@@ -439,7 +439,7 @@ export default function OpportunitiesPage() {
       setProb(clamp(p, 0, 100))
     } else {
       setAutoProb(true)
-      setProb(STAGE_DEFAULT_PROB[((r.stage as any) || 'Lead') as any] ?? 10)
+      setProb((STAGE_DEFAULT_PROB as Record<string, number>)[String(r.stage || 'Lead')] ?? 10)
     }
 
     setBookingMonth(r.booking_month || defaultClosing)
