@@ -42,17 +42,10 @@ function userName(email: string) {
 }
 
 const ACTION_COLOR: Record<string, string> = {
-  create: '#10b981',
-  update: '#3b82f6',
-  delete: '#ef4444',
-  stage:  '#f59e0b',
+  create: '#10b981', update: '#3b82f6', delete: '#ef4444', stage: '#f59e0b',
 };
-
 const ACTION_LABEL: Record<string, string> = {
-  create: 'Ajouté',
-  update: 'Modifié',
-  delete: 'Supprimé',
-  stage:  'Stage →',
+  create: 'Ajouté', update: 'Modifié', delete: 'Supprimé', stage: 'Stage →',
 };
 
 export default function NavBar() {
@@ -62,27 +55,62 @@ export default function NavBar() {
   const [showNotifs, setShowNotifs] = useState(false);
   const [unread, setUnread] = useState(0);
   const panelRef = useRef<HTMLDivElement>(null);
-  const lastReadRef = useRef<string>(
-    typeof window !== 'undefined' ? (localStorage.getItem('crm_last_read') || '') : ''
-  );
+  const lastReadRef = useRef<string>('');
 
+  // Load current user
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       const { data } = await supabase.auth.getUser();
       if (!mounted) return;
-      setEmail(data?.user?.email ?? null);
+      const userEmail = data?.user?.email ?? null;
+      setEmail(userEmail);
+      if (userEmail) {
+        await loadLastRead(userEmail);
+      }
     };
     load();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => { load(); });
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const userEmail = session?.user?.email ?? null;
+      setEmail(userEmail);
+      if (userEmail) loadLastRead(userEmail);
+    });
     return () => { mounted = false; sub?.subscription?.unsubscribe(); };
   }, []);
 
+  // Load last_read from DB for this user
+  async function loadLastRead(userEmail: string) {
+    const { data } = await supabase
+      .from('notification_reads')
+      .select('last_read_at')
+      .eq('user_email', userEmail)
+      .single();
+    const lastRead = data?.last_read_at ?? '';
+    lastReadRef.current = lastRead;
+    await loadActivities(lastRead);
+  }
+
+  // Load activities + compute unread
+  async function loadActivities(lastRead?: string) {
+    const { data } = await supabase
+      .from('activity_log')
+      .select('id,user_email,action_type,entity_type,entity_name,detail,created_at')
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (data) {
+      setActivities(data as Activity[]);
+      const ref = lastRead ?? lastReadRef.current;
+      const newCount = ref
+        ? data.filter(a => a.created_at > ref).length
+        : Math.min(data.length, 5);
+      setUnread(newCount);
+    }
+  }
+
+  // Real-time subscription
   useEffect(() => {
-    loadActivities();
-    // Real-time subscription
     const channel = supabase
-      .channel('activity_log')
+      .channel('activity_log_realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, (payload) => {
         const newAct = payload.new as Activity;
         setActivities(prev => [newAct, ...prev.slice(0, 49)]);
@@ -92,28 +120,17 @@ export default function NavBar() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  async function loadActivities() {
-    const { data } = await supabase
-      .from('activity_log')
-      .select('id,user_email,action_type,entity_type,entity_name,detail,created_at')
-      .order('created_at', { ascending: false })
-      .limit(50);
-    if (data) {
-      setActivities(data as Activity[]);
-      const lastRead = lastReadRef.current;
-      const newCount = lastRead
-        ? data.filter(a => a.created_at > lastRead).length
-        : Math.min(data.length, 5);
-      setUnread(newCount);
-    }
-  }
-
-  function openNotifs() {
+  // Open panel + mark as read in DB
+  async function openNotifs() {
     setShowNotifs(true);
     setUnread(0);
     const now = new Date().toISOString();
     lastReadRef.current = now;
-    if (typeof window !== 'undefined') localStorage.setItem('crm_last_read', now);
+    if (email) {
+      await supabase
+        .from('notification_reads')
+        .upsert({ user_email: email, last_read_at: now }, { onConflict: 'user_email' });
+    }
   }
 
   // Close on outside click
@@ -136,12 +153,10 @@ export default function NavBar() {
     <div style={{ borderBottom: '1px solid #e2e8f0', background: '#fff', position: 'sticky', top: 0, zIndex: 100 }}>
       <div style={{ maxWidth: 1600, margin: '0 auto', padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', gap: 8 }}>
 
-        {/* Logo */}
         <Link href="/dashboard-v3" style={{ fontWeight: 900, fontSize: 15, letterSpacing: '1.5px', color: '#0f172a', textDecoration: 'none', marginRight: 16 }}>
           CRM-PIPE
         </Link>
 
-        {/* Nav links */}
         <nav style={{ display: 'flex', gap: 2, flex: 1 }}>
           {NAV_ITEMS.map(it => {
             const active = path === it.href || path.startsWith(it.href + "/");
@@ -150,7 +165,6 @@ export default function NavBar() {
                 padding: '5px 12px', borderRadius: 8, fontSize: 13, fontWeight: active ? 600 : 400,
                 color: active ? '#0f172a' : '#64748b', textDecoration: 'none',
                 background: active ? '#f1f5f9' : 'transparent',
-                transition: 'all 0.15s',
               }}>
                 {it.label}
               </Link>
@@ -158,16 +172,13 @@ export default function NavBar() {
           })}
         </nav>
 
-        {/* Right side */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {/* User name */}
           {email && (
             <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
               {userName(email)}
             </span>
           )}
 
-          {/* Bell */}
           <div style={{ position: 'relative' }} ref={panelRef}>
             <button
               onClick={openNotifs}
@@ -186,35 +197,41 @@ export default function NavBar() {
               )}
             </button>
 
-            {/* Notifications panel */}
             {showNotifs && (
               <div style={{
-                position: 'absolute', top: 44, right: 0, width: 360,
+                position: 'absolute', top: 44, right: 0, width: 380,
                 background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14,
                 boxShadow: '0 10px 40px rgba(0,0,0,0.12)', overflow: 'hidden', zIndex: 200,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Activité récente</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Activité de l'équipe</span>
                   <button onClick={() => setShowNotifs(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4 }}>
                     <X style={{ width: 14, height: 14, color: '#94a3b8' }} />
                   </button>
                 </div>
 
-                <div style={{ maxHeight: 420, overflowY: 'auto' }}>
+                <div style={{ maxHeight: 440, overflowY: 'auto' }}>
                   {activities.length === 0 ? (
                     <div style={{ padding: '30px 16px', textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>
                       Aucune activité récente
                     </div>
                   ) : (
-                    activities.map(a => {
+                    activities.map((a, idx) => {
                       const color = ACTION_COLOR[a.action_type] || '#64748b';
                       const label = ACTION_LABEL[a.action_type] || a.action_type;
+                      const isNew = lastReadRef.current ? a.created_at > lastReadRef.current : idx < 5;
                       return (
-                        <div key={a.id} style={{ display: 'flex', gap: 12, padding: '11px 16px', borderBottom: '1px solid #f8fafc', transition: 'background 0.1s' }}>
+                        <div key={a.id} style={{
+                          display: 'flex', gap: 12, padding: '11px 16px',
+                          borderBottom: '1px solid #f8fafc',
+                          background: isNew ? '#fefce8' : '#fff',
+                        }}>
                           <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, marginTop: 5, flexShrink: 0 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12, color: '#0f172a', lineHeight: 1.4 }}>
-                              <b>{userName(a.user_email)}</b>
+                            <div style={{ fontSize: 12, color: '#0f172a', lineHeight: 1.5 }}>
+                              <b style={{ color: a.user_email === email ? '#2563eb' : '#0f172a' }}>
+                                {userName(a.user_email)}
+                              </b>
                               {' '}<span style={{ color, fontWeight: 600 }}>{label}</span>
                               {' '}<span style={{ fontWeight: 500 }}>{a.entity_name}</span>
                             </div>
@@ -225,16 +242,22 @@ export default function NavBar() {
                             )}
                             <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2 }}>{timeAgo(a.created_at)}</div>
                           </div>
+                          {isNew && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', marginTop: 6, flexShrink: 0 }} />}
                         </div>
                       );
                     })
                   )}
                 </div>
+
+                <div style={{ padding: '10px 16px', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                    Toute l'activité de l'équipe (Nabil + Salim)
+                  </span>
+                </div>
               </div>
             )}
           </div>
 
-          {/* Logout */}
           <button onClick={logout} style={{ height: 34, borderRadius: 10, padding: '0 14px', fontSize: 12, fontWeight: 500, background: '#0f172a', color: '#fff', border: 'none', cursor: 'pointer' }}>
             Déconnexion
           </button>
