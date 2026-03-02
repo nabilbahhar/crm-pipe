@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabaseClient'
-import { Plus, Trash2, Pencil, X, RefreshCw, ArrowUpDown } from 'lucide-react'
+import { Plus, Trash2, Pencil, X, RefreshCw, ArrowUpDown, Eye, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 
 type Account = { id: string; name: string }
 type CardRow = { id: string; name: string }
@@ -290,6 +291,63 @@ function Modal(props: { open: boolean; title: string; onClose: () => void; child
 type SortKey = 'account' | 'stage' | 'bu' | 'card' | 'amount' | 'prob' | 'closing'
 type SortDir = 'asc' | 'desc'
 
+// ---- Confirmation Modal ----
+function ConfirmModal(props: {
+  open: boolean
+  title: string
+  message: string
+  confirmLabel?: string
+  danger?: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  if (!props.open) return null
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border">
+        <div className="p-6">
+          <div className="flex items-start gap-4">
+            {props.danger && (
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="text-base font-semibold text-slate-900">{props.title}</div>
+              <div className="mt-1 text-sm text-slate-500 leading-relaxed">{props.message}</div>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-3 px-6 pb-5">
+          <button
+            className="h-10 px-5 rounded-xl border text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            onClick={props.onCancel}
+          >
+            Annuler
+          </button>
+          <button
+            className={`h-10 px-5 rounded-xl text-sm font-semibold text-white transition-colors ${
+              props.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-900 hover:bg-slate-800'
+            }`}
+            onClick={props.onConfirm}
+          >
+            {props.confirmLabel || 'Confirmer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type ConfirmState = {
+  open: boolean
+  title: string
+  message: string
+  confirmLabel?: string
+  danger?: boolean
+  onConfirm: () => void
+}
+
 export default function OpportunitiesPage() {
   const now = new Date()
   const yyyy = now.getFullYear()
@@ -302,10 +360,16 @@ export default function OpportunitiesPage() {
   const cardItems = useMemo(() => cards.map((c) => ({ id: c.name, label: c.name })), [cards])
   const accountItems = useMemo(() => accounts.map((a) => ({ id: a.id, label: a.name })), [accounts])
 
+  const searchParams = useSearchParams()
+
   const [rows, setRows] = useState<DealRow[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+
+  const [confirm, setConfirm] = useState<ConfirmState>({
+    open: false, title: '', message: '', onConfirm: () => {}
+  })
 
   // tri
   const [sortKey, setSortKey] = useState<SortKey>('closing')
@@ -541,6 +605,16 @@ export default function OpportunitiesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Auto-open edit modal if ?edit=ID in URL
+  useEffect(() => {
+    const editId = searchParams?.get('edit')
+    if (editId && rows.length > 0) {
+      const r = rows.find(r => r.id === editId)
+      if (r) openModify(r)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, rows])
+
   const addCardIfMissing = async (name: string) => {
     const v = name.trim()
     if (!v) return
@@ -676,14 +750,37 @@ export default function OpportunitiesPage() {
 
     setLoading(true)
     try {
+      const { data: { user } } = await supabase.auth.getUser()
       if (editingId) {
         const r = await supabase.from('opportunities').update(payload).eq('id', editingId)
         if (r.error) throw new Error(r.error.message)
         setInfo('Deal modifié.')
+        if (user) {
+          const acc = accounts.find(a => a.id === accountId)
+          await supabase.from('activity_log').insert({
+            user_email: user.email,
+            action_type: 'update',
+            entity_type: 'deal',
+            entity_id: editingId,
+            entity_name: title.trim(),
+            detail: `${acc?.name || ''} · ${stage}`,
+          })
+        }
       } else {
-        const r = await supabase.from('opportunities').insert(payload)
+        const r = await supabase.from('opportunities').insert(payload).select('id').single()
         if (r.error) throw new Error(r.error.message)
         setInfo('Deal ajouté.')
+        if (user) {
+          const acc = accounts.find(a => a.id === accountId)
+          await supabase.from('activity_log').insert({
+            user_email: user.email,
+            action_type: 'create',
+            entity_type: 'deal',
+            entity_id: r.data?.id || '',
+            entity_name: title.trim(),
+            detail: `${acc?.name || ''} · ${stage} · ${new Intl.NumberFormat('fr-MA', { maximumFractionDigits: 0 }).format(payload.amount)} MAD`,
+          })
+        }
       }
 
       setOpenEdit(false)
@@ -697,20 +794,52 @@ export default function OpportunitiesPage() {
   }
 
   const onDelete = async (id: string) => {
-    setErr(null)
-    setInfo(null)
-    setLoading(true)
-    try {
-      const r = await supabase.from('opportunities').delete().eq('id', id)
-      if (r.error) throw new Error(r.error.message)
-      setInfo('Deal supprimé.')
-      await load()
-    } catch (e: any) {
-      setErr(e?.message || 'Erreur suppression')
-    } finally {
-      setLoading(false)
-    }
+    const deal = rows.find(r => r.id === id)
+    setConfirm({
+      open: true,
+      title: 'Confirmer la suppression',
+      message: `Vous êtes sur le point de supprimer définitivement le deal "${deal?.title || ''}". Cette action est irréversible.`,
+      confirmLabel: 'Supprimer définitivement',
+      danger: true,
+      onConfirm: async () => {
+        setConfirm(c => ({ ...c, open: false }))
+        setErr(null)
+        setInfo(null)
+        setLoading(true)
+        try {
+          const r = await supabase.from('opportunities').delete().eq('id', id)
+          if (r.error) throw new Error(r.error.message)
+          setInfo('Deal supprimé.')
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user && deal) {
+            await supabase.from('activity_log').insert({
+              user_email: user.email,
+              action_type: 'delete',
+              entity_type: 'deal',
+              entity_id: id,
+              entity_name: deal.title,
+              detail: deal.accounts?.name || '',
+            })
+          }
+          await load()
+        } catch (e: any) {
+          setErr(e?.message || 'Erreur suppression')
+        } finally {
+          setLoading(false)
+        }
+      }
+    })
   }
+
+  const miniStats = useMemo(() => {
+    const open = rows.filter(r => r.status === 'Open' || (!r.status && r.stage !== 'Won' && !r.stage?.includes('Lost')))
+    const won = rows.filter(r => r.status === 'Won' || r.stage === 'Won')
+    const lost = rows.filter(r => r.status === 'Lost' || r.stage?.includes('Lost'))
+    const pipelineAmount = open.reduce((s, r) => s + Number(r.amount || 0), 0)
+    const wonAmount = won.reduce((s, r) => s + Number(r.amount || 0), 0)
+    const forecast = open.reduce((s, r) => s + Number(r.amount || 0) * (Number(r.prob || 0) / 100), 0)
+    return { total: rows.length, openCount: open.length, wonCount: won.length, lostCount: lost.length, pipelineAmount, wonAmount, forecast }
+  }, [rows])
 
   const toggleSort = (key: SortKey) => {
     setSortKey((prev) => {
@@ -839,6 +968,22 @@ export default function OpportunitiesPage() {
           <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{info}</div>
         ) : null}
 
+        {/* Mini Stats */}
+        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
+          {[
+            { label: 'Total deals', value: miniStats.total, sub: null, color: 'text-slate-900' },
+            { label: 'Open', value: miniStats.openCount, sub: null, color: 'text-blue-700' },
+            { label: 'Won', value: miniStats.wonCount, sub: null, color: 'text-emerald-700' },
+            { label: 'Pipeline Open', value: mad(miniStats.pipelineAmount), sub: null, color: 'text-slate-900' },
+            { label: 'Forecast pondéré', value: mad(miniStats.forecast), sub: null, color: 'text-violet-700' },
+          ].map(s => (
+            <div key={s.label} className="rounded-2xl border bg-white p-3 shadow-sm">
+              <div className="text-xs text-slate-400 mb-1">{s.label}</div>
+              <div className={`text-lg font-bold ${s.color}`}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+
         {/* LIST */}
         <div className="mt-6 rounded-2xl border bg-white p-4 shadow-sm">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -880,7 +1025,15 @@ export default function OpportunitiesPage() {
                 {sortedRows.map((r) => (
                   <tr key={r.id} className="border-b last:border-b-0">
                     <td className="py-2 font-medium text-slate-900">{r.accounts?.name || '—'}</td>
-                    <td className="py-2">{r.title}</td>
+                    <td className="py-2">
+                      <Link
+                        href={`/opportunities/${r.id}`}
+                        className="text-slate-900 hover:text-blue-600 hover:underline font-medium transition-colors"
+                        title="Voir le détail du deal"
+                      >
+                        {r.title}
+                      </Link>
+                    </td>
                     <td className="py-2">{r.stage}</td>
                     <td className="py-2">{r.bu || '—'}</td>
                     <td className="py-2">{cardCell(r)}</td>
@@ -890,6 +1043,13 @@ export default function OpportunitiesPage() {
                     <td className="py-2">{r.next_step || '—'}</td>
                     <td className="py-2">
                       <div className="flex items-center gap-2">
+                        <Link
+                          href={`/opportunities/${r.id}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm hover:bg-slate-50"
+                          title="Voir le deal"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Link>
                         <button
                           className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-slate-50"
                           onClick={() => openModify(r)}
@@ -1347,6 +1507,16 @@ export default function OpportunitiesPage() {
             </div>
           </div>
         </Modal>
+
+        <ConfirmModal
+          open={confirm.open}
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          danger={confirm.danger}
+          onConfirm={confirm.onConfirm}
+          onCancel={() => setConfirm(c => ({ ...c, open: false }))}
+        />
       </div>
     </div>
   )

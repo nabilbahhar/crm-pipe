@@ -96,6 +96,63 @@ function Modal({
   )
 }
 
+
+function ConfirmModal(props: {
+  open: boolean
+  title: string
+  message: string
+  confirmLabel?: string
+  danger?: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  if (!props.open) return null
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border">
+        <div className="p-6">
+          <div className="flex items-start gap-4">
+            {props.danger && (
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
+                <span style={{ fontSize: 20, color: '#dc2626' }}>⚠</span>
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="text-base font-semibold text-slate-900">{props.title}</div>
+              <div className="mt-1 text-sm text-slate-500 leading-relaxed whitespace-pre-line">{props.message}</div>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-3 px-6 pb-5">
+          <button
+            className="h-10 px-5 rounded-xl border text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+            onClick={props.onCancel}
+          >
+            Annuler
+          </button>
+          <button
+            className={`h-10 px-5 rounded-xl text-sm font-semibold text-white transition-colors ${
+              props.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-900 hover:bg-slate-800'
+            }`}
+            onClick={props.onConfirm}
+          >
+            {props.confirmLabel || 'Confirmer'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+type ConfirmState = {
+  open: boolean
+  title: string
+  message: string
+  confirmLabel?: string
+  danger?: boolean
+  onConfirm: () => void
+}
+
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<AccountRow[]>([])
   const [loading, setLoading] = useState(false)
@@ -115,6 +172,9 @@ export default function AccountsPage() {
   const [editSectorActivite, setEditSectorActivite] = useState('')
   const [editRegion, setEditRegion] = useState<(typeof REGION_OPTIONS)[number]>('Rabat')
   const [busyEdit, setBusyEdit] = useState(false)
+  const [confirm, setConfirm] = useState<ConfirmState>({
+    open: false, title: '', message: '', onConfirm: () => {}
+  })
 
   // Contacts modal
   const [contactsOpen, setContactsOpen] = useState(false)
@@ -235,6 +295,19 @@ export default function AccountsPage() {
         .eq('id', editRow.id)
 
       if (error) throw error
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user && editRow) {
+        await supabase.from('activity_log').insert({
+          user_email: user.email,
+          action_type: 'update',
+          entity_type: 'account',
+          entity_id: editRow.id,
+          entity_name: n,
+          detail: `${editSegmentClient} · ${editSectorActivite} · ${editRegion}`,
+        })
+      }
+
       setEditOpen(false)
       setEditRow(null)
       await loadAccounts()
@@ -267,33 +340,50 @@ export default function AccountsPage() {
   }
 
   const deleteAccount = async (row: AccountRow) => {
-    const ok = window.confirm(
-      `Supprimer le compte "${row.name}" ?\n\nSi ce client a des deals liés, la suppression sera refusée.`
-    )
-    if (!ok) return
+    setConfirm({
+      open: true,
+      title: 'Confirmer la suppression du compte',
+      message: `Vous êtes sur le point de supprimer définitivement le compte client "${row.name}".\n\nAttention : si ce client possède des deals liés, la suppression sera refusée par le système.`,
+      confirmLabel: 'Supprimer définitivement',
+      danger: true,
+      onConfirm: async () => {
+        setConfirm(c => ({ ...c, open: false }))
+        setErr(null)
+        setLoading(true)
+        try {
+          const { error } = await supabase.from('accounts').delete().eq('id', row.id)
+          if (error) throw error
 
-    setErr(null)
-    setLoading(true)
-    try {
-      const { error } = await supabase.from('accounts').delete().eq('id', row.id)
-      if (error) throw error
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            await supabase.from('activity_log').insert({
+              user_email: user.email,
+              action_type: 'delete',
+              entity_type: 'account',
+              entity_id: row.id,
+              entity_name: row.name,
+              detail: `${row.sector || ''} · ${row.region || ''}`,
+            })
+          }
 
-      if (editRow?.id === row.id) {
-        setEditOpen(false)
-        setEditRow(null)
+          if (editRow?.id === row.id) {
+            setEditOpen(false)
+            setEditRow(null)
+          }
+          if (contactsAccount?.id === row.id) {
+            setContactsOpen(false)
+            setContactsAccount(null)
+            setContacts([])
+          }
+
+          await loadAccounts()
+        } catch (e: any) {
+          setErr(friendlyDeleteError(e?.message || 'Erreur suppression'))
+        } finally {
+          setLoading(false)
+        }
       }
-      if (contactsAccount?.id === row.id) {
-        setContactsOpen(false)
-        setContactsAccount(null)
-        setContacts([])
-      }
-
-      await loadAccounts()
-    } catch (e: any) {
-      setErr(friendlyDeleteError(e?.message || 'Erreur suppression'))
-    } finally {
-      setLoading(false)
-    }
+    })
   }
 
   // ---------------- Contacts modal ----------------
@@ -409,6 +499,24 @@ export default function AccountsPage() {
     }
   }
 
+
+  const accountStats = useMemo(() => {
+    const bySegment: Record<string, number> = {}
+    const bySector: Record<string, number> = {}
+    const byRegion: Record<string, number> = {}
+    for (const a of accounts) {
+      const seg = a.sector || 'Autre'
+      bySegment[seg] = (bySegment[seg] || 0) + 1
+      const sec = a.segment || 'Autre'
+      bySector[sec] = (bySector[sec] || 0) + 1
+      const reg = a.region || 'Autre'
+      byRegion[reg] = (byRegion[reg] || 0) + 1
+    }
+    const topSectors = Object.entries(bySector).sort((a,b) => b[1]-a[1]).slice(0,4)
+    const topRegions = Object.entries(byRegion).sort((a,b) => b[1]-a[1])
+    return { total: accounts.length, bySegment, bySector, byRegion, topSectors, topRegions }
+  }, [accounts])
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="mx-auto max-w-7xl px-4 py-6">
@@ -430,6 +538,65 @@ export default function AccountsPage() {
             {err}
           </div>
         ) : null}
+
+        {/* Stats */}
+        {accounts.length > 0 && (
+          <div className="mt-5 space-y-3">
+            {/* KPI row */}
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <div className="text-xs text-slate-400 mb-1">Total clients</div>
+                <div className="text-2xl font-bold text-slate-900">{accountStats.total}</div>
+              </div>
+              {Object.entries(accountStats.bySegment).map(([seg, count]) => (
+                <div key={seg} className="rounded-2xl border bg-white p-4 shadow-sm">
+                  <div className="text-xs text-slate-400 mb-1">{seg}</div>
+                  <div className="text-2xl font-bold text-slate-900">{count}</div>
+                  <div className="text-xs text-slate-400">{Math.round(count / accountStats.total * 100)}% du portefeuille</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Sectors + Regions */}
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <div className="text-sm font-semibold text-slate-900 mb-3">Top secteurs d'activité</div>
+                <div className="space-y-2">
+                  {accountStats.topSectors.map(([sec, count]) => (
+                    <div key={sec} className="flex items-center gap-3">
+                      <div className="text-sm text-slate-700 w-32 truncate" title={sec}>{sec}</div>
+                      <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-slate-800 transition-all"
+                          style={{ width: `${Math.round(count / accountStats.total * 100)}%` }}
+                        />
+                      </div>
+                      <div className="text-xs font-medium text-slate-600 w-8 text-right">{count}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                <div className="text-sm font-semibold text-slate-900 mb-3">Répartition par région</div>
+                <div className="space-y-2">
+                  {accountStats.topRegions.map(([reg, count]) => (
+                    <div key={reg} className="flex items-center gap-3">
+                      <div className="text-sm text-slate-700 w-32 truncate">{reg}</div>
+                      <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-blue-500 transition-all"
+                          style={{ width: `${Math.round(count / accountStats.total * 100)}%` }}
+                        />
+                      </div>
+                      <div className="text-xs font-medium text-slate-600 w-8 text-right">{count}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Ajouter */}
         <div className="mt-4 rounded-2xl border bg-white p-4 shadow-sm">
@@ -698,6 +865,16 @@ export default function AccountsPage() {
             </div>
           )}
         </Modal>
+
+        <ConfirmModal
+          open={confirm.open}
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          danger={confirm.danger}
+          onConfirm={confirm.onConfirm}
+          onCancel={() => setConfirm(c => ({ ...c, open: false }))}
+        />
       </div>
     </div>
   )
