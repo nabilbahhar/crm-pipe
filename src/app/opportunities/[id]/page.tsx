@@ -207,10 +207,10 @@ export default function DealDetailPage() {
             </div>
 
             <Link
-              href={`/opportunities?edit=${deal.id}`}
+              href={`/opportunities`}
               className="inline-flex items-center gap-2 h-10 rounded-xl bg-slate-900 px-4 text-sm text-white hover:bg-slate-800 transition-colors"
             >
-              <Pencil className="h-4 w-4" /> Modifier ce deal
+              <Pencil className="h-4 w-4" /> Modifier
             </Link>
           </div>
         </div>
