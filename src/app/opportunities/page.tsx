@@ -5,7 +5,6 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabaseClient'
 import { Plus, Trash2, Pencil, X, RefreshCw, ArrowUpDown, Eye, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
 
 type Account = { id: string; name: string }
 type CardRow = { id: string; name: string }
@@ -360,7 +359,9 @@ export default function OpportunitiesPage() {
   const cardItems = useMemo(() => cards.map((c) => ({ id: c.name, label: c.name })), [cards])
   const accountItems = useMemo(() => accounts.map((a) => ({ id: a.id, label: a.name })), [accounts])
 
-  const searchParams = useSearchParams()
+  const searchParams = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search)
+    : null
 
   const [rows, setRows] = useState<DealRow[]>([])
   const [loading, setLoading] = useState(false)
