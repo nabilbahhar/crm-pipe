@@ -1,5 +1,7 @@
 'use client'
+
 export const dynamic = 'force-dynamic'
+
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
@@ -10,203 +12,141 @@ const ALLOWED_EMAILS = new Set([
 ])
 
 export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: '#64748b' }}>
+        Chargement…
+      </div>
+    }>
+      <ResetPasswordInner />
+    </Suspense>
+  )
+}
+
+function ResetPasswordInner() {
   const router = useRouter()
   const sp = useSearchParams()
-  const code = sp.get('code') // Supabase PKCE
+  const code = sp.get('code')
 
   const [email, setEmail] = useState('')
   const [newPwd, setNewPwd] = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')
-
-  const [step, setStep] = useState<'request' | 'exchanging' | 'update'>(
-    code ? 'exchanging' : 'request'
-  )
+  const [step, setStep] = useState<'request' | 'exchanging' | 'update'>(code ? 'exchanging' : 'request')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
 
   const emailNormalized = useMemo(() => email.trim().toLowerCase(), [email])
 
-  // Si on arrive depuis l’email Supabase, on échange le code -> session
   useEffect(() => {
     let cancelled = false
-
     async function run() {
       if (!code) return
-
-      setErr(null)
-      setInfo(null)
-      setStep('exchanging')
-
+      setErr(null); setInfo(null); setStep('exchanging')
       const { error } = await supabase.auth.exchangeCodeForSession(code)
       if (cancelled) return
-
       if (error) {
-        setErr(
-          "Lien invalide ou expiré. Recommence la demande de réinitialisation depuis la page Login."
-        )
+        setErr("Lien invalide ou expiré. Recommence depuis la page Login.")
         setStep('request')
         return
       }
-
       setStep('update')
     }
-
     run()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [code])
 
   async function requestReset(e: React.FormEvent) {
-    e.preventDefault()
-    setErr(null)
-    setInfo(null)
-
-    if (!emailNormalized) return setErr('Merci de saisir ton email.')
-    if (!ALLOWED_EMAILS.has(emailNormalized)) {
-      return setErr("Accès refusé : cet email n'est pas autorisé sur ce CRM.")
-    }
-
+    e.preventDefault(); setErr(null); setInfo(null)
+    if (!emailNormalized) return setErr('Saisis ton email.')
+    if (!ALLOWED_EMAILS.has(emailNormalized)) return setErr("Cet email n'est pas autorisé.")
     setLoading(true)
-    const redirectTo = `${window.location.origin}/reset-password`
     const { error } = await supabase.auth.resetPasswordForEmail(emailNormalized, {
-      redirectTo,
+      redirectTo: `${window.location.origin}/reset-password`
     })
     setLoading(false)
-
     if (error) return setErr(error.message)
-
-    setInfo(
-      `Email envoyé à ${emailNormalized}. Ouvre le lien reçu pour définir un nouveau mot de passe.`
-    )
+    setInfo(`Email envoyé à ${emailNormalized}. Vérifie ta boîte mail et clique sur le lien.`)
   }
 
   async function updatePassword(e: React.FormEvent) {
-    e.preventDefault()
-    setErr(null)
-    setInfo(null)
-
-    if (!newPwd || newPwd.length < 8) {
-      return setErr('Mot de passe trop court (minimum 8 caractères).')
-    }
-    if (newPwd !== confirmPwd) {
-      return setErr('Les deux mots de passe ne sont pas identiques.')
-    }
-
+    e.preventDefault(); setErr(null); setInfo(null)
+    if (!newPwd || newPwd.length < 8) return setErr('Mot de passe trop court (8 caractères minimum).')
+    if (newPwd !== confirmPwd) return setErr('Les deux mots de passe ne correspondent pas.')
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password: newPwd })
     setLoading(false)
-
     if (error) return setErr(error.message)
-
-    setInfo('Mot de passe mis à jour. Redirection…')
-    router.replace('/dashboard-v2')
+    setInfo('Mot de passe mis à jour ! Redirection…')
+    setTimeout(() => router.replace('/dashboard-v3'), 1500)
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="rounded-2xl border bg-white p-6 shadow-sm">
-          <div className="mb-6">
-            <div className="text-2xl font-bold text-slate-900">CRM-PIPE</div>
-            <div className="text-sm text-slate-500">
-              {step === 'update' ? 'Nouveau mot de passe' : 'Réinitialiser le mot de passe'}
-            </div>
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#f8fafc' }}>
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <div className="text-3xl font-black tracking-tight text-slate-900">CRM-PIPE</div>
+          <div className="mt-1 text-sm text-slate-500">
+            {step === 'update' ? 'Choisir un nouveau mot de passe' : 'Réinitialiser le mot de passe'}
           </div>
+        </div>
 
-          {err ? (
-            <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              {err}
-            </div>
-          ) : null}
+        <div className="rounded-2xl bg-white p-7 shadow-sm border border-slate-100">
+          {err && <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{err}</div>}
+          {info && <div className="mb-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">{info}</div>}
 
-          {info ? (
-            <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              {info}
-            </div>
-          ) : null}
+          {step === 'exchanging' && (
+            <div className="text-center py-4 text-sm text-slate-500">Vérification du lien…</div>
+          )}
 
-          {step === 'exchanging' ? (
-            <div className="text-sm text-slate-600">Vérification du lien…</div>
-          ) : null}
-
-          {step === 'request' ? (
-            <form onSubmit={requestReset} className="grid gap-3">
-              <label className="grid gap-1">
-                <span className="text-sm text-slate-700">Email</span>
+          {step === 'request' && (
+            <form onSubmit={requestReset} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
                 <input
-                  className="h-11 rounded-xl border bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-                  placeholder="nabil.imdh@gmail.com"
+                  className="w-full h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors"
+                  placeholder="votre@email.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={e => setEmail(e.target.value)}
+                  type="email"
                   autoComplete="email"
                 />
-              </label>
-
-              <button
-                disabled={loading}
-                className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-                type="submit"
-              >
-                {loading ? 'Envoi…' : 'Envoyer le lien'}
-              </button>
-
-              <button
-                type="button"
-                className="inline-flex h-10 items-center justify-center rounded-xl border bg-white px-4 text-sm text-slate-700 hover:bg-slate-100"
-                onClick={() => router.replace('/login')}
-              >
-                Retour au login
-              </button>
-
-              <div className="pt-2 text-xs text-slate-500">
-                Accès autorisé uniquement : nabil.imdh@gmail.com / s.chitachny@compucom.ma
               </div>
-            </form>
-          ) : null}
-
-          {step === 'update' ? (
-            <form onSubmit={updatePassword} className="grid gap-3">
-              <label className="grid gap-1">
-                <span className="text-sm text-slate-700">Nouveau mot de passe</span>
-                <input
-                  className="h-11 rounded-xl border bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-                  type="password"
-                  value={newPwd}
-                  onChange={(e) => setNewPwd(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </label>
-
-              <label className="grid gap-1">
-                <span className="text-sm text-slate-700">Confirmer le mot de passe</span>
-                <input
-                  className="h-11 rounded-xl border bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-slate-200"
-                  type="password"
-                  value={confirmPwd}
-                  onChange={(e) => setConfirmPwd(e.target.value)}
-                  autoComplete="new-password"
-                />
-              </label>
-
-              <button
-                disabled={loading}
-                className="mt-2 inline-flex h-11 items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
-                type="submit"
-              >
-                {loading ? 'Mise à jour…' : 'Mettre à jour'}
+              <button disabled={loading} type="submit"
+                className="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-60 transition-colors">
+                {loading ? 'Envoi…' : 'Envoyer le lien de réinitialisation'}
               </button>
-
-              <button
-                type="button"
-                className="inline-flex h-10 items-center justify-center rounded-xl border bg-white px-4 text-sm text-slate-700 hover:bg-slate-100"
-                onClick={() => router.replace('/login')}
-              >
+              <button type="button" onClick={() => router.replace('/login')}
+                className="w-full h-10 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
                 Retour au login
               </button>
             </form>
-          ) : null}
+          )}
+
+          {step === 'update' && (
+            <form onSubmit={updatePassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Nouveau mot de passe</label>
+                <input
+                  className="w-full h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors"
+                  type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)}
+                  autoComplete="new-password" placeholder="8 caractères minimum"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">Confirmer le mot de passe</label>
+                <input
+                  className="w-full h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors"
+                  type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)}
+                  autoComplete="new-password" placeholder="••••••••"
+                />
+              </div>
+              <button disabled={loading} type="submit"
+                className="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-60 transition-colors">
+                {loading ? 'Mise à jour…' : 'Mettre à jour le mot de passe'}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </div>
