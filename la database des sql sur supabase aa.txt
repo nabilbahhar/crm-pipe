@@ -1,0 +1,1420 @@
+la database des sql sur supabase : 
+
+Sales CRM schema with stage-driven probabilities and RLS 
+
+create extension if not exists pgcrypto;
+
+create table if not exists stage_definitions (
+  stage text primary key,
+  sort_order int not null,
+  default_probability int not null check (default_probability between 0 and 100)
+);
+
+insert into stage_definitions(stage, sort_order, default_probability) values
+('Lead', 10, 10),
+('Discovery', 20, 20),
+('Qualified', 30, 35),
+('Solutioning', 40, 50),
+('Proposal Sent', 50, 60),
+('Negotiation', 60, 75),
+('Commit', 70, 90),
+('Won', 80, 100),
+('Lost / No decision', 90, 0)
+on conflict (stage) do nothing;
+
+create table if not exists accounts (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  region text,
+  segment text,
+  owner_id uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists contacts (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references accounts(id) on delete cascade,
+  full_name text not null,
+  role text,
+  email text,
+  phone text,
+  influence_level int check (influence_level between 1 and 5),
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists opportunities (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references accounts(id) on delete restrict,
+
+  title text not null,
+  bu text not null check (bu in ('INFRA','CSG','CYBER','SERVICE')),
+  deal_type text not null check (deal_type in ('AO','Run','Projet','Renouvellement')),
+
+  stage text not null references stage_definitions(stage),
+  probability int not null default 0 check (probability between 0 and 100),
+
+  amount_mad numeric(14,2) not null default 0,
+  margin_pct numeric(5,2) not null default 0,
+  margin_mad numeric(14,2) generated always as (round(amount_mad * (margin_pct/100.0), 2)) stored,
+
+  close_date date,
+  next_step text,
+  next_step_due date,
+
+  procurement_path text,
+  competition text,
+  risks jsonb default '[]'::jsonb,
+
+  owner_id uuid,
+  inside_owner_id uuid,
+  inside_status text not null default 'NEW'
+    check (inside_status in ('NEW','IN PROGRESS','WAITING VENDOR','PRICING RECEIVED','READY TO SEND','BOOKING PENDING','DONE','BLOCKED')),
+
+  sponsor_contact_id uuid references contacts(id),
+
+  last_activity_at timestamptz,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+
+  constraint next_step_required
+    check (
+      stage not in ('Proposal Sent','Negotiation','Commit')
+      or next_step_due is not null
+    )
+);
+
+create table if not exists activities (
+  id uuid primary key default gen_random_uuid(),
+  opportunity_id uuid not null references opportunities(id) on delete cascade,
+  activity_type text not null check (activity_type in ('Call','Meeting','Email','Task','Other')),
+  subject text not null,
+  due_at timestamptz,
+  done boolean not null default false,
+  notes text,
+  created_by uuid,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists inside_tickets (
+  id uuid primary key default gen_random_uuid(),
+  opportunity_id uuid not null references opportunities(id) on delete cascade,
+  priority text not null default 'P2' check (priority in ('P1','P2','P3')),
+  vendor text,
+  request_summary text not null,
+  status text not null default 'NEW'
+    check (status in ('NEW','IN PROGRESS','WAITING VENDOR','PRICING RECEIVED','READY TO SEND','BOOKING PENDING','DONE','BLOCKED')),
+  deadline date,
+  last_update text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create or replace function set_updated_at()
+returns trigger language plpgsql as $$
+begin
+  new.updated_at = now();
+  return new;
+end; $$;
+
+create or replace function set_probability_from_stage()
+returns trigger language plpgsql as $$
+declare p int;
+begin
+  select default_probability into p from stage_definitions where stage = new.stage;
+  if p is not null then new.probability = p; end if;
+  return new;
+end; $$;
+
+drop trigger if exists trg_accounts_updated on accounts;
+create trigger trg_accounts_updated before update on accounts
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_contacts_updated on contacts;
+create trigger trg_contacts_updated before update on contacts
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_opps_updated on opportunities;
+create trigger trg_opps_updated before update on opportunities
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_activities_updated on activities;
+create trigger trg_activities_updated before update on activities
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_inside_updated on inside_tickets;
+create trigger trg_inside_updated before update on inside_tickets
+for each row execute function set_updated_at();
+
+drop trigger if exists trg_opps_probability on opportunities;
+create trigger trg_opps_probability
+before insert or update of stage on opportunities
+for each row execute function set_probability_from_stage();
+
+alter table accounts enable row level security;
+alter table contacts enable row level security;
+alter table opportunities enable row level security;
+alter table activities enable row level security;
+alter table inside_tickets enable row level security;
+
+drop policy if exists "auth all" on accounts;
+create policy "auth all" on accounts for all to authenticated using (true) with check (true);
+
+drop policy if exists "auth all" on contacts;
+create policy "auth all" on contacts for all to authenticated using (true) with check (true);
+
+drop policy if exists "auth all" on opportunities;
+create policy "auth all" on opportunities for all to authenticated using (true) with check (true);
+
+drop policy if exists "auth all" on activities;
+create policy "auth all" on activities for all to authenticated using (true) with check (true);
+
+drop policy if exists "auth all" on inside_tickets;
+create policy "auth all" on inside_tickets for all to authenticated using (true) with check (true);
+
+
+
+Seed accounts table with company records
+
+INSERT INTO accounts (name, region, segment)
+VALUES
+  ('BKAM', 'Rabat', 'Banque'),
+  ('APTIV', 'Nord', 'Industrie'),
+  ('ACWA POWER', 'Rabat', 'Energie'),
+  ('AFMA', 'Casa', 'Assurance'),
+  ('Allianz', 'Casa', 'Assurance'),
+  ('ANEP', 'Rabat', 'Public'),
+  ('ACOME', 'Nord', 'Industrie'),
+  ('ByteDance', 'Rabat', 'Tech'),
+  ('HPS', 'Casa', 'Tech'),
+  ('AXA', 'Casa', 'Assurance'),
+  ('Lear', 'Nord', 'Industrie'),
+  ('TAQA', 'Rabat', 'Energie');
+
+Seed sample opportunities
+
+
+WITH acc AS (
+  SELECT id, row_number() OVER (ORDER BY name) rn
+  FROM accounts
+  WHERE name IN ('BKAM','APTIV','ACWA POWER','AFMA','Allianz','ANEP','ACOME','ByteDance','HPS','AXA','Lear','TAQA')
+),
+acc_count AS (SELECT COUNT(*)::int n FROM acc),
+
+stg AS (
+  SELECT stage, row_number() OVER (ORDER BY sort_order) rn
+  FROM stage_definitions
+),
+stg_count AS (SELECT COUNT(*)::int n FROM stg),
+
+gen AS (SELECT generate_series(1,20) g)
+
+INSERT INTO opportunities (
+  account_id, title, bu, deal_type, stage,
+  probability, amount_mad, margin_pct, close_date, inside_status
+)
+SELECT
+  (SELECT id FROM acc ORDER BY rn LIMIT 1 OFFSET ((g-1) % (SELECT n FROM acc_count))),
+  'Deal test #' || g,
+  CASE ((g-1) % 4)
+    WHEN 0 THEN 'INFRA'
+    WHEN 1 THEN 'CSG'
+    WHEN 2 THEN 'CYBER'
+    ELSE 'SERVICE'
+  END,
+  CASE ((g-1) % 4)
+    WHEN 0 THEN 'AO'
+    WHEN 1 THEN 'Projet'
+    WHEN 2 THEN 'Run'
+    ELSE 'Renouvellement'
+  END,
+  (SELECT stage FROM stg ORDER BY rn LIMIT 1 OFFSET ((g-1) % (SELECT n FROM stg_count))),
+  CASE ((g-1) % 6)
+    WHEN 0 THEN 10
+    WHEN 1 THEN 20
+    WHEN 2 THEN 40
+    WHEN 3 THEN 60
+    WHEN 4 THEN 80
+    ELSE 90
+  END,
+  ROUND(200000 + RANDOM()*1800000),
+  ROUND(8 + RANDOM()*12),
+  (CURRENT_DATE + (RANDOM()*90)::int),
+  'NONE'
+FROM gen;
+
+
+Opportunities Constraint Definition
+
+
+SELECT pg_get_constraintdef(oid) AS def
+FROM pg_constraint
+WHERE conrelid = 'opportunities'::regclass
+  AND conname = 'opportunities_inside_status_check';
+
+
+Constraint Definition Lookup
+
+
+SELECT pg_get_constraintdef(oid) AS def
+FROM pg_constraint
+WHERE conrelid = 'opportunities'::regclass
+  AND conname = 'opportunities_inside_status_check';
+
+
+Seed Opportunities with Test Data
+
+
+WITH acc AS (
+  SELECT id, row_number() OVER (ORDER BY name) rn
+  FROM accounts
+  WHERE name IN ('BKAM','APTIV','ACWA POWER','AFMA','Allianz','ANEP','ACOME','ByteDance','HPS','AXA','Lear','TAQA')
+),
+acc_count AS (SELECT COUNT(*)::int n FROM acc),
+
+stg AS (
+  SELECT stage, row_number() OVER (ORDER BY sort_order) rn
+  FROM stage_definitions
+),
+stg_count AS (SELECT COUNT(*)::int n FROM stg),
+
+gen AS (SELECT generate_series(1,20) g)
+
+INSERT INTO opportunities (
+  account_id, title, bu, deal_type, stage,
+  probability, amount_mad, margin_pct, close_date, inside_status,
+  next_step, next_step_due
+)
+SELECT
+  (SELECT id FROM acc ORDER BY rn LIMIT 1 OFFSET ((g-1) % (SELECT n FROM acc_count))),
+  'Deal test #' || g,
+  CASE ((g-1) % 4)
+    WHEN 0 THEN 'INFRA'
+    WHEN 1 THEN 'CSG'
+    WHEN 2 THEN 'CYBER'
+    ELSE 'SERVICE'
+  END,
+  CASE ((g-1) % 4)
+    WHEN 0 THEN 'AO'
+    WHEN 1 THEN 'Projet'
+    WHEN 2 THEN 'Run'
+    ELSE 'Renouvellement'
+  END,
+  (SELECT stage FROM stg ORDER BY rn LIMIT 1 OFFSET ((g-1) % (SELECT n FROM stg_count))),
+  CASE ((g-1) % 6)
+    WHEN 0 THEN 10
+    WHEN 1 THEN 20
+    WHEN 2 THEN 40
+    WHEN 3 THEN 60
+    WHEN 4 THEN 80
+    ELSE 90
+  END,
+  ROUND(200000 + RANDOM()*1800000),
+  ROUND(8 + RANDOM()*12),
+  (CURRENT_DATE + (RANDOM()*90)::int),
+  'NEW',
+  'Relance / prochaine action',
+  (CURRENT_DATE + (1 + (RANDOM()*14)::int))
+FROM gen;
+
+
+
+Add constructor and booking date to opportunities
+
+
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS constructor text;
+ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS booking_date date;
+
+
+Populate Missing Constructor with Random Vendor
+
+
+UPDATE opportunities
+SET constructor = (ARRAY['Dell','HP','Lenovo','Fortinet','Palo Alto','NetApp'])[(floor(random()*6)+1)::int]
+WHERE constructor IS NULL;
+
+
+
+
+Billing and Sales Activity Tables
+
+-- Si pas déjà présent (pour gen_random_uuid)
+create extension if not exists pgcrypto;
+
+-- 1) FACTURES / FACTURÉ (la vérité pour Achraf = facturé, pas PO)
+create table if not exists billings (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid references accounts(id) on delete set null,
+  bu text not null,
+  constructor text null,
+  amount_mad numeric not null check (amount_mad >= 0),
+  invoice_date date not null,
+  notes text null,
+  created_at timestamptz not null default now()
+);
+
+alter table billings enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where policyname = 'billings_all_authenticated'
+  ) then
+    create policy "billings_all_authenticated"
+    on billings for all
+    to authenticated
+    using (true)
+    with check (true);
+  end if;
+end $$;
+
+-- 2) ACTIVITÉS (Call/Email/Meeting) pour le graphe “Sales Activity by Rep”
+create table if not exists activities (
+  id uuid primary key default gen_random_uuid(),
+  rep_email text not null,
+  rep_name text not null,
+  activity_type text not null check (activity_type in ('Call','Email','Meeting','Other')),
+  activity_date date not null,
+  account_id uuid references accounts(id) on delete set null,
+  opportunity_id uuid references opportunities(id) on delete set null,
+  notes text null,
+  created_at timestamptz not null default now()
+);
+
+alter table activities enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_policies where policyname = 'activities_all_authenticated'
+  ) then
+    create policy "activities_all_authenticated"
+    on activities for all
+    to authenticated
+    using (true)
+    with check (true);
+  end if;
+end $$;
+
+-- 3) OWNER (pour “Pipeline by Sales Rep”)
+alter table opportunities add column if not exists owner_name text;
+alter table opportunities add column if not exists owner_email text;
+
+-- (Optionnel) Valeurs par défaut si c'est vide
+update opportunities
+set owner_name = coalesce(owner_name, 'Nabil'),
+    owner_email = coalesce(owner_email, 'nabil.imdh@gmail.com')
+where owner_name is null or owner_email is null;
+
+
+Billings table schema
+create table if not exists public.billings (
+  id uuid primary key default gen_random_uuid(),
+  billing_date date not null,
+  client_name text not null,
+  bu text not null check (bu in ('CSG','INFRA','CYBER','SERVICE','OTHER')),
+  amount_mad numeric(14,2) not null check (amount_mad >= 0),
+  invoice_ref text,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists billings_billing_date_idx on public.billings (billing_date);
+create index if not exists billings_bu_idx on public.billings (bu);
+create index if not exists billings_client_idx on public.billings (client_name);
+
+
+Billings table — Facturé (v1)
+
+-- CRM-PIPE — Schema v1 (OFFICIEL) : Billings (Facturé)
+
+drop table if exists public.billings cascade;
+create extension if not exists pgcrypto;
+
+create table public.billings (
+  id uuid primary key default gen_random_uuid(),
+  billing_date date not null,
+  client_name text not null,
+  bu text not null check (bu in ('CSG','INFRA','CYBER','SERVICE','OTHER')),
+  amount_mad numeric(14,2) not null check (amount_mad >= 0),
+  invoice_ref text,
+  notes text,
+  created_at timestamptz not null default now()
+);
+
+create index billings_billing_date_idx on public.billings (billing_date);
+create index billings_bu_idx on public.billings (bu);
+create index billings_client_idx on public.billings (client_name);
+
+
+Enable RLS and full-access policies on Billings
+
+
+
+alter table public.billings enable row level security;
+
+drop policy if exists "billings_read_all" on public.billings;
+create policy "billings_read_all"
+on public.billings for select
+to authenticated
+using (true);
+
+drop policy if exists "billings_write_all" on public.billings;
+create policy "billings_write_all"
+on public.billings for insert
+to authenticated
+with check (true);
+
+drop policy if exists "billings_update_all" on public.billings;
+create policy "billings_update_all"
+on public.billings for update
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists "billings_delete_all" on public.billings;
+create policy "billings_delete_all"
+on public.billings for delete
+to authenticated
+using (true);
+
+Bulk insert of billing records
+
+insert into public.billings (billing_date, client_name, bu, amount_mad, invoice_ref, notes)
+values
+('2026-01-05','APTIV','CSG', 850000, 'INV-APT-001','Test'),
+('2026-01-12','BKAM','INFRA', 1200000, 'INV-BKAM-001','Test'),
+('2026-01-18','AXA','CYBER', 430000, 'INV-AXA-001','Test'),
+('2026-02-03','HPS','SERVICE', 210000, 'INV-HPS-001','Test'),
+('2026-02-11','APTIV','INFRA', 640000, 'INV-APT-002','Test'),
+('2026-03-02','BKAM','CSG', 1500000, 'INV-BKAM-002','Test'),
+('2026-03-15','TAQA','CYBER', 520000, 'INV-TAQA-001','Test'),
+('2026-04-09','LEAR','INFRA', 760000, 'INV-LEAR-001','Test'),
+('2026-05-20','BYTEDANCE','SERVICE', 300000, 'INV-BD-001','Test'),
+('2026-06-28','APTIV','CYBER', 390000, 'INV-APT-003','Test');
+
+
+
+Accounts and contacts schema + seed data
+
+
+-- 0) UUID helper (normalement déjà activé sur Supabase)
+create extension if not exists "pgcrypto";
+
+-- 1) Ajouter les colonnes manquantes (pour que /accounts charge)
+alter table if exists public.accounts
+  add column if not exists sector text,
+  add column if not exists segment text,
+  add column if not exists region text,
+  add column if not exists is_public boolean default false;
+
+-- 2) Index unique sur le nom (évite doublons exacts)
+create unique index if not exists accounts_name_unique
+on public.accounts (name);
+
+-- 3) Table contacts (plusieurs contacts par client)
+create table if not exists public.account_contacts (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references public.accounts(id) on delete cascade,
+  full_name text,
+  email text,
+  phone text,
+  role text,
+  is_primary boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists account_contacts_account_id_idx
+on public.account_contacts(account_id);
+
+-- 4) Seed tes comptes (mapping temporaire pour matcher l’écran actuel) :
+-- sector = Segment client (Public / Semi-public / Privé)
+-- segment = Secteur d’activité (Industrie / Energie / …)
+-- region = Région
+insert into public.accounts (name, sector, segment, region, is_public)
+values
+('ACOME','Privé','Industrie','Nord Ma', false),
+('ACWA POWER','Privé','Energie','Rabat', false),
+('AFMA','Privé','Assurance','Casablanca', false),
+('Allianz','Privé','Assurance','Casablanca', false),
+('ANEP','Public','Infrastructures','Rabat', true),
+('APTIV','Privé','Industrie','Nord Ma', false),
+('AUDA','Semi-public','Aménagement','Casablanca', true),
+('AXESS PHARMA','Privé','Pharmaceutique','Casablanca', false),
+('BANK AL MAGHRIB','Public','Banque','Rabat', true)
+on conflict (name) do update set
+  sector = excluded.sector,
+  segment = excluded.segment,
+  region = excluded.region,
+  is_public = excluded.is_public;
+
+-- 5) Seed contacts
+insert into public.account_contacts (account_id, full_name, email, phone, role, is_primary)
+values
+((select id from public.accounts where name='ACOME' limit 1), 'Ahmed Yassine CHAKOR', 'ahmedyassine.chakor@acome.ma', '0688158578', 'Responsable compte', true),
+
+((select id from public.accounts where name='ACWA POWER' limit 1), 'Ismail El Bouzakraoui Alaoui', 'IAlaoui@acwapower.com', '0686022980', 'Responsable compte', true),
+
+((select id from public.accounts where name='ANEP' limit 1), 'Mustapha Azbakh', 'm.azbakh@anep.ma', '0772000558', 'Responsable compte', true),
+
+((select id from public.accounts where name='APTIV' limit 1), 'Bounab Ikram', 'ikram.bounab@aptiv.com', '0663262460', 'Responsable compte', true),
+((select id from public.accounts where name='APTIV' limit 1), 'Yamani Mehdia', 'mehdia.yamani@aptiv.com', '0655556371', 'Contact', false),
+((select id from public.accounts where name='APTIV' limit 1), 'Elghazi Tarik', 'Tarik.Elghazi@aptiv.com', '0663262081', 'Contact', false),
+((select id from public.accounts where name='APTIV' limit 1), 'Errady Mohamed', 'mohamed.errady@aptiv.com', '0656349240', 'Contact', false),
+((select id from public.accounts where name='APTIV' limit 1), 'El Boussaidi Naima', 'naima.el.boussaidi@aptiv.com', '0691800754', 'Contact', false),
+
+((select id from public.accounts where name='AUDA' limit 1), 'Atif Ifriki', 'a.ifriki@auda.ma', '0657777678', 'Responsable compte', true),
+
+((select id from public.accounts where name='AXESS PHARMA' limit 1), 'Badreddine Bencherki', 'b.bencherki@axesspharma.ma', '0673267809', 'Responsable compte', true),
+
+((select id from public.accounts where name='BANK AL MAGHRIB' limit 1), 'OUAHIB SAMY', 's.ouahib@bkam.ma', '0661320767', 'Responsable compte', true),
+((select id from public.accounts where name='BANK AL MAGHRIB' limit 1), 'BENLAFQIH EL MEHDI', 'm.benlafqih@bkam.ma', null, 'Contact', false),
+((select id from public.accounts where name='BANK AL MAGHRIB' limit 1), 'BRICHA KENZA', 'k.bricha@bkam.ma', '0666207064', 'Contact', false);
+
+
+
+Restrict accounts and contacts access to two users
+
+
+-- ACCOUNTS
+alter table public.accounts enable row level security;
+
+create policy "accounts_full_access_for_two_users"
+on public.accounts
+for all
+to authenticated
+using (
+  (auth.jwt() ->> 'email') in ('nabil.imdh@gmail.com','s.chitachny@compucom.ma')
+)
+with check (
+  (auth.jwt() ->> 'email') in ('nabil.imdh@gmail.com','s.chitachny@compucom.ma')
+);
+
+-- CONTACTS
+alter table public.account_contacts enable row level security;
+
+create policy "account_contacts_full_access_for_two_users"
+on public.account_contacts
+for all
+to authenticated
+using (
+  (auth.jwt() ->> 'email') in ('nabil.imdh@gmail.com','s.chitachny@compucom.ma')
+)
+with check (
+  (auth.jwt() ->> 'email') in ('nabil.imdh@gmail.com','s.chitachny@compucom.ma')
+);
+
+
+Opportunity Line Items
+
+create table if not exists public.opportunity_lines (
+  id uuid primary key default gen_random_uuid(),
+  opportunity_id uuid not null references public.opportunities(id) on delete cascade,
+  bu text not null,
+  vendor text null,
+  amount numeric not null default 0,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists opportunity_lines_opportunity_id_idx
+on public.opportunity_lines(opportunity_id);
+
+
+Opportunities Columns and Vendor Cards Seed
+
+
+-- 1) Colonnes manquantes dans opportunities
+alter table public.opportunities
+  add column if not exists status text not null default 'Open',
+  add column if not exists notes text,
+  add column if not exists booking_month text,
+  add column if not exists next_step text,
+  add column if not exists prob int,
+  add column if not exists bu text,
+  add column if not exists vendor text,
+  add column if not exists multi_bu boolean not null default false,
+  add column if not exists bu_lines jsonb;
+
+-- 2) Table "cards" (constructeurs/éditeurs) + seed
+create table if not exists public.cards (
+  id uuid primary key default gen_random_uuid(),
+  name text unique not null,
+  created_at timestamptz not null default now()
+);
+
+insert into public.cards(name) values
+('Adobe'),('Anthology'),('AnyDesk'),('APC'),('Apple'),('Autodesk'),('Barco'),('Blancco'),
+('Brother'),('Canon'),('Check Point'),('Cisco'),('Commvault'),('Cysop'),('Dell'),('Eaton'),
+('Efficient Elements'),('Fortinet'),('Grandstream'),('Honeywell'),('HP'),('HPE'),('Huawei'),
+('Jabra'),('Kaspersky'),('Konica Minolta'),('Lenovo'),('Logitech'),('Microsoft'),('Moxa'),
+('NEC'),('NetApp'),('Nutanix'),('Palo Alto Networks'),('Panasonic'),('Peplink'),('Roomz'),
+('Samsung'),('Seagate'),('Sophos'),('Sony'),('Synology'),('think-cell'),('Thuraya'),
+('Transcend'),('Ubiquiti'),('Veeam'),('ViewSonic'),('VMware'),('Yubico'),('Zebra')
+on conflict (name) do nothing;
+
+Add amount and created_at to opportunities
+
+
+alter table public.opportunities
+  add column if not exists amount numeric not null default 0,
+  add column if not exists created_at timestamptz not null default now();
+
+-- optionnel (propre) : éviter montant négatif
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'opportunities_amount_nonneg'
+  ) then
+    alter table public.opportunities
+      add constraint opportunities_amount_nonneg check (amount >= 0);
+  end if;
+end $$;
+
+
+Opportunities defaults and tracking fields
+
+
+-- 1) Deal type : mettre un défaut pour que les inserts passent
+alter table public.opportunities
+  alter column deal_type set default 'standard';
+
+update public.opportunities
+set deal_type = 'standard'
+where deal_type is null;
+
+-- 2) (sécurité) si tu n’as pas encore ces colonnes, on les ajoute
+alter table public.opportunities
+  add column if not exists status text not null default 'Open',
+  add column if not exists prob int not null default 10,
+  add column if not exists booking_month text null,
+  add column if not exists next_step text null;
+
+
+Normalize opportunities deal_type and add lines JSONB column
+
+
+-- 1) On remplace le check constraint deal_type par un check compatible CRM:
+--    single = 1 BU / multi = Multi-BU
+
+alter table public.opportunities
+  drop constraint if exists opportunities_deal_type_check;
+
+alter table public.opportunities
+  add constraint opportunities_deal_type_check
+  check (deal_type in ('single','multi'));
+
+alter table public.opportunities
+  alter column deal_type set default 'single';
+
+update public.opportunities
+set deal_type = 'single'
+where deal_type is null
+   or deal_type not in ('single','multi');
+
+-- 2) On ajoute un champ JSON pour stocker les lignes Multi-BU (sans casser le modèle actuel)
+alter table public.opportunities
+  add column if not exists lines jsonb not null default '[]'::jsonb;
+
+
+
+Opportunities table normalization for UI Deals
+
+
+-- ✅ CRM-PIPE: Normalisation table opportunities pour UI Deals
+
+-- 1) Colonnes manquantes (idempotent)
+alter table public.opportunities
+  add column if not exists title text,
+  add column if not exists stage text,
+  add column if not exists prob int,
+  add column if not exists close_month text,
+  add column if not exists next_step text,
+  add column if not exists bu text,
+  add column if not exists vendor text,
+  add column if not exists amount numeric,
+  add column if not exists lines jsonb not null default '[]'::jsonb,
+  add column if not exists deal_type text,
+  add column if not exists created_at timestamptz default now();
+
+-- 2) Valeurs par défaut (pour éviter NOT NULL errors)
+update public.opportunities set title = 'Untitled' where title is null;
+update public.opportunities set stage = 'Lead' where stage is null;
+update public.opportunities set prob = 10 where prob is null;
+update public.opportunities set next_step = '' where next_step is null;
+update public.opportunities set amount = 0 where amount is null;
+update public.opportunities set deal_type = 'single'
+where deal_type is null or deal_type not in ('single','multi');
+
+-- 3) Contraintes propres (on drop avant, puis on recrée)
+alter table public.opportunities drop constraint if exists opportunities_deal_type_check;
+alter table public.opportunities drop constraint if exists opportunities_prob_check;
+
+alter table public.opportunities
+  add constraint opportunities_deal_type_check check (deal_type in ('single','multi'));
+
+alter table public.opportunities
+  add constraint opportunities_prob_check check (prob between 0 and 100);
+
+
+
+Opportunities Table Normalization for UI Deals
+
+
+-- ✅ CRM-PIPE: Normalisation table opportunities pour UI Deals
+
+-- 1) Colonnes manquantes (idempotent)
+alter table public.opportunities
+  add column if not exists title text,
+  add column if not exists stage text,
+  add column if not exists prob int,
+  add column if not exists close_month text,
+  add column if not exists next_step text,
+  add column if not exists bu text,
+  add column if not exists vendor text,
+  add column if not exists amount numeric,
+  add column if not exists lines jsonb not null default '[]'::jsonb,
+  add column if not exists deal_type text,
+  add column if not exists created_at timestamptz default now();
+
+-- 2) Valeurs par défaut (pour éviter NOT NULL errors)
+update public.opportunities set title = 'Untitled' where title is null;
+update public.opportunities set stage = 'Lead' where stage is null;
+update public.opportunities set prob = 10 where prob is null;
+update public.opportunities set next_step = '' where next_step is null;
+update public.opportunities set amount = 0 where amount is null;
+update public.opportunities set deal_type = 'single'
+where deal_type is null or deal_type not in ('single','multi');
+
+-- 3) Contraintes propres (on drop avant, puis on recrée)
+alter table public.opportunities drop constraint if exists opportunities_deal_type_check;
+alter table public.opportunities drop constraint if exists opportunities_prob_check;
+
+alter table public.opportunities
+  add constraint opportunities_deal_type_check check (deal_type in ('single','multi'));
+
+alter table public.opportunities
+  add constraint opportunities_prob_check check (prob between 0 and 100);
+
+
+Normalize opportunities.deal_type and enforce allowed values
+
+
+-- 1) On enlève temporairement le CHECK
+alter table public.opportunities
+  drop constraint if exists opportunities_deal_type_check;
+
+-- 2) On s’assure que deal_type existe
+alter table public.opportunities
+  add column if not exists deal_type text;
+
+-- 3) On normalise les anciennes valeurs (single/multi/NULL/whatever => NEW)
+update public.opportunities
+set deal_type = 'NEW'
+where deal_type is null
+   or trim(deal_type) = ''
+   or lower(deal_type) in ('single','multi')
+   or deal_type not in ('NEW','RENEW','UPSELL','CROSSSELL');
+
+-- 4) On met un DEFAULT propre + NOT NULL
+alter table public.opportunities
+  alter column deal_type set default 'NEW';
+
+update public.opportunities
+set deal_type = 'NEW'
+where deal_type is null;
+
+alter table public.opportunities
+  alter column deal_type set not null;
+
+-- 5) On remet le CHECK (commercial)
+alter table public.opportunities
+  add constraint opportunities_deal_type_check
+  check (deal_type in ('NEW','RENEW','UPSELL','CROSSSELL'));
+
+
+Normalize opportunities.deal_type and enforce allowed values
+
+
+-- 1) On enlève temporairement le CHECK
+alter table public.opportunities
+  drop constraint if exists opportunities_deal_type_check;
+
+-- 2) On s’assure que deal_type existe
+alter table public.opportunities
+  add column if not exists deal_type text;
+
+-- 3) On normalise les anciennes valeurs (single/multi/NULL/whatever => NEW)
+update public.opportunities
+set deal_type = 'NEW'
+where deal_type is null
+   or trim(deal_type) = ''
+   or lower(deal_type) in ('single','multi')
+   or deal_type not in ('NEW','RENEW','UPSELL','CROSSSELL');
+
+-- 4) On met un DEFAULT propre + NOT NULL
+alter table public.opportunities
+  alter column deal_type set default 'NEW';
+
+update public.opportunities
+set deal_type = 'NEW'
+where deal_type is null;
+
+alter table public.opportunities
+  alter column deal_type set not null;
+
+-- 5) On remet le CHECK (commercial)
+alter table public.opportunities
+  add constraint opportunities_deal_type_check
+  check (deal_type in ('NEW','RENEW','UPSELL','CROSSSELL'));
+
+
+Constraint definition for opportunities.next_step_required
+
+
+select conname, pg_get_constraintdef(c.oid) as def
+from pg_constraint c
+join pg_class t on t.oid = c.conrelid
+join pg_namespace n on n.oid = t.relnamespace
+where n.nspname='public'
+  and t.relname='opportunities'
+  and conname='next_step_required';
+
+
+Enforce non-empty next_step on opportunities
+
+update public.opportunities
+set next_step = 'TBD'
+where next_step is null or length(trim(next_step)) = 0;
+
+alter table public.opportunities
+drop constraint if exists next_step_required;
+
+alter table public.opportunities
+add constraint next_step_required
+check (length(trim(coalesce(next_step,''))) > 0);
+
+
+Enforce allowed business-unit values on opportunities
+
+
+alter table public.opportunities
+drop constraint if exists opportunities_bu_check;
+
+alter table public.opportunities
+add constraint opportunities_bu_check
+check (bu in ('HCI','Network','Storage','Cyber','Service','CSG','MULTI'));
+
+
+
+Normalize opportunities BU values
+
+-- 0) Voir les valeurs BU existantes (info)
+select coalesce(trim(bu), '(NULL)') as bu_value, count(*) as n
+from public.opportunities
+group by 1
+order by 2 desc;
+
+-- 1) Normaliser les BU connus + MULTI variants
+update public.opportunities
+set bu =
+  case
+    when bu is null then null
+    else case upper(trim(bu))
+      when 'HCI' then 'HCI'
+      when 'NETWORK' then 'Network'
+      when 'STORAGE' then 'Storage'
+      when 'CYBER' then 'Cyber'
+      when 'SERVICE' then 'Service'
+      when 'CSG' then 'CSG'
+      when 'MULTI' then 'MULTI'
+      when 'MULTI_BU' then 'MULTI'
+      when 'MULTI-BU' then 'MULTI'
+      when 'MULTIBU' then 'MULTI'
+      else trim(bu)
+    end
+  end,
+  notes =
+    case
+      when bu is null then notes
+      when upper(trim(bu)) in ('HCI','NETWORK','STORAGE','CYBER','SERVICE','CSG','MULTI','MULTI_BU','MULTI-BU','MULTIBU') then notes
+      when trim(bu) in ('HCI','Network','Storage','Cyber','Service','CSG','MULTI') then notes
+      else concat('[BU raw: ', trim(bu), '] ', coalesce(notes, ''))
+    end;
+
+-- 2) Tout ce qui reste hors liste => bu = NULL (mais on a gardé BU raw dans notes)
+update public.opportunities
+set bu = null
+where bu is not null
+  and trim(bu) not in ('HCI','Network','Storage','Cyber','Service','CSG','MULTI');
+
+-- 3) Recréer la contrainte (avec MULTI)
+alter table public.opportunities
+drop constraint if exists opportunities_bu_check;
+
+alter table public.opportunities
+add constraint opportunities_bu_check
+check (bu is null or trim(bu) in ('HCI','Network','Storage','Cyber','Service','CSG','MULTI'));
+
+-- 4) Vérif rapide : il ne doit plus rien rester hors liste
+select id, bu, notes
+from public.opportunities
+where bu is not null and trim(bu) not in ('HCI','Network','Storage','Cyber','Service','CSG','MULTI');
+
+
+
+BU cleanup and normalization
+
+
+-- 1) On enlève la contrainte BU (sinon elle bloque le nettoyage)
+alter table public.opportunities
+drop constraint if exists opportunities_bu_check;
+
+-- 2) Nettoyage basique (trim + enlève NBSP)
+update public.opportunities
+set bu = nullif(trim(replace(bu, chr(160), '')), '')
+where bu is not null;
+
+-- 3) Normalisation (on garde ton style d'affichage)
+update public.opportunities
+set bu =
+  case upper(bu)
+    when 'HCI' then 'HCI'
+    when 'NETWORK' then 'Network'
+    when 'STORAGE' then 'Storage'
+    when 'CYBER' then 'Cyber'
+    when 'SERVICE' then 'Service'
+    when 'CSG' then 'CSG'
+    when 'MULTI' then 'MULTI'
+    when 'MULTI_BU' then 'MULTI'
+    when 'MULTI-BU' then 'MULTI'
+    when 'MULTIBU' then 'MULTI'
+    else bu
+  end
+where bu is not null;
+
+-- 4) Si BU reste inconnue, on la met à NULL mais on garde la valeur brute dans notes
+update public.opportunities
+set notes = concat('[BU raw: ', bu, '] ', coalesce(notes, '')),
+    bu = null
+where bu is not null
+  and upper(trim(replace(bu, chr(160), ''))) not in ('HCI','NETWORK','STORAGE','CYBER','SERVICE','CSG','MULTI');
+
+-- 5) Recréation de la contrainte BU (INSENSIBLE À LA CASSE + trim + NBSP safe)
+alter table public.opportunities
+add constraint opportunities_bu_check
+check (
+  bu is null
+  or upper(trim(replace(bu, chr(160), ''))) in ('HCI','NETWORK','STORAGE','CYBER','SERVICE','CSG','MULTI')
+);
+
+-- 6) Vérif : doit retourner 0 ligne
+select id, bu, notes
+from public.opportunities
+where bu is not null
+  and upper(trim(replace(bu, chr(160), ''))) not in ('HCI','NETWORK','STORAGE','CYBER','SERVICE','CSG','MULTI');
+
+
+Normalize and Enforce Opportunity BU Values
+
+
+begin;
+
+-- 1) Retire la contrainte BU le temps du nettoyage
+alter table public.opportunities
+drop constraint if exists opportunities_bu_check;
+
+-- 2) Nettoyage whitespace + NBSP (chr(160))
+update public.opportunities
+set bu = trim(replace(bu, chr(160), ''))
+where bu is not null;
+
+-- 3) Normalisation / mapping (ajoute ici les synonymes utiles)
+update public.opportunities
+set bu =
+  case upper(bu)
+    when 'HCI' then 'HCI'
+    when 'INFRA' then 'HCI'
+    when 'INFRASTRUCTURE' then 'HCI'
+
+    when 'NETWORK' then 'Network'
+    when 'RESEAU' then 'Network'
+
+    when 'STORAGE' then 'Storage'
+    when 'STOCKAGE' then 'Storage'
+
+    when 'CYBER' then 'Cyber'
+    when 'SECURITY' then 'Cyber'
+    when 'SECURITE' then 'Cyber'
+
+    when 'SERVICE' then 'Service'
+    when 'SERVICES' then 'Service'
+
+    when 'CSG' then 'CSG'
+
+    when 'MULTI' then 'MULTI'
+    when 'MULTI_BU' then 'MULTI'
+    when 'MULTI-BU' then 'MULTI'
+    when 'MULTIBU' then 'MULTI'
+
+    else bu
+  end
+where bu is not null;
+
+-- 4) Si BU invalide => on garde la valeur raw dans notes, et on met une BU valide (HCI)
+update public.opportunities
+set notes = concat('[BU raw: ', bu, '] ', coalesce(notes, '')),
+    bu = 'HCI'
+where bu is not null
+  and upper(trim(replace(bu, chr(160), ''))) not in
+    ('HCI','NETWORK','STORAGE','CYBER','SERVICE','CSG','MULTI');
+
+-- 5) Recréation de la contrainte BU (insensible à la casse + trim + NBSP safe)
+alter table public.opportunities
+add constraint opportunities_bu_check
+check (
+  upper(trim(replace(bu, chr(160), ''))) in ('HCI','NETWORK','STORAGE','CYBER','SERVICE','CSG','MULTI')
+);
+
+commit;
+
+-- Vérif (doit retourner 0 ligne)
+select id, bu, notes
+from public.opportunities
+where upper(trim(replace(bu, chr(160), ''))) not in
+  ('HCI','NETWORK','STORAGE','CYBER','SERVICE','CSG','MULTI');
+
+
+
+Opportunities Backup Snapshot 
+
+create table if not exists public.opportunities_backup_tmp as
+select * from public.opportunities;
+
+Opportunities with Missing or Nonstandard BU
+
+
+select id, bu, notes
+from public.opportunities
+where bu is null
+   or upper(trim(replace(bu, chr(160), ''))) not in
+    ('HCI','NETWORK','STORAGE','CYBER','SERVICE','CSG','MULTI');
+
+Normalisation des champs opportunities
+
+
+
+-- 0) (Optionnel) Voir ce qui existe
+select deal_type, count(*) from public.opportunities group by deal_type order by 2 desc;
+select bu, count(*) from public.opportunities group by bu order by 2 desc;
+
+-- 1) Normaliser deal_type (certaines anciennes lignes ont NEW / NULL)
+update public.opportunities
+set deal_type = 'single'
+where deal_type is null or deal_type not in ('single','multi');
+
+alter table public.opportunities
+  alter column deal_type set default 'single';
+
+alter table public.opportunities
+  drop constraint if exists opportunities_deal_type_check;
+
+alter table public.opportunities
+  add constraint opportunities_deal_type_check
+  check (deal_type in ('single','multi'));
+
+-- 2) Normaliser BU (certaines anciennes lignes ont INFRA / NULL / etc.)
+-- Choix safe: on remet en CSG quand c'est invalide
+update public.opportunities
+set bu = 'CSG'
+where bu is null
+   or lower(bu) not in ('hci','network','storage','cyber','service','csg','multi');
+
+-- 3) Recréer la contrainte BU (case-insensitive + autorise multi)
+alter table public.opportunities
+  drop constraint if exists opportunities_bu_check;
+
+alter table public.opportunities
+  add constraint opportunities_bu_check
+  check (lower(bu) in ('hci','network','storage','cyber','service','csg','multi'));
+
+
+Normalize and enforce opportunities.deal_type
+
+
+
+-- 1) Voir les valeurs invalides (tu vas sûrement voir NEW)
+select deal_type, count(*)
+from public.opportunities
+group by deal_type
+order by count(*) desc;
+
+select id, deal_type
+from public.opportunities
+where deal_type is null
+   or lower(trim(deal_type)) not in ('single','multi')
+limit 50;
+
+-- 2) Normaliser (tout ce qui est invalide => single)
+update public.opportunities
+set deal_type = case
+  when deal_type is null then 'single'
+  when lower(trim(deal_type)) = 'multi' then 'multi'
+  when lower(trim(deal_type)) = 'single' then 'single'
+  else 'single'
+end;
+
+-- 3) Recréer la contrainte (version robuste: trim/lower)
+alter table public.opportunities
+drop constraint if exists opportunities_deal_type_check;
+
+alter table public.opportunities
+add constraint opportunities_deal_type_check
+check (lower(trim(deal_type)) in ('single','multi'));
+
+-- 4) Default (utile pour les inserts)
+alter table public.opportunities
+alter column deal_type set default 'single';
+
+
+Normalize and enforce opportunities.deal_type
+
+
+begin;
+
+-- 0) (optionnel) voir la définition actuelle avant
+select conname, pg_get_constraintdef(c.oid) as def
+from pg_constraint c
+where c.conrelid = 'public.opportunities'::regclass
+  and c.conname = 'opportunities_deal_type_check';
+
+-- 1) enlever la contrainte actuelle (celle qui bloque)
+alter table public.opportunities
+drop constraint if exists opportunities_deal_type_check;
+
+-- 2) normaliser TOUTES les valeurs existantes vers single/multi
+update public.opportunities
+set deal_type = case
+  when deal_type is null then 'single'
+  when trim(deal_type) = '' then 'single'
+  when lower(trim(deal_type)) = 'multi' then 'multi'
+  when lower(trim(deal_type)) = 'single' then 'single'
+  else 'single'              -- ex: NEW, RENEW, etc => single
+end;
+
+-- 3) forcer en minuscules propres (évite Single / SINGLE)
+update public.opportunities
+set deal_type = lower(trim(deal_type));
+
+-- 4) default (pour les futurs inserts)
+alter table public.opportunities
+alter column deal_type set default 'single';
+
+-- 5) recréer la contrainte (robuste)
+alter table public.opportunities
+add constraint opportunities_deal_type_check
+check (lower(trim(deal_type)) in ('single','multi'));
+
+commit;
+
+-- 6) contrôle (doit retourner uniquement single/multi)
+select deal_type, count(*)
+from public.opportunities
+group by deal_type
+order by count(*) desc;
+
+
+Constraint Definition Lookup
+
+
+select conname, pg_get_constraintdef(oid)
+from pg_constraint
+where conrelid='public.opportunities'::regclass
+  and conname='opportunities_deal_type_check';
+
+
+
+
+Case-insensitive BU constraint for opportunities
+
+
+-- Autoriser Multi + tes BU (case-insensitive)
+alter table public.opportunities
+drop constraint if exists opportunities_bu_check;
+
+alter table public.opportunities
+add constraint opportunities_bu_check
+check (
+  lower(trim(bu)) in ('csg','hci','cyber','service','storage','network','multi')
+);
+
+
+
+Opportunities Backup Snapshot 2026-01-09
+
+
+create table if not exists public.opportunities_backup_20260109 as
+select * from public.opportunities;
+
+
+Populate opportunity amounts from bu_lines totals
+
+
+with sums as (
+  select
+    o.id,
+    coalesce(sum( (e->>'amount')::numeric ), 0) as sum_amount
+  from public.opportunities o
+  cross join lateral jsonb_array_elements(coalesce(o.bu_lines, '[]'::jsonb)) e
+  group by o.id
+)
+update public.opportunities o
+set amount = s.sum_amount
+from sums s
+where o.id = s.id
+  and (o.amount is null or o.amount = 0)
+  and s.sum_amount > 0;
+
+Populate Missing Booking Month for Open Opportunities
+
+update public.opportunities
+set booking_month = '2026-02'
+where status = 'Open'
+  and (booking_month is null or booking_month = '');
+
+
+Q1 2026 opportunities by status
+
+
+
+-- Q1 2026 : somme montants OPEN + count
+with o as (
+  select
+    id,
+    status,
+    bu,
+    stage,
+    vendor,
+    amount,
+    prob,
+    case
+      when booking_month is null then null
+      when booking_month::text ~ '^\d{4}-\d{2}$' then to_date(booking_month::text||'-01','YYYY-MM-DD')
+      else (booking_month::text)::date
+    end as closing_date
+  from public.opportunities
+)
+select
+  status,
+  count(*) as nb,
+  coalesce(sum(amount),0) as total_amount
+from o
+where closing_date >= date '2026-01-01'
+  and closing_date <  date '2026-04-01'
+group by status
+order by status;
+
+
+Opportunities cleanup and normalization
+
+
+-- ✅ 0) BACKUP (sécurité)
+create table if not exists public.opportunities_backup_20260109 as
+select * from public.opportunities;
+
+-- ✅ 1) Normaliser deal_type
+update public.opportunities
+set deal_type = lower(trim(deal_type))
+where deal_type is not null;
+
+update public.opportunities
+set deal_type = 'single'
+where deal_type is null
+   or lower(trim(deal_type)) not in ('single','multi');
+
+alter table public.opportunities
+alter column deal_type set default 'single';
+
+alter table public.opportunities
+drop constraint if exists opportunities_deal_type_check;
+
+alter table public.opportunities
+add constraint opportunities_deal_type_check
+check (lower(trim(deal_type)) in ('single','multi'));
+
+-- ✅ 2) Normaliser BU + rendre compatible Multi
+-- (on accepte n’importe quelle casse: Service/service/SERVICE OK)
+update public.opportunities
+set bu =
+  case
+    when bu is null or trim(bu) = '' then null
+    when upper(trim(bu)) = 'INFRA' then 'HCI'
+    when upper(trim(bu)) in ('HCI','NETWORK','STORAGE','CYBER','SERVICE','CSG','MULTI')
+      then trim(bu)
+    else trim(bu)
+  end;
+
+-- Pour les deals multi, si bu vide => MULTI
+update public.opportunities
+set bu = 'MULTI'
+where lower(trim(deal_type)) = 'multi'
+  and (bu is null or trim(bu) = '');
+
+-- Pour les deals single, si bu vide => CSG (valeur par défaut)
+update public.opportunities
+set bu = 'CSG'
+where lower(trim(deal_type)) = 'single'
+  and (bu is null or trim(bu) = '');
+
+alter table public.opportunities
+drop constraint if exists opportunities_bu_check;
+
+alter table public.opportunities
+add constraint opportunities_bu_check
+check (upper(trim(bu)) in ('HCI','NETWORK','STORAGE','CYBER','SERVICE','CSG','MULTI'));
+
+
+Add purchase order fields to opportunities
+
+
+
+alter table public.opportunities
+  add column if not exists po_number text,
+  add column if not exists po_date date;
+
+
+
+Require PO number and date for won opportunities
+
+alter table public.opportunities
+  drop constraint if exists po_required_when_won;
+
+alter table public.opportunities
+  add constraint po_required_when_won
+  check (
+    lower(trim(stage)) <> 'won'
+    or (po_number is not null and length(trim(po_number)) > 0 and po_date is not null)
+  );
+
+
+Add PO fields to opportunities table
+
+
+-- Add PO fields (required when stage/status = Won)
+-- Run this in Supabase SQL editor BEFORE using the updated Deals page
+ALTER TABLE public.opportunities
+  ADD COLUMN IF NOT EXISTS po_number text;
+
+ALTER TABLE public.opportunities
+  ADD COLUMN IF NOT EXISTS po_date date;
+
+
+
+
+
+
+
