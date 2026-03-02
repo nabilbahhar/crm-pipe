@@ -833,13 +833,38 @@ export default function OpportunitiesPage() {
   }
 
   const miniStats = useMemo(() => {
-    const open = rows.filter(r => r.status === 'Open' || (!r.status && r.stage !== 'Won' && !r.stage?.includes('Lost')))
-    const won = rows.filter(r => r.status === 'Won' || r.stage === 'Won')
-    const lost = rows.filter(r => r.status === 'Lost' || r.stage?.includes('Lost'))
+    const now = new Date()
+    const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const nextMonth = `${now.getFullYear()}-${String(now.getMonth() + 2).padStart(2, '0')}`
+
+    const open = rows.filter(r => r.status === 'Open')
+    const won = rows.filter(r => r.status === 'Won')
+    const lost = rows.filter(r => r.status === 'Lost')
+
     const pipelineAmount = open.reduce((s, r) => s + Number(r.amount || 0), 0)
     const wonAmount = won.reduce((s, r) => s + Number(r.amount || 0), 0)
     const forecast = open.reduce((s, r) => s + Number(r.amount || 0) * (Number(r.prob || 0) / 100), 0)
-    return { total: rows.length, openCount: open.length, wonCount: won.length, lostCount: lost.length, pipelineAmount, wonAmount, forecast }
+
+    const closed = won.length + lost.length
+    const winRate = closed > 0 ? Math.round((won.length / closed) * 100) : 0
+    const avgDealSize = open.length > 0 ? pipelineAmount / open.length : 0
+    const closingThisMonth = open.filter(r => r.booking_month === thisMonth || r.booking_month === nextMonth)
+    const closingThisMonthAmount = closingThisMonth.reduce((s, r) => s + Number(r.amount || 0), 0)
+
+    // Par stage
+    const stageMap: Record<string, { count: number; amount: number }> = {}
+    for (const r of open) {
+      if (!stageMap[r.stage]) stageMap[r.stage] = { count: 0, amount: 0 }
+      stageMap[r.stage].count++
+      stageMap[r.stage].amount += Number(r.amount || 0)
+    }
+    const byStage = Object.entries(stageMap).sort((a, b) => b[1].amount - a[1].amount)
+
+    return {
+      total: rows.length, openCount: open.length, wonCount: won.length, lostCount: lost.length,
+      pipelineAmount, wonAmount, forecast, winRate, avgDealSize, closingThisMonth: closingThisMonth.length,
+      closingThisMonthAmount, byStage
+    }
   }, [rows])
 
   const toggleSort = (key: SortKey) => {
@@ -969,20 +994,59 @@ export default function OpportunitiesPage() {
           <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{info}</div>
         ) : null}
 
-        {/* Mini Stats */}
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-5">
-          {[
-            { label: 'Total deals', value: miniStats.total, sub: null, color: 'text-slate-900' },
-            { label: 'Open', value: miniStats.openCount, sub: null, color: 'text-blue-700' },
-            { label: 'Won', value: miniStats.wonCount, sub: null, color: 'text-emerald-700' },
-            { label: 'Pipeline Open', value: mad(miniStats.pipelineAmount), sub: null, color: 'text-slate-900' },
-            { label: 'Forecast pondéré', value: mad(miniStats.forecast), sub: null, color: 'text-violet-700' },
-          ].map(s => (
-            <div key={s.label} className="rounded-2xl border bg-white p-3 shadow-sm">
-              <div className="text-xs text-slate-400 mb-1">{s.label}</div>
-              <div className={`text-lg font-bold ${s.color}`}>{s.value}</div>
+        {/* Stats */}
+        <div className="mt-5 space-y-3">
+          {/* Row 1 — KPIs principaux */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
+            {[
+              { label: 'Total deals', value: String(miniStats.total), color: 'text-slate-900', bg: '' },
+              { label: 'Open', value: String(miniStats.openCount), color: 'text-blue-700', bg: 'bg-blue-50' },
+              { label: 'Won', value: String(miniStats.wonCount), color: 'text-emerald-700', bg: 'bg-emerald-50' },
+              { label: 'Lost', value: String(miniStats.lostCount), color: 'text-red-600', bg: 'bg-red-50' },
+              { label: 'Win Rate', value: `${miniStats.winRate}%`, color: miniStats.winRate >= 50 ? 'text-emerald-700' : 'text-orange-600', bg: '' },
+              { label: 'Pipeline Open', value: mad(miniStats.pipelineAmount), color: 'text-slate-900', bg: '' },
+              { label: 'Forecast pondéré', value: mad(miniStats.forecast), color: 'text-violet-700', bg: '' },
+            ].map(s => (
+              <div key={s.label} className={`rounded-2xl border bg-white p-3 shadow-sm ${s.bg}`}>
+                <div className="text-xs text-slate-400 mb-1">{s.label}</div>
+                <div className={`text-base font-bold ${s.color}`}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Row 2 — Closing imminent + Taille moyenne + Répartition stages */}
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border bg-white p-4 shadow-sm">
+              <div className="text-xs text-slate-400 mb-1">Closing ce mois / mois prochain</div>
+              <div className="text-xl font-bold text-slate-900">{miniStats.closingThisMonth} deals</div>
+              <div className="text-sm text-orange-600 font-semibold mt-0.5">{mad(miniStats.closingThisMonthAmount)}</div>
+              <div className="text-xs text-slate-400 mt-1">Opportunités à closer rapidement</div>
             </div>
-          ))}
+
+            <div className="rounded-2xl border bg-white p-4 shadow-sm">
+              <div className="text-xs text-slate-400 mb-1">Taille moyenne deal open</div>
+              <div className="text-xl font-bold text-slate-900">{mad(miniStats.avgDealSize)}</div>
+              <div className="text-xs text-slate-400 mt-1">Montant Won total : <span className="font-semibold text-emerald-600">{mad(miniStats.wonAmount)}</span></div>
+            </div>
+
+            <div className="rounded-2xl border bg-white p-4 shadow-sm">
+              <div className="text-xs text-slate-500 font-semibold mb-2">Pipeline par stage (open)</div>
+              <div className="space-y-1.5">
+                {miniStats.byStage.slice(0, 4).map(([stage, { count, amount }]) => (
+                  <div key={stage} className="flex items-center gap-2">
+                    <div className="text-xs text-slate-600 w-24 truncate">{stage}</div>
+                    <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-slate-700"
+                        style={{ width: `${Math.round((amount / (miniStats.pipelineAmount || 1)) * 100)}%` }}
+                      />
+                    </div>
+                    <div className="text-xs text-slate-500 w-6 text-right">{count}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* LIST */}
