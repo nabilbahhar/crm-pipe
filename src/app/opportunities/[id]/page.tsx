@@ -103,24 +103,16 @@ export default function DealDetailPage() {
     setLoading(true)
     setErr(null)
     try {
-      const [d, a] = await Promise.all([
-        supabase
-          .from('opportunities')
-          .select('*, accounts(name)')
-          .eq('id', id)
-          .single(),
-        supabase
-          .from('activity_log')
-          .select('id,user_email,action_type,entity_name,detail,created_at')
-          .or(`entity_id.eq.${id},entity_name.eq.${encodeURIComponent(id)}`)
-          .order('created_at', { ascending: false })
-          .limit(50),
-      ])
+      const { data: dealData, error: dealError } = await supabase
+        .from('opportunities')
+        .select('*, accounts(name)')
+        .eq('id', id)
+        .single()
 
-      if (d.error) throw new Error(d.error.message)
-      setDeal(d.data as DealRow)
+      if (dealError) throw new Error(dealError.message)
+      setDeal(dealData as DealRow)
 
-      // Also load by entity_id column
+      // Load history by entity_id
       const { data: byId } = await supabase
         .from('activity_log')
         .select('id,user_email,action_type,entity_name,detail,created_at')
@@ -128,28 +120,27 @@ export default function DealDetailPage() {
         .order('created_at', { ascending: false })
         .limit(50)
 
-      // Merge and deduplicate
-      const allHistory = [...(byId || [])]
-      const seen = new Set(allHistory.map((x: any) => x.id))
+      const allHistory: ActivityRow[] = [...(byId || [])]
+      const seen = new Set(allHistory.map((x) => x.id))
 
       // Also search by deal title
-      if (d.data?.title) {
+      if (dealData?.title) {
         const { data: byName } = await supabase
           .from('activity_log')
           .select('id,user_email,action_type,entity_name,detail,created_at')
-          .eq('entity_name', d.data.title)
+          .eq('entity_name', dealData.title)
           .order('created_at', { ascending: false })
           .limit(50)
-        for (const item of byName || []) {
+        for (const item of (byName || [])) {
           if (!seen.has(item.id)) {
             seen.add(item.id)
-            allHistory.push(item)
+            allHistory.push(item as ActivityRow)
           }
         }
       }
 
       allHistory.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      setHistory(allHistory as ActivityRow[])
+      setHistory(allHistory)
     } catch (e: any) {
       setErr(e?.message || 'Erreur chargement deal')
     } finally {
