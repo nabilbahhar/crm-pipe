@@ -391,7 +391,7 @@ export default function KPIPage() {
                   tickFormatter={v => v >= 1_000_000 ? (v/1_000_000).toFixed(0)+'M' : v >= 1000 ? (v/1000).toFixed(0)+'K' : String(v)}
                 />
                 <Tooltip
-                  formatter={(v: any, name: string) => [fmtMAD(Number(v) || 0, true), name === 'mensuel' ? 'Mensuel' : name === 'cumul' ? 'Cumul' : 'Objectif']}
+                  formatter={(v: any, name: any) => [fmtMAD(Number(v) || 0, true), name === 'mensuel' ? 'Mensuel' : name === 'cumul' ? 'Cumul' : 'Objectif']}
                 />
                 <Bar dataKey="mensuel" fill="#1e293b" radius={[3,3,0,0]} />
                 <Line type="monotone" dataKey="cumul" stroke="#2563eb" strokeWidth={2} dot={false} />
