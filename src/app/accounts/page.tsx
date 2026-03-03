@@ -1,672 +1,531 @@
 'use client'
-
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { Search, ExternalLink } from 'lucide-react'
+import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type AccountRow = {
-  id: string
-  name: string
-  sector: string | null   // Segment client: Public / Semi-public / Privé
-  segment: string | null  // Secteur d'activité: Industrie, Banque...
-  region: string | null
+type AccountRow = { id: string; name: string; sector: string|null; segment: string|null; region: string|null }
+type ContactRow = { id: string; account_id: string; full_name: string|null; email: string|null; phone: string|null; role: string|null; is_primary: boolean }
+
+const SEGMENT_OPTIONS = ['Public', 'Semi-public', 'Privé'] as const
+const REGION_OPTIONS  = ['Rabat', 'Casablanca', 'Nord Ma', 'Sud Ma'] as const
+
+const SEG_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
+  'Privé':       { bg: 'bg-blue-50',    text: 'text-blue-700',    dot: 'bg-blue-400'    },
+  'Public':      { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  'Semi-public': { bg: 'bg-amber-50',   text: 'text-amber-700',   dot: 'bg-amber-400'   },
 }
 
-type ContactRow = {
-  id: string
-  account_id: string
-  full_name: string | null
-  email: string | null
-  phone: string | null
-  role: string | null
-  is_primary: boolean
-}
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-const SEGMENT_CLIENT_OPTIONS = ['Public', 'Semi-public', 'Privé'] as const
-const REGION_OPTIONS = ['Rabat', 'Casablanca', 'Nord Ma', 'Sud Ma'] as const
-
-const SEGMENT_STYLE: Record<string, { bg: string; text: string }> = {
-  'Privé':       { bg: 'bg-blue-50',    text: 'text-blue-700'    },
-  'Public':      { bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  'Semi-public': { bg: 'bg-amber-50',   text: 'text-amber-700'   },
-}
-
-// ─── Mini components ──────────────────────────────────────────────────────────
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return <div className="mb-1 text-xs font-medium text-slate-600">{children}</div>
-}
-
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+// ─── Small components ─────────────────────────────────────────────────────────
+function SegBadge({ seg }: { seg: string|null }) {
+  if (!seg) return <span className="text-slate-300 text-xs">—</span>
+  const s = SEG_STYLE[seg] || { bg: 'bg-slate-100', text: 'text-slate-600', dot: 'bg-slate-400' }
   return (
-    <input
-      {...props}
-      className={`h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400 ${props.className || ''}`}
-    />
-  )
-}
-
-function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      {...props}
-      className={`h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400 ${props.className || ''}`}
-    />
-  )
-}
-
-function Button(
-  props: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger' }
-) {
-  const v = props.variant || 'ghost'
-  const cls =
-    v === 'primary' ? 'bg-slate-900 text-white hover:bg-slate-800 border-slate-900' :
-    v === 'danger'  ? 'bg-red-600 text-white hover:bg-red-500 border-red-600' :
-    'bg-white hover:bg-slate-50 border-slate-200'
-  return (
-    <button
-      {...props}
-      className={`inline-flex h-9 items-center justify-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors ${cls} ${props.className || ''}`}
-    />
-  )
-}
-
-function Chip({ children, color = 'slate' }: { children: React.ReactNode; color?: string }) {
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium bg-${color}-100 text-${color}-700`}>{children}</span>
-}
-
-function SegmentBadge({ segment }: { segment: string | null }) {
-  if (!segment) return <span className="text-slate-400 text-xs">—</span>
-  const s = SEGMENT_STYLE[segment] || { bg: 'bg-slate-100', text: 'text-slate-600' }
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${s.bg} ${s.text}`}>
-      {segment}
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${s.bg} ${s.text}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />{seg}
     </span>
   )
 }
 
-function Modal({ open, title, children, onClose }: {
-  open: boolean; title: string; children: React.ReactNode; onClose: () => void
+function FL({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold text-slate-600">{label}{required && <span className="ml-0.5 text-red-500">*</span>}</label>
+      {children}
+    </div>
+  )
+}
+const inputCls = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 placeholder:text-slate-400"
+const selectCls = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 appearance-none"
+
+function Btn({ children, variant = 'ghost', size = 'md', ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary'|'ghost'|'danger'|'outline'; size?: 'sm'|'md' }) {
+  const vCls = {
+    primary: 'bg-slate-900 text-white hover:bg-slate-800 border-slate-900',
+    ghost:   'bg-white text-slate-700 hover:bg-slate-50 border-slate-200',
+    outline: 'bg-transparent text-slate-700 hover:bg-slate-50 border-slate-200',
+    danger:  'bg-red-600 text-white hover:bg-red-700 border-red-600',
+  }[variant]
+  const szCls = size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-9 px-3.5 text-sm'
+  return (
+    <button {...props} className={`inline-flex items-center justify-center gap-1.5 rounded-xl border font-semibold transition-colors disabled:opacity-50 ${vCls} ${szCls} ${props.className || ''}`}>
+      {children}
+    </button>
+  )
+}
+
+function Modal({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
+  if (!open) return null
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="w-full max-w-4xl max-h-[88vh] flex flex-col rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200">
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div className="text-base font-bold text-slate-900">{title}</div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="overflow-auto p-6">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function ConfirmDialog({ open, title, msg, danger, confirmLabel, onConfirm, onCancel }: {
+  open: boolean; title: string; msg: string; danger?: boolean; confirmLabel?: string; onConfirm: () => void; onCancel: () => void
 }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
-      <div className="w-full max-w-5xl max-h-[85vh] overflow-hidden rounded-2xl border bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b p-4">
-          <div className="text-sm font-semibold text-slate-900">{title}</div>
-          <button className="rounded-lg px-3 py-1.5 text-sm hover:bg-slate-100 text-slate-600" onClick={onClose}>Fermer</button>
-        </div>
-        <div className="p-4 overflow-auto max-h-[calc(85vh-64px)]">{children}</div>
-      </div>
-    </div>
-  )
-}
-
-function ConfirmModal(props: {
-  open: boolean; title: string; message: string
-  confirmLabel?: string; danger?: boolean
-  onConfirm: () => void; onCancel: () => void
-}) {
-  if (!props.open) return null
-  return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl border">
-        <div className="p-6">
-          <div className="flex items-start gap-4">
-            {props.danger && (
-              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-50 flex items-center justify-center">
-                <span style={{ fontSize: 20, color: '#dc2626' }}>⚠</span>
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="text-base font-semibold text-slate-900">{props.title}</div>
-              <div className="mt-1 text-sm text-slate-500 leading-relaxed whitespace-pre-line">{props.message}</div>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center justify-end gap-3 px-6 pb-5">
-          <button className="h-10 px-5 rounded-xl border text-sm font-medium text-slate-700 hover:bg-slate-50" onClick={props.onCancel}>
-            Annuler
-          </button>
-          <button
-            className={`h-10 px-5 rounded-xl text-sm font-semibold text-white ${props.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-slate-900 hover:bg-slate-800'}`}
-            onClick={props.onConfirm}
-          >
-            {props.confirmLabel || 'Confirmer'}
-          </button>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 p-6">
+        <div className="text-base font-bold text-slate-900">{title}</div>
+        <div className="mt-2 text-sm text-slate-500 leading-relaxed whitespace-pre-line">{msg}</div>
+        <div className="mt-5 flex justify-end gap-2.5">
+          <Btn variant="ghost" onClick={onCancel}>Annuler</Btn>
+          <Btn variant={danger ? 'danger' : 'primary'} onClick={onConfirm}>{confirmLabel || 'Confirmer'}</Btn>
         </div>
       </div>
     </div>
   )
-}
-
-type ConfirmState = {
-  open: boolean; title: string; message: string
-  confirmLabel?: string; danger?: boolean; onConfirm: () => void
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function AccountsPage() {
-  const [accounts, setAccounts]   = useState<AccountRow[]>([])
-  const [loading, setLoading]     = useState(false)
-  const [err, setErr]             = useState<string | null>(null)
-  const [info, setInfo]           = useState<string | null>(null)
-
-  // Deal counts per account
+  const [accounts, setAccounts] = useState<AccountRow[]>([])
+  const [loading, setLoading]   = useState(false)
+  const [err, setErr]           = useState<string|null>(null)
+  const [toast, setToast]       = useState<string|null>(null)
   const [dealCounts, setDealCounts] = useState<Record<string, number>>({})
 
   // Filters
-  const [search, setSearch]             = useState('')
-  const [segFilter, setSegFilter]       = useState('Tous')
-  const [regionFilter, setRegionFilter] = useState('Tous')
+  const [search, setSearch] = useState('')
+  const [segFilter, setSegFilter] = useState('Tous')
+  const [regFilter, setRegFilter] = useState('Tous')
 
   // Add form
-  const [name, setName]                 = useState('')
-  const [segmentClient, setSegmentClient] = useState<(typeof SEGMENT_CLIENT_OPTIONS)[number]>('Privé')
-  const [sectorActivite, setSectorActivite] = useState('')
-  const [region, setRegion]             = useState<(typeof REGION_OPTIONS)[number]>('Rabat')
+  const [aName, setAName]       = useState('')
+  const [aSeg, setASeg]         = useState<typeof SEGMENT_OPTIONS[number]>('Privé')
+  const [aSector, setASector]   = useState('')
+  const [aRegion, setARegion]   = useState<typeof REGION_OPTIONS[number]>('Rabat')
+  const [showAddForm, setShowAddForm] = useState(false)
 
   // Edit modal
-  const [editOpen, setEditOpen]         = useState(false)
-  const [editRow, setEditRow]           = useState<AccountRow | null>(null)
-  const [editName, setEditName]         = useState('')
-  const [editSegmentClient, setEditSegmentClient] = useState<(typeof SEGMENT_CLIENT_OPTIONS)[number]>('Privé')
-  const [editSectorActivite, setEditSectorActivite] = useState('')
-  const [editRegion, setEditRegion]     = useState<(typeof REGION_OPTIONS)[number]>('Rabat')
-  const [busyEdit, setBusyEdit]         = useState(false)
-
-  const [confirm, setConfirm] = useState<ConfirmState>({
-    open: false, title: '', message: '', onConfirm: () => {}
-  })
+  const [editOpen, setEditOpen]     = useState(false)
+  const [editRow, setEditRow]       = useState<AccountRow|null>(null)
+  const [eName, setEName]           = useState('')
+  const [eSeg, setESeg]             = useState<typeof SEGMENT_OPTIONS[number]>('Privé')
+  const [eSector, setESector]       = useState('')
+  const [eRegion, setERegion]       = useState<typeof REGION_OPTIONS[number]>('Rabat')
+  const [busyEdit, setBusyEdit]     = useState(false)
 
   // Contacts modal
-  const [contactsOpen, setContactsOpen]       = useState(false)
-  const [contactsAccount, setContactsAccount] = useState<AccountRow | null>(null)
-  const [contacts, setContacts]               = useState<ContactRow[]>([])
-  const [contactsLoading, setContactsLoading] = useState(false)
-  const [cFullName, setCFullName] = useState('')
-  const [cEmail, setCEmail]       = useState('')
-  const [cPhone, setCPhone]       = useState('')
-  const [cRole, setCRole]         = useState('')
-  const [cPrimary, setCPrimary]   = useState(false)
+  const [contOpen, setContOpen]     = useState(false)
+  const [contAccount, setContAccount] = useState<AccountRow|null>(null)
+  const [contacts, setContacts]     = useState<ContactRow[]>([])
+  const [contLoading, setContLoading] = useState(false)
+  const [cName, setCName]           = useState('')
+  const [cEmail, setCEmail]         = useState('')
+  const [cPhone, setCPhone]         = useState('')
+  const [cRole, setCRole]           = useState('')
+  const [cPrimary, setCPrimary]     = useState(false)
 
-  const uniqueSectorActivite = useMemo(() => {
-    const s = new Set<string>()
-    for (const a of accounts) {
-      if (a.segment && a.segment.trim()) s.add(a.segment.trim())
-    }
-    return Array.from(s).sort((x, y) => x.localeCompare(y))
-  }, [accounts])
+  // Confirm
+  const [confirm, setConfirm] = useState({ open: false, title: '', msg: '', danger: false, confirmLabel: '', onConfirm: () => {} })
 
-  function toast(msg: string) { setInfo(msg); setTimeout(() => setInfo(null), 3000) }
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
+  const uniqueSectors = useMemo(() => [...new Set(accounts.map(a => a.segment).filter(Boolean) as string[])].sort(), [accounts])
+  const existsName = (n: string, excludeId?: string) => accounts.some(a => a.id !== excludeId && (a.name || '').trim().toLowerCase() === n.trim().toLowerCase())
 
-  // ── Load ───────────────────────────────────────────────────────────────────
-  const loadAccounts = async () => {
+  // ── Load ─────────────────────────────────────────────────────────────────
+  const loadAll = async () => {
     setLoading(true); setErr(null)
     try {
-      const { data, error } = await supabase
-        .from('accounts').select('id,name,sector,segment,region').order('name', { ascending: true })
-      if (error) throw error
-      setAccounts((data || []) as AccountRow[])
-    } catch (e: any) {
-      setErr(e?.message || 'Erreur chargement comptes')
-    } finally {
-      setLoading(false)
-    }
+      const [{ data: acc, error: e1 }, { data: opps }] = await Promise.all([
+        supabase.from('accounts').select('id,name,sector,segment,region').order('name'),
+        supabase.from('opportunities').select('account_id,status').eq('status', 'Open'),
+      ])
+      if (e1) throw e1
+      setAccounts((acc || []) as AccountRow[])
+      const counts: Record<string, number> = {}
+      for (const d of opps || []) { if (d.account_id) counts[d.account_id] = (counts[d.account_id] || 0) + 1 }
+      setDealCounts(counts)
+    } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
+    finally { setLoading(false) }
   }
+  useEffect(() => { loadAll() }, [])
 
-  const loadDealCounts = async () => {
-    const { data } = await supabase
-      .from('opportunities')
-      .select('account_id, status')
-      .eq('status', 'Open')
-    if (!data) return
-    const counts: Record<string, number> = {}
-    for (const d of data) {
-      if (d.account_id) counts[d.account_id] = (counts[d.account_id] || 0) + 1
-    }
-    setDealCounts(counts)
-  }
-
-  useEffect(() => { loadAccounts(); loadDealCounts() }, [])
-
-  // ── Add ────────────────────────────────────────────────────────────────────
-  const existsExactName = (n: string, excludeId?: string) => {
-    const x = n.trim().toLowerCase()
-    if (!x) return false
-    return accounts.some(a => a.id !== excludeId && (a.name || '').trim().toLowerCase() === x)
-  }
-
-  const onAdd = async (e: React.FormEvent) => {
-    e.preventDefault(); setErr(null)
-    const n = name.trim()
-    if (!n) return setErr('Client obligatoire.')
-    if (!sectorActivite.trim()) return setErr('Secteur d\'activité obligatoire.')
-    if (!region) return setErr('Région obligatoire.')
-    if (existsExactName(n)) return setErr('Ce client existe déjà. Utilise l\'autocomplete pour éviter les doublons.')
+  // ── Add ──────────────────────────────────────────────────────────────────
+  const onAdd = async (ev: React.FormEvent) => {
+    ev.preventDefault(); setErr(null)
+    const n = aName.trim()
+    if (!n) return setErr('Nom du client obligatoire')
+    if (!aSector.trim()) return setErr('Secteur d\'activité obligatoire')
+    if (existsName(n)) return setErr('Ce client existe déjà.')
     setLoading(true)
     try {
-      const { error } = await supabase.from('accounts').insert({
-        name: n, sector: segmentClient, segment: sectorActivite.trim(), region,
-      })
+      const { error } = await supabase.from('accounts').insert({ name: n, sector: aSeg, segment: aSector.trim(), region: aRegion })
       if (error) throw error
-      setName(''); setSectorActivite(''); setSegmentClient('Privé'); setRegion('Rabat')
-      toast(`${n} ajouté`)
-      await loadAccounts(); await loadDealCounts()
-    } catch (e: any) {
-      setErr(e?.message || 'Erreur ajout compte')
-    } finally {
-      setLoading(false)
-    }
+      setAName(''); setASector('')
+      setShowAddForm(false)
+      showToast(`✓ ${n} ajouté`)
+      await loadAll()
+    } catch (e: any) { setErr(e?.message) }
+    finally { setLoading(false) }
   }
 
-  // ── Edit ───────────────────────────────────────────────────────────────────
+  // ── Edit ─────────────────────────────────────────────────────────────────
   const openEdit = (row: AccountRow) => {
-    setErr(null); setEditRow(row)
-    setEditName(row.name || '')
-    setEditSegmentClient((row.sector as any) || 'Privé')
-    setEditSectorActivite(row.segment || '')
-    setEditRegion((row.region as any) || 'Rabat')
-    setEditOpen(true)
+    setEditRow(row); setEName(row.name); setESeg((row.sector as any) || 'Privé')
+    setESector(row.segment || ''); setERegion((row.region as any) || 'Rabat')
+    setErr(null); setEditOpen(true)
   }
-
   const onSaveEdit = async () => {
     if (!editRow) return; setErr(null)
-    const n = editName.trim()
-    if (!n) return setErr('Client obligatoire.')
-    if (!editSectorActivite.trim()) return setErr('Secteur d\'activité obligatoire.')
-    if (!editRegion) return setErr('Région obligatoire.')
-    if (existsExactName(n, editRow.id)) return setErr('Un autre compte existe déjà avec ce nom.')
+    const n = eName.trim()
+    if (!n || !eSector.trim()) return setErr('Nom et secteur obligatoires')
+    if (existsName(n, editRow.id)) return setErr('Un autre compte existe déjà avec ce nom.')
     setBusyEdit(true)
     try {
-      const { error } = await supabase.from('accounts').update({
-        name: n, sector: editSegmentClient, segment: editSectorActivite.trim(), region: editRegion,
-      }).eq('id', editRow.id)
+      const { error } = await supabase.from('accounts').update({ name: n, sector: eSeg, segment: eSector.trim(), region: eRegion }).eq('id', editRow.id)
       if (error) throw error
       const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        await supabase.from('activity_log').insert({
-          user_email: user.email, action_type: 'update', entity_type: 'account',
-          entity_id: editRow.id, entity_name: n,
-          detail: `${editSegmentClient} · ${editSectorActivite} · ${editRegion}`,
-        })
-      }
+      if (user) await supabase.from('activity_log').insert({ user_email: user.email, action_type: 'update', entity_type: 'account', entity_id: editRow.id, entity_name: n, detail: `${eSeg} · ${eSector} · ${eRegion}` })
       setEditOpen(false); setEditRow(null)
-      toast(`${n} mis à jour`)
-      await loadAccounts()
-    } catch (e: any) {
-      setErr(e?.message || 'Erreur modification')
-    } finally {
-      setBusyEdit(false)
-    }
+      showToast(`✓ ${n} mis à jour`)
+      await loadAll()
+    } catch (e: any) { setErr(e?.message) }
+    finally { setBusyEdit(false) }
   }
 
-  // ── Delete ─────────────────────────────────────────────────────────────────
-  const friendlyDeleteError = (message: string) => {
-    const m = (message || '').toLowerCase()
-    if (m.includes('foreign key')) return 'Suppression impossible : ce client a des deals liés.\nSupprime ou réaffecte les deals d\'abord.'
-    if (m.includes('row-level security')) return 'Suppression bloquée par la sécurité (RLS).'
-    return message || 'Erreur suppression'
-  }
-
-  const deleteAccount = async (row: AccountRow) => {
+  // ── Delete ────────────────────────────────────────────────────────────────
+  const deleteAccount = (row: AccountRow) => {
     setConfirm({
-      open: true,
-      title: 'Confirmer la suppression',
-      message: `Supprimer définitivement "${row.name}" ?\n\nSi ce client a des deals liés, la suppression sera refusée.`,
-      confirmLabel: 'Supprimer définitivement',
-      danger: true,
+      open: true, title: 'Supprimer le client', danger: true, confirmLabel: 'Supprimer',
+      msg: `Supprimer définitivement "${row.name}" ?\n\nLes deals liés bloqueront la suppression.`,
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false })); setErr(null); setLoading(true)
         try {
           const { error } = await supabase.from('accounts').delete().eq('id', row.id)
-          if (error) throw error
-          const { data: { user } } = await supabase.auth.getUser()
-          if (user) {
-            await supabase.from('activity_log').insert({
-              user_email: user.email, action_type: 'delete', entity_type: 'account',
-              entity_id: row.id, entity_name: row.name,
-              detail: `${row.sector || ''} · ${row.region || ''}`,
-            })
+          if (error) {
+            const m = (error.message || '').toLowerCase()
+            throw new Error(m.includes('foreign key') ? 'Suppression impossible : ce client a des deals liés.' : error.message)
           }
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) await supabase.from('activity_log').insert({ user_email: user.email, action_type: 'delete', entity_type: 'account', entity_id: row.id, entity_name: row.name, detail: `${row.sector || ''} · ${row.region || ''}` })
           if (editRow?.id === row.id) { setEditOpen(false); setEditRow(null) }
-          if (contactsAccount?.id === row.id) { setContactsOpen(false); setContactsAccount(null); setContacts([]) }
-          toast(`${row.name} supprimé`)
-          await loadAccounts()
-        } catch (e: any) {
-          setErr(friendlyDeleteError(e?.message || 'Erreur suppression'))
-        } finally {
-          setLoading(false)
-        }
+          showToast(`✓ ${row.name} supprimé`)
+          await loadAll()
+        } catch (e: any) { setErr(e?.message) }
+        finally { setLoading(false) }
       }
     })
   }
 
-  // ── Contacts ───────────────────────────────────────────────────────────────
+  // ── Contacts ──────────────────────────────────────────────────────────────
   const loadContacts = async (accountId: string) => {
-    setContactsLoading(true); setErr(null)
+    setContLoading(true)
     try {
-      const { data, error } = await supabase.from('account_contacts')
-        .select('id,account_id,full_name,email,phone,role,is_primary')
-        .eq('account_id', accountId)
-        .order('is_primary', { ascending: false })
-        .order('full_name', { ascending: true })
+      const { data, error } = await supabase.from('account_contacts').select('id,account_id,full_name,email,phone,role,is_primary').eq('account_id', accountId).order('is_primary', { ascending: false }).order('full_name')
       if (error) throw error
       setContacts((data || []) as ContactRow[])
-    } catch (e: any) {
-      setErr(e?.message || 'Erreur chargement contacts')
-    } finally {
-      setContactsLoading(false)
-    }
+    } catch (e: any) { setErr(e?.message) }
+    finally { setContLoading(false) }
   }
-
   const openContacts = async (row: AccountRow) => {
-    setContactsAccount(row); setContactsOpen(true)
-    setCFullName(''); setCEmail(''); setCPhone(''); setCRole(''); setCPrimary(false)
+    setContAccount(row); setContOpen(true)
+    setCName(''); setCEmail(''); setCPhone(''); setCRole(''); setCPrimary(false)
     await loadContacts(row.id)
   }
-
-  const addContact = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!contactsAccount) return; setErr(null)
-    const fn = cFullName.trim()
-    if (!fn) return setErr('Nom du contact obligatoire.')
-    setContactsLoading(true)
+  const addContact = async (ev: React.FormEvent) => {
+    ev.preventDefault(); if (!contAccount || !cName.trim()) return
+    setContLoading(true)
     try {
-      if (cPrimary) {
-        const r0 = await supabase.from('account_contacts').update({ is_primary: false }).eq('account_id', contactsAccount.id)
-        if (r0.error) throw r0.error
-      }
-      const { error } = await supabase.from('account_contacts').insert({
-        account_id: contactsAccount.id, full_name: fn,
-        email: cEmail.trim() || null, phone: cPhone.trim() || null,
-        role: cRole.trim() || null, is_primary: cPrimary,
-      })
+      if (cPrimary) await supabase.from('account_contacts').update({ is_primary: false }).eq('account_id', contAccount.id)
+      const { error } = await supabase.from('account_contacts').insert({ account_id: contAccount.id, full_name: cName.trim(), email: cEmail.trim() || null, phone: cPhone.trim() || null, role: cRole.trim() || null, is_primary: cPrimary })
       if (error) throw error
-      setCFullName(''); setCEmail(''); setCPhone(''); setCRole(''); setCPrimary(false)
-      await loadContacts(contactsAccount.id)
-    } catch (e: any) {
-      setErr(e?.message || 'Erreur ajout contact')
-    } finally {
-      setContactsLoading(false)
-    }
+      setCName(''); setCEmail(''); setCPhone(''); setCRole(''); setCPrimary(false)
+      await loadContacts(contAccount.id)
+    } catch (e: any) { setErr(e?.message) }
+    finally { setContLoading(false) }
   }
-
   const setPrimary = async (contactId: string) => {
-    if (!contactsAccount) return; setErr(null); setContactsLoading(true)
+    if (!contAccount) return; setContLoading(true)
     try {
-      const r1 = await supabase.from('account_contacts').update({ is_primary: false }).eq('account_id', contactsAccount.id)
-      if (r1.error) throw r1.error
-      const r2 = await supabase.from('account_contacts').update({ is_primary: true }).eq('id', contactId)
-      if (r2.error) throw r2.error
-      await loadContacts(contactsAccount.id)
-    } catch (e: any) {
-      setErr(e?.message || 'Erreur set principal')
-    } finally {
-      setContactsLoading(false)
-    }
+      await supabase.from('account_contacts').update({ is_primary: false }).eq('account_id', contAccount.id)
+      await supabase.from('account_contacts').update({ is_primary: true }).eq('id', contactId)
+      await loadContacts(contAccount.id)
+    } catch (e: any) { setErr(e?.message) }
+    finally { setContLoading(false) }
+  }
+  const deleteContact = (row: ContactRow) => {
+    setConfirm({
+      open: true, title: 'Supprimer le contact', danger: true, confirmLabel: 'Supprimer',
+      msg: `Supprimer "${row.full_name}" ?`,
+      onConfirm: async () => {
+        setConfirm(c => ({ ...c, open: false }))
+        if (!contAccount) return; setContLoading(true)
+        try {
+          await supabase.from('account_contacts').delete().eq('id', row.id)
+          await loadContacts(contAccount.id)
+        } catch (e: any) { setErr(e?.message) }
+        finally { setContLoading(false) }
+      }
+    })
   }
 
-  const deleteContact = async (row: ContactRow) => {
-    if (!window.confirm(`Supprimer le contact "${row.full_name || ''}" ?`)) return
-    setErr(null); setContactsLoading(true)
-    try {
-      const { error } = await supabase.from('account_contacts').delete().eq('id', row.id)
-      if (error) throw error
-      if (contactsAccount) await loadContacts(contactsAccount.id)
-    } catch (e: any) {
-      setErr(e?.message || 'Erreur suppression contact')
-    } finally {
-      setContactsLoading(false)
-    }
-  }
-
-  // ── Stats ──────────────────────────────────────────────────────────────────
-  const accountStats = useMemo(() => {
-    const bySegment: Record<string, number> = {}
-    const bySector: Record<string, number> = {}
-    const byRegion: Record<string, number> = {}
+  // ── Stats ─────────────────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const bySeg: Record<string, number> = {}; const byReg: Record<string, number> = {}; const bySector: Record<string, number> = {}
     for (const a of accounts) {
-      const seg = a.sector || 'Autre'
-      bySegment[seg] = (bySegment[seg] || 0) + 1
-      const sec = a.segment || 'Autre'
-      bySector[sec] = (bySector[sec] || 0) + 1
-      const reg = a.region || 'Autre'
-      byRegion[reg] = (byRegion[reg] || 0) + 1
+      const seg = a.sector || 'Autre'; bySeg[seg] = (bySeg[seg] || 0) + 1
+      const reg = a.region || 'Autre'; byReg[reg] = (byReg[reg] || 0) + 1
+      const sec = a.segment || 'Autre'; bySector[sec] = (bySector[sec] || 0) + 1
     }
-    const topSectors = Object.entries(bySector).sort((a, b) => b[1] - a[1]).slice(0, 5)
-    const topRegions = Object.entries(byRegion).sort((a, b) => b[1] - a[1])
-    return { total: accounts.length, bySegment, bySector, byRegion, topSectors, topRegions }
+    return { total: accounts.length, bySeg, byReg, topSectors: Object.entries(bySector).sort((a,b)=>b[1]-a[1]).slice(0,6), topRegs: Object.entries(byReg).sort((a,b)=>b[1]-a[1]) }
   }, [accounts])
 
-  // ── Filtered list ──────────────────────────────────────────────────────────
-  const displayAccounts = useMemo(() => {
-    let r = [...accounts]
+  // ── Filtered ──────────────────────────────────────────────────────────────
+  const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
-    if (q) r = r.filter(a =>
-      (a.name || '').toLowerCase().includes(q) ||
-      (a.segment || '').toLowerCase().includes(q) ||
-      (a.region || '').toLowerCase().includes(q)
+    return accounts.filter(a =>
+      (!q || (a.name||'').toLowerCase().includes(q) || (a.segment||'').toLowerCase().includes(q) || (a.region||'').toLowerCase().includes(q)) &&
+      (segFilter === 'Tous' || a.sector === segFilter) &&
+      (regFilter === 'Tous' || a.region === regFilter)
     )
-    if (segFilter !== 'Tous') r = r.filter(a => a.sector === segFilter)
-    if (regionFilter !== 'Tous') r = r.filter(a => a.region === regionFilter)
-    return r
-  }, [accounts, search, segFilter, regionFilter])
+  }, [accounts, search, segFilter, regFilter])
 
-  // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-7xl px-4 py-6">
+    <div className="min-h-screen bg-[#f8fafc]">
+      <div className="mx-auto max-w-7xl px-4 py-6 space-y-5">
 
-        {/* Header */}
+        {/* ── HEADER ── */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-2xl font-bold text-slate-900">Comptes</div>
-            <div className="text-sm text-slate-500">Base clients CRM · {accountStats.total} comptes</div>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Comptes</h1>
+              <p className="text-xs text-slate-500">Base clients CRM · {stats.total} comptes</p>
+            </div>
           </div>
-          <Button onClick={() => { loadAccounts(); loadDealCounts() }} disabled={loading}>
-            {loading ? 'Chargement…' : 'Rafraîchir'}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Btn variant="ghost" onClick={loadAll} disabled={loading}>
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Actualiser
+            </Btn>
+            <Btn variant="primary" onClick={() => setShowAddForm(v => !v)}>
+              <Plus className="h-4 w-4" />
+              Ajouter un client
+            </Btn>
+          </div>
         </div>
 
-        {err && (
-          <div className="mt-4 whitespace-pre-line rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>
-        )}
-        {info && (
-          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{info}</div>
-        )}
+        {/* ── TOAST / ERR ── */}
+        {toast && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{toast}</div>}
+        {err && <div className="whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
 
-        {/* ── KPIs ── */}
-        {accounts.length > 0 && (
-          <div className="mt-5 space-y-3">
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="rounded-2xl border bg-white p-4 shadow-sm">
-                <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total clients</div>
-                <div className="text-2xl font-bold text-slate-900">{accountStats.total}</div>
-              </div>
-              {Object.entries(accountStats.bySegment)
-                .sort((a, b) => b[1] - a[1])
-                .map(([seg, count]) => {
-                  const s = SEGMENT_STYLE[seg] || { bg: 'bg-slate-50', text: 'text-slate-600' }
-                  return (
-                    <div key={seg} className={`rounded-2xl border p-4 shadow-sm ${s.bg}`}>
-                      <div className={`text-xs font-medium uppercase tracking-wide mb-1 ${s.text}`}>{seg}</div>
-                      <div className={`text-2xl font-bold ${s.text}`}>{count}</div>
-                      <div className={`text-xs mt-0.5 ${s.text} opacity-70`}>
-                        {Math.round(count / accountStats.total * 100)}% du portefeuille
-                      </div>
-                    </div>
-                  )
-                })}
+        {/* ── KPI STRIP ── */}
+        {stats.total > 0 && (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+              <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total</div>
+              <div className="mt-1 text-3xl font-black text-slate-900">{stats.total}</div>
+              <div className="mt-0.5 text-xs text-slate-500">comptes actifs</div>
             </div>
-
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border bg-white p-4 shadow-sm">
-                <div className="text-sm font-semibold text-slate-900 mb-3">Top secteurs d'activité</div>
-                <div className="space-y-2">
-                  {accountStats.topSectors.map(([sec, count]) => (
-                    <div key={sec} className="flex items-center gap-3">
-                      <div className="text-sm text-slate-700 w-36 truncate" title={sec}>{sec}</div>
-                      <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                        <div className="h-full rounded-full bg-slate-800 transition-all"
-                          style={{ width: `${Math.round(count / accountStats.total * 100)}%` }} />
-                      </div>
-                      <div className="text-xs font-medium text-slate-600 w-6 text-right">{count}</div>
-                    </div>
-                  ))}
+            {Object.entries(stats.bySeg).sort((a,b)=>b[1]-a[1]).map(([seg, cnt]) => {
+              const s = SEG_STYLE[seg] || { bg: 'bg-slate-50', text: 'text-slate-600', dot: 'bg-slate-400' }
+              return (
+                <div key={seg} className={`rounded-2xl ring-1 ring-slate-200 shadow-sm p-4 ${s.bg}`}>
+                  <div className={`text-xs font-semibold uppercase tracking-wider ${s.text}`}>{seg}</div>
+                  <div className={`mt-1 text-3xl font-black ${s.text}`}>{cnt}</div>
+                  <div className={`mt-0.5 text-xs ${s.text} opacity-70`}>{Math.round(cnt/stats.total*100)}% du portefeuille</div>
                 </div>
-              </div>
-              <div className="rounded-2xl border bg-white p-4 shadow-sm">
-                <div className="text-sm font-semibold text-slate-900 mb-3">Répartition par région</div>
-                <div className="space-y-2">
-                  {accountStats.topRegions.map(([reg, count]) => (
-                    <div key={reg} className="flex items-center gap-3">
-                      <div className="text-sm text-slate-700 w-36 truncate">{reg}</div>
-                      <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                        <div className="h-full rounded-full bg-blue-500 transition-all"
-                          style={{ width: `${Math.round(count / accountStats.total * 100)}%` }} />
-                      </div>
-                      <div className="text-xs font-medium text-slate-600 w-6 text-right">{count}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+              )
+            })}
           </div>
         )}
 
-        {/* ── Add form ── */}
-        <div className="mt-4 rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="mb-3 text-sm font-semibold text-slate-900">Ajouter un client</div>
-          <form onSubmit={onAdd} className="grid grid-cols-1 gap-3 md:grid-cols-5">
-            <div className="md:col-span-2">
-              <FieldLabel>Client *</FieldLabel>
-              <Input placeholder="Ex: BKAM / APTIV" value={name} onChange={e => setName(e.target.value)} list="accounts_names" />
-              <datalist id="accounts_names">{accounts.map(a => <option key={a.id} value={a.name} />)}</datalist>
-              <div className="mt-1 text-[11px] text-slate-400">Tape quelques lettres pour éviter les doublons.</div>
+        {/* ── BARS SECTEUR / RÉGION ── */}
+        {stats.total > 0 && (
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5">
+              <div className="mb-3 text-sm font-bold text-slate-900">Top secteurs d'activité</div>
+              <div className="space-y-2.5">
+                {stats.topSectors.map(([sec, cnt]) => (
+                  <div key={sec} className="flex items-center gap-3">
+                    <div className="w-36 truncate text-xs text-slate-700 font-medium" title={sec}>{sec}</div>
+                    <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div className="h-full rounded-full bg-slate-800 transition-all" style={{ width: `${Math.round(cnt/stats.total*100)}%` }} />
+                    </div>
+                    <div className="w-6 text-right text-xs font-semibold text-slate-600">{cnt}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div>
-              <FieldLabel>Segment client *</FieldLabel>
-              <Select value={segmentClient} onChange={e => setSegmentClient(e.target.value as any)}>
-                {SEGMENT_CLIENT_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
-              </Select>
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5">
+              <div className="mb-3 text-sm font-bold text-slate-900">Répartition par région</div>
+              <div className="space-y-2.5">
+                {stats.topRegs.map(([reg, cnt]) => (
+                  <div key={reg} className="flex items-center gap-3">
+                    <div className="w-36 text-xs text-slate-700 font-medium">{reg}</div>
+                    <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${Math.round(cnt/stats.total*100)}%` }} />
+                    </div>
+                    <div className="w-6 text-right text-xs font-semibold text-slate-600">{cnt}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div>
-              <FieldLabel>Secteur d'activité *</FieldLabel>
-              <Input placeholder="Industrie / Banque / Assurance…" value={sectorActivite}
-                onChange={e => setSectorActivite(e.target.value)} list="sectors_list" />
-              <datalist id="sectors_list">{uniqueSectorActivite.map(x => <option key={x} value={x} />)}</datalist>
-              <div className="mt-1 text-[11px] text-slate-400">Nouveau secteur → disponible ensuite.</div>
-            </div>
-            <div>
-              <FieldLabel>Région *</FieldLabel>
-              <Select value={region} onChange={e => setRegion(e.target.value as any)}>
-                {REGION_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button variant="primary" type="submit" disabled={loading} className="w-full h-10">Ajouter</Button>
-            </div>
-          </form>
-        </div>
+          </div>
+        )}
 
-        {/* ── List ── */}
-        <div className="mt-4 rounded-2xl border bg-white shadow-sm overflow-hidden">
+        {/* ── ADD FORM ── */}
+        {showAddForm && (
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
+              <div className="text-sm font-bold text-slate-900">Nouveau client</div>
+              <button onClick={() => setShowAddForm(false)} className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <form onSubmit={onAdd} className="p-5 grid grid-cols-1 gap-4 md:grid-cols-5">
+              <div className="md:col-span-2">
+                <FL label="Client" required>
+                  <input className={inputCls} placeholder="Ex: BKAM, OCP, Aptiv…" value={aName} onChange={e => setAName(e.target.value)} list="acc_names" />
+                  <datalist id="acc_names">{accounts.map(a => <option key={a.id} value={a.name} />)}</datalist>
+                  <div className="mt-1 text-[11px] text-slate-400">Tape pour éviter les doublons.</div>
+                </FL>
+              </div>
+              <div>
+                <FL label="Segment" required>
+                  <div className="relative">
+                    <select className={selectCls} value={aSeg} onChange={e => setASeg(e.target.value as any)}>
+                      {SEGMENT_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
+                  </div>
+                </FL>
+              </div>
+              <div>
+                <FL label="Secteur d'activité" required>
+                  <input className={inputCls} placeholder="Banque / Industrie…" value={aSector} onChange={e => setASector(e.target.value)} list="sectors_add" />
+                  <datalist id="sectors_add">{uniqueSectors.map(x => <option key={x} value={x} />)}</datalist>
+                </FL>
+              </div>
+              <div>
+                <FL label="Région" required>
+                  <div className="relative">
+                    <select className={selectCls} value={aRegion} onChange={e => setARegion(e.target.value as any)}>
+                      {REGION_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
+                  </div>
+                </FL>
+              </div>
+              <div className="flex items-end">
+                <Btn variant="primary" type="submit" disabled={loading} className="w-full">
+                  <Plus className="h-4 w-4" /> Ajouter
+                </Btn>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* ── LIST ── */}
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden">
           {/* Toolbar */}
-          <div className="flex flex-wrap items-center gap-2 border-b px-4 py-3">
-            <div className="flex h-9 items-center gap-2 rounded-xl border bg-slate-50 px-3">
-              <Search className="h-3.5 w-3.5 text-slate-400" />
-              <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Rechercher un compte…"
-                className="w-48 bg-transparent text-sm outline-none placeholder:text-slate-400" />
-              {search && (
-                <button onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600 text-xs">✕</button>
-              )}
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3">
+            <div className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 min-w-[180px]">
+              <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher…"
+                className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" />
+              {search && <button onClick={() => setSearch('')} className="text-slate-400 hover:text-slate-600"><X className="h-3.5 w-3.5" /></button>}
             </div>
 
-            {/* Segment filter */}
-            <div className="flex gap-1 rounded-xl border bg-slate-50 p-1">
-              {['Tous', ...SEGMENT_CLIENT_OPTIONS].map(s => (
+            <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
+              {['Tous', ...SEGMENT_OPTIONS].map(s => (
                 <button key={s} onClick={() => setSegFilter(s)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors
-                    ${segFilter === s ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-white'}`}>
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors
+                    ${segFilter === s ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                   {s}
                 </button>
               ))}
             </div>
 
-            {/* Region filter */}
-            <div className="flex gap-1 rounded-xl border bg-slate-50 p-1">
+            <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-0.5">
               {['Tous', ...REGION_OPTIONS].map(r => (
-                <button key={r} onClick={() => setRegionFilter(r)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors
-                    ${regionFilter === r ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-white'}`}>
+                <button key={r} onClick={() => setRegFilter(r)}
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors
+                    ${regFilter === r ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                   {r}
                 </button>
               ))}
             </div>
 
-            <div className="ml-auto text-xs text-slate-400">
-              {displayAccounts.length} compte{displayAccounts.length > 1 ? 's' : ''}
-              {(search || segFilter !== 'Tous' || regionFilter !== 'Tous') && (
-                <button onClick={() => { setSearch(''); setSegFilter('Tous'); setRegionFilter('Tous') }}
-                  className="ml-2 text-blue-600 hover:underline">Réinitialiser</button>
+            <div className="ml-auto flex items-center gap-2 text-xs text-slate-400">
+              {filtered.length} / {accounts.length} comptes
+              {(search || segFilter !== 'Tous' || regFilter !== 'Tous') && (
+                <button onClick={() => { setSearch(''); setSegFilter('Tous'); setRegFilter('Tous') }}
+                  className="text-blue-600 hover:underline font-semibold">Réinitialiser</button>
               )}
             </div>
           </div>
 
+          {/* Table */}
           <div className="overflow-auto">
-            <table className="w-full min-w-[800px] text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead>
-                <tr className="border-b bg-slate-50 text-xs text-slate-500">
-                  <th className="px-4 py-3 text-left font-semibold">Client</th>
-                  <th className="px-4 py-3 text-left font-semibold">Segment</th>
-                  <th className="px-4 py-3 text-left font-semibold">Secteur d'activité</th>
-                  <th className="px-4 py-3 text-left font-semibold">Région</th>
-                  <th className="px-4 py-3 text-left font-semibold">Deals actifs</th>
-                  <th className="px-4 py-3 text-left font-semibold">Actions</th>
+                <tr className="border-b border-slate-100 bg-slate-50/70 text-xs font-semibold text-slate-400">
+                  <th className="px-5 py-3 text-left">Client</th>
+                  <th className="px-4 py-3 text-left">Segment</th>
+                  <th className="px-4 py-3 text-left">Secteur d'activité</th>
+                  <th className="px-4 py-3 text-left">Région</th>
+                  <th className="px-4 py-3 text-left">Deals actifs</th>
+                  <th className="px-4 py-3 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {displayAccounts.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="py-12 text-center text-sm text-slate-400">
-                      {accounts.length === 0 ? 'Aucun client pour l\'instant.' : 'Aucun résultat pour ces filtres.'}
-                    </td>
-                  </tr>
-                ) : displayAccounts.map(a => {
-                  const dealsCount = dealCounts[a.id] || 0
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={6} className="py-16 text-center text-sm text-slate-400">
+                    {accounts.length === 0 ? 'Aucun client. Commencez par en ajouter un.' : 'Aucun résultat pour ces filtres.'}
+                  </td></tr>
+                ) : filtered.map(a => {
+                  const deals = dealCounts[a.id] || 0
                   return (
-                    <tr key={a.id} className="group hover:bg-slate-50/70 transition-colors">
-                      <td className="px-4 py-3">
-                        <div className="font-semibold text-slate-900">{a.name}</div>
+                    <tr key={a.id} className="group hover:bg-slate-50/60 transition-colors">
+                      <td className="px-5 py-3">
+                        <div className="font-bold text-slate-900">{a.name}</div>
                       </td>
-                      <td className="px-4 py-3"><SegmentBadge segment={a.sector} /></td>
-                      <td className="px-4 py-3 text-slate-600">{a.segment || '—'}</td>
-                      <td className="px-4 py-3 text-slate-600">{a.region || '—'}</td>
+                      <td className="px-4 py-3"><SegBadge seg={a.sector} /></td>
+                      <td className="px-4 py-3 text-slate-600 text-sm">{a.segment || <span className="text-slate-300">—</span>}</td>
                       <td className="px-4 py-3">
-                        {dealsCount > 0 ? (
+                        {a.region ? (
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                            <MapPin className="h-3 w-3 text-slate-400" />{a.region}
+                          </span>
+                        ) : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {deals > 0 ? (
                           <Link href={`/pipeline?account=${encodeURIComponent(a.name)}`}
-                            className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors">
-                            {dealsCount} deal{dealsCount > 1 ? 's' : ''} <ExternalLink className="h-3 w-3" />
+                            className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition-colors">
+                            {deals} deal{deals > 1 ? 's' : ''} <ExternalLink className="h-3 w-3" />
                           </Link>
-                        ) : (
-                          <span className="text-xs text-slate-300">—</span>
-                        )}
+                        ) : <span className="text-xs text-slate-300">—</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
-                          <Button onClick={() => openEdit(a)}>Modifier</Button>
-                          <Button onClick={() => openContacts(a)}>Contacts</Button>
-                          <Button
-                            variant="danger"
-                            onClick={() => deleteAccount(a)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            Supprimer
-                          </Button>
+                          <Btn size="sm" variant="ghost" onClick={() => openEdit(a)}>
+                            <Pencil className="h-3.5 w-3.5" /> Modifier
+                          </Btn>
+                          <Btn size="sm" variant="ghost" onClick={() => openContacts(a)}>
+                            <Users className="h-3.5 w-3.5" /> Contacts
+                          </Btn>
+                          <Btn size="sm" variant="ghost" onClick={() => deleteAccount(a)}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:bg-red-50 border-red-100">
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Btn>
                         </div>
                       </td>
                     </tr>
@@ -676,156 +535,159 @@ export default function AccountsPage() {
             </table>
           </div>
 
-          {displayAccounts.length > 0 && (
-            <div className="border-t bg-slate-50/50 px-4 py-2.5 text-xs text-slate-400">
-              {displayAccounts.length} compte{displayAccounts.length > 1 ? 's' : ''} affichés · {accounts.length} total
+          {filtered.length > 0 && (
+            <div className="border-t border-slate-50 bg-slate-50/50 px-5 py-2.5 text-xs text-slate-400">
+              {filtered.length} compte{filtered.length > 1 ? 's' : ''} affichés · {stats.total} total
             </div>
           )}
         </div>
       </div>
 
-      {/* ── Edit modal ── */}
+      {/* ── EDIT MODAL ── */}
       <Modal open={editOpen} title={editRow ? `Modifier : ${editRow.name}` : 'Modifier'} onClose={() => setEditOpen(false)}>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="md:col-span-2">
-            <FieldLabel>Client *</FieldLabel>
-            <Input value={editName} onChange={e => setEditName(e.target.value)} />
+            <FL label="Nom du client" required>
+              <input className={inputCls} value={eName} onChange={e => setEName(e.target.value)} />
+            </FL>
           </div>
-          <div>
-            <FieldLabel>Segment client *</FieldLabel>
-            <Select value={editSegmentClient} onChange={e => setEditSegmentClient(e.target.value as any)}>
-              {SEGMENT_CLIENT_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
-            </Select>
-          </div>
-          <div>
-            <FieldLabel>Région *</FieldLabel>
-            <Select value={editRegion} onChange={e => setEditRegion(e.target.value as any)}>
-              {REGION_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
-            </Select>
-          </div>
+          <FL label="Segment client" required>
+            <div className="relative">
+              <select className={selectCls} value={eSeg} onChange={e => setESeg(e.target.value as any)}>
+                {SEGMENT_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
+            </div>
+          </FL>
+          <FL label="Région" required>
+            <div className="relative">
+              <select className={selectCls} value={eRegion} onChange={e => setERegion(e.target.value as any)}>
+                {REGION_OPTIONS.map(x => <option key={x} value={x}>{x}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-3 top-3 h-4 w-4 text-slate-400" />
+            </div>
+          </FL>
           <div className="md:col-span-2">
-            <FieldLabel>Secteur d'activité *</FieldLabel>
-            <Input value={editSectorActivite} onChange={e => setEditSectorActivite(e.target.value)} list="sectors_list_edit" />
-            <datalist id="sectors_list_edit">{uniqueSectorActivite.map(x => <option key={x} value={x} />)}</datalist>
+            <FL label="Secteur d'activité" required>
+              <input className={inputCls} value={eSector} onChange={e => setESector(e.target.value)} list="sectors_edit" />
+              <datalist id="sectors_edit">{uniqueSectors.map(x => <option key={x} value={x} />)}</datalist>
+            </FL>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap justify-between gap-2">
+        {err && <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">{err}</div>}
+        <div className="mt-5 flex items-center justify-between gap-2">
           <div className="flex gap-2">
-            <Button onClick={() => setEditOpen(false)}>Annuler</Button>
-            <Button variant="primary" onClick={onSaveEdit} disabled={busyEdit}>
+            <Btn variant="ghost" onClick={() => setEditOpen(false)}>Annuler</Btn>
+            <Btn variant="primary" onClick={onSaveEdit} disabled={busyEdit}>
               {busyEdit ? 'Enregistrement…' : 'Enregistrer'}
-            </Button>
+            </Btn>
           </div>
-          {editRow && (
-            <Button variant="danger" onClick={() => deleteAccount(editRow)} disabled={busyEdit}>
-              Supprimer le compte
-            </Button>
-          )}
+          {editRow && <Btn variant="danger" size="sm" onClick={() => deleteAccount(editRow)} disabled={busyEdit}><Trash2 className="h-3.5 w-3.5" /> Supprimer</Btn>}
         </div>
       </Modal>
 
-      {/* ── Contacts modal ── */}
-      <Modal
-        open={contactsOpen}
-        title={contactsAccount ? `Contacts — ${contactsAccount.name}` : 'Contacts'}
-        onClose={() => { setContactsOpen(false); setContactsAccount(null); setContacts([]) }}
-      >
-        {contactsAccount && (
-          <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-              {contactsAccount.sector && <Chip color="slate">{contactsAccount.sector}</Chip>}
-              {contactsAccount.segment && <Chip color="slate">{contactsAccount.segment}</Chip>}
-              {contactsAccount.region && <Chip color="slate">{contactsAccount.region}</Chip>}
+      {/* ── CONTACTS MODAL ── */}
+      <Modal open={contOpen} title={contAccount ? `Contacts — ${contAccount.name}` : 'Contacts'}
+        onClose={() => { setContOpen(false); setContAccount(null); setContacts([]) }}>
+        {contAccount && (
+          <div className="space-y-4">
+            {/* Info strip */}
+            <div className="flex flex-wrap gap-2 rounded-xl bg-slate-50 px-4 py-3 text-xs">
+              {contAccount.sector && <SegBadge seg={contAccount.sector} />}
+              {contAccount.segment && <span className="rounded-full bg-white ring-1 ring-slate-200 px-2.5 py-0.5 font-medium text-slate-600">{contAccount.segment}</span>}
+              {contAccount.region && <span className="inline-flex items-center gap-1 rounded-full bg-white ring-1 ring-slate-200 px-2.5 py-0.5 font-medium text-slate-600"><MapPin className="h-3 w-3" />{contAccount.region}</span>}
               <div className="flex-1" />
-              <Button onClick={() => loadContacts(contactsAccount.id)} disabled={contactsLoading}>
-                {contactsLoading ? '…' : 'Rafraîchir'}
-              </Button>
+              <Btn size="sm" variant="ghost" onClick={() => loadContacts(contAccount.id)} disabled={contLoading}>
+                <RefreshCw className={`h-3.5 w-3.5 ${contLoading ? 'animate-spin' : ''}`} />
+              </Btn>
             </div>
 
-            <div className="rounded-2xl border bg-white p-4">
-              <div className="mb-3 text-sm font-semibold text-slate-900">Ajouter un contact</div>
+            {/* Add contact form */}
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200 p-4">
+              <div className="mb-3 text-sm font-bold text-slate-900">Ajouter un contact</div>
               <form onSubmit={addContact} className="grid grid-cols-1 gap-3 md:grid-cols-4">
                 <div className="md:col-span-2">
-                  <FieldLabel>Nom *</FieldLabel>
-                  <Input value={cFullName} onChange={e => setCFullName(e.target.value)} placeholder="Ex: Bounab Ikram" />
+                  <FL label="Nom" required><input className={inputCls} value={cName} onChange={e => setCName(e.target.value)} placeholder="Prénom Nom" /></FL>
                 </div>
-                <div>
-                  <FieldLabel>Email</FieldLabel>
-                  <Input value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="ex@client.com" />
-                </div>
-                <div>
-                  <FieldLabel>Téléphone</FieldLabel>
-                  <Input value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="06..." />
-                </div>
+                <FL label="Email"><input type="email" className={inputCls} value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="email@client.ma" /></FL>
+                <FL label="Téléphone"><input className={inputCls} value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="06…" /></FL>
                 <div className="md:col-span-3">
-                  <FieldLabel>Rôle</FieldLabel>
-                  <Input value={cRole} onChange={e => setCRole(e.target.value)} placeholder="Responsable compte / Acheteur / DSI..." />
+                  <FL label="Rôle"><input className={inputCls} value={cRole} onChange={e => setCRole(e.target.value)} placeholder="DSI / Acheteur / Responsable…" /></FL>
                 </div>
                 <div className="flex items-end justify-between gap-2">
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input type="checkbox" checked={cPrimary} onChange={e => setCPrimary(e.target.checked)} />
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                    <input type="checkbox" className="rounded" checked={cPrimary} onChange={e => setCPrimary(e.target.checked)} />
                     Principal
                   </label>
-                  <Button variant="primary" type="submit" disabled={contactsLoading}>Ajouter</Button>
+                  <Btn variant="primary" type="submit" size="sm" disabled={contLoading}>
+                    <Plus className="h-3.5 w-3.5" /> Ajouter
+                  </Btn>
                 </div>
               </form>
             </div>
 
-            <div className="mt-4 rounded-2xl border bg-white p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="text-sm font-semibold text-slate-900">Liste des contacts</div>
-                <div className="text-xs text-slate-500">{contacts.length} contacts</div>
+            {/* Contacts list */}
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200 overflow-hidden">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                <div className="text-sm font-bold text-slate-900">Liste des contacts</div>
+                <div className="text-xs text-slate-400">{contacts.length} contact{contacts.length > 1 ? 's' : ''}</div>
               </div>
-              <div className="overflow-x-hidden">
-                <table className="w-full table-fixed text-sm">
-                  <thead className="text-left text-slate-500">
-                    <tr className="border-b">
-                      <th className="py-2 w-[22%]">Nom</th>
-                      <th className="py-2 w-[20%]">Rôle</th>
-                      <th className="py-2 w-[26%]">Email</th>
-                      <th className="py-2 w-[14%]">Téléphone</th>
-                      <th className="py-2 w-[8%]">Principal</th>
-                      <th className="py-2 w-[10%]">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contacts.map(c => (
-                      <tr key={c.id} className="border-b last:border-b-0">
-                        <td className="py-2 font-medium text-slate-900 truncate" title={c.full_name || ''}>{c.full_name || '—'}</td>
-                        <td className="py-2 truncate" title={c.role || ''}>{c.role || '—'}</td>
-                        <td className="py-2 truncate" title={c.email || ''}>
-                          {c.email ? <a href={`mailto:${c.email}`} className="text-blue-600 hover:underline">{c.email}</a> : '—'}
-                        </td>
-                        <td className="py-2 truncate">
-                          {c.phone ? <a href={`tel:${c.phone}`} className="text-blue-600 hover:underline">{c.phone}</a> : '—'}
-                        </td>
-                        <td className="py-2">
-                          {c.is_primary ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">Oui</span> : <span className="text-slate-400">Non</span>}
-                        </td>
-                        <td className="py-2">
-                          <div className="flex flex-wrap gap-1">
-                            {!c.is_primary && <Button onClick={() => setPrimary(c.id)}>Définir</Button>}
-                            <Button variant="danger" onClick={() => deleteContact(c)}>Suppr.</Button>
-                          </div>
-                        </td>
+              {contacts.length === 0 ? (
+                <div className="py-10 text-center text-sm text-slate-400">Aucun contact pour ce client.</div>
+              ) : (
+                <div className="overflow-auto">
+                  <table className="w-full text-sm min-w-[600px]">
+                    <thead className="bg-slate-50 text-xs text-slate-400">
+                      <tr>
+                        <th className="px-4 py-2.5 text-left font-semibold">Nom</th>
+                        <th className="px-4 py-2.5 text-left font-semibold">Rôle</th>
+                        <th className="px-4 py-2.5 text-left font-semibold">Contact</th>
+                        <th className="px-4 py-2.5 text-left font-semibold">Statut</th>
+                        <th className="px-4 py-2.5 text-left font-semibold">Actions</th>
                       </tr>
-                    ))}
-                    {contacts.length === 0 && (
-                      <tr><td colSpan={6} className="py-6 text-center text-slate-400">Aucun contact.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {contacts.map(c => (
+                        <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-4 py-2.5 font-semibold text-slate-900 text-xs">{c.full_name || '—'}</td>
+                          <td className="px-4 py-2.5 text-slate-500 text-xs">{c.role || '—'}</td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex flex-col gap-0.5">
+                              {c.email && <a href={`mailto:${c.email}`} className="flex items-center gap-1 text-xs text-blue-600 hover:underline"><Mail className="h-3 w-3" />{c.email}</a>}
+                              {c.phone && <a href={`tel:${c.phone}`} className="flex items-center gap-1 text-xs text-blue-600 hover:underline"><Phone className="h-3 w-3" />{c.phone}</a>}
+                              {!c.email && !c.phone && <span className="text-xs text-slate-300">—</span>}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {c.is_primary ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-bold text-amber-700">
+                                <Star className="h-3 w-3 fill-amber-500 text-amber-500" /> Principal
+                              </span>
+                            ) : <span className="text-xs text-slate-300">—</span>}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex gap-1.5">
+                              {!c.is_primary && <Btn size="sm" variant="ghost" onClick={() => setPrimary(c.id)}>Définir principal</Btn>}
+                              <Btn size="sm" variant="ghost" onClick={() => deleteContact(c)} className="text-red-500 hover:bg-red-50 border-red-100">
+                                <Trash2 className="h-3 w-3" />
+                              </Btn>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}
       </Modal>
 
-      <ConfirmModal
-        open={confirm.open} title={confirm.title} message={confirm.message}
-        confirmLabel={confirm.confirmLabel} danger={confirm.danger}
-        onConfirm={confirm.onConfirm}
-        onCancel={() => setConfirm(c => ({ ...c, open: false }))}
+      <ConfirmDialog
+        open={confirm.open} title={confirm.title} msg={confirm.msg}
+        danger={confirm.danger} confirmLabel={confirm.confirmLabel}
+        onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))}
       />
     </div>
   )
