@@ -4,16 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Bell, X } from "lucide-react";
+import { Bell, X, ChevronDown, KeyRound, LogOut } from "lucide-react";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", href: "/dashboard-v3" },
-  { label: "Prospection",   href: "/prospection" },
-  { label: "Pipeline",      href: "/pipeline" },
-  { label: "Comptes",   href: "/accounts" },
-  { label: "Deals",     href: "/opportunities" },
-  { label: "KPI",       href: "/kpi" },
-  { label: "Inside",    href: "/inside" },
+  { label: "Dashboard",   href: "/dashboard-v3" },
+  { label: "Prospection", href: "/prospection" },
+  { label: "Pipeline",    href: "/pipeline" },
+  { label: "Comptes",     href: "/accounts" },
+  { label: "Deals",       href: "/opportunities" },
+  { label: "KPI",         href: "/kpi" },
+  { label: "Inside",      href: "/inside" },
 ];
 
 type Activity = {
@@ -37,28 +37,166 @@ function timeAgo(iso: string) {
 }
 
 function userName(email: string) {
-  if (email === 'nabil.imdh@gmail.com') return 'Nabil';
-  if (email === 's.chitachny@compucom.ma') return 'Salim';
-  return email.split('@')[0];
+  if (email === "nabil.imdh@gmail.com") return "Nabil";
+  if (email === "s.chitachny@compucom.ma") return "Salim";
+  return email.split("@")[0];
 }
 
 const ACTION_COLOR: Record<string, string> = {
-  create: '#10b981', update: '#3b82f6', delete: '#ef4444', stage: '#f59e0b',
+  create: "#10b981", update: "#3b82f6", delete: "#ef4444", stage: "#f59e0b",
 };
 const ACTION_LABEL: Record<string, string> = {
-  create: 'Ajouté', update: 'Modifié', delete: 'Supprimé', stage: 'Stage →',
+  create: "Ajouté", update: "Modifié", delete: "Supprimé", stage: "Stage →",
 };
 
+// ── Password modal ────────────────────────────────────────────────────────────
+function PasswordModal({ onClose }: { onClose: () => void }) {
+  const [newPwd, setNewPwd]       = useState("");
+  const [confirmPwd, setConfirmPwd] = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [err, setErr]             = useState<string | null>(null);
+  const [success, setSuccess]     = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    if (newPwd.length < 8) return setErr("Le mot de passe doit faire au moins 8 caractères.");
+    if (newPwd !== confirmPwd) return setErr("Les mots de passe ne correspondent pas.");
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPwd });
+      if (error) throw error;
+      setSuccess(true);
+      setTimeout(() => onClose(), 2000);
+    } catch (e: any) {
+      setErr(e?.message || "Erreur lors du changement de mot de passe.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 999,
+      background: "rgba(0,0,0,0.35)",
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+    }}>
+      <div style={{
+        background: "#fff", borderRadius: 20, width: "100%", maxWidth: 420,
+        boxShadow: "0 20px 60px rgba(0,0,0,0.15)", overflow: "hidden",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: "1px solid #f1f5f9" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <KeyRound style={{ width: 16, height: 16, color: "#475569" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Changer le mot de passe</div>
+              <div style={{ fontSize: 11, color: "#94a3b8" }}>Compte CRM-PIPE</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", padding: 6, borderRadius: 8 }}>
+            <X style={{ width: 16, height: 16, color: "#94a3b8" }} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: "20px" }}>
+          {success ? (
+            <div style={{ textAlign: "center", padding: "20px 0" }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#16a34a" }}>Mot de passe mis à jour !</div>
+              <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>Fermeture automatique...</div>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 6 }}>
+                  Nouveau mot de passe
+                </label>
+                <input
+                  type="password"
+                  value={newPwd}
+                  onChange={e => setNewPwd(e.target.value)}
+                  placeholder="Min. 8 caractères"
+                  autoFocus
+                  style={{ width: "100%", height: 42, borderRadius: 12, border: "1px solid #e2e8f0", padding: "0 14px", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 6 }}>
+                  Confirmer le mot de passe
+                </label>
+                <input
+                  type="password"
+                  value={confirmPwd}
+                  onChange={e => setConfirmPwd(e.target.value)}
+                  placeholder="Retape le même mot de passe"
+                  style={{ width: "100%", height: 42, borderRadius: 12, border: "1px solid #e2e8f0", padding: "0 14px", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+
+              {err && (
+                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#dc2626" }}>
+                  {err}
+                </div>
+              )}
+
+              {/* Strength indicator */}
+              {newPwd.length > 0 && (
+                <div>
+                  <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                    {[1,2,3,4].map(i => (
+                      <div key={i} style={{
+                        flex: 1, height: 3, borderRadius: 2,
+                        background: newPwd.length >= i * 3 ? (newPwd.length >= 12 ? "#16a34a" : newPwd.length >= 8 ? "#f59e0b" : "#ef4444") : "#e2e8f0",
+                        transition: "background 0.2s",
+                      }}/>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 11, color: newPwd.length >= 12 ? "#16a34a" : newPwd.length >= 8 ? "#f59e0b" : "#ef4444" }}>
+                    {newPwd.length >= 12 ? "Fort" : newPwd.length >= 8 ? "Moyen" : "Trop court"}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                <button type="button" onClick={onClose} style={{
+                  flex: 1, height: 42, borderRadius: 12, border: "1px solid #e2e8f0",
+                  background: "#fff", fontSize: 13, fontWeight: 500, color: "#475569", cursor: "pointer",
+                }}>
+                  Annuler
+                </button>
+                <button type="submit" disabled={loading} style={{
+                  flex: 2, height: 42, borderRadius: 12, border: "none",
+                  background: loading ? "#94a3b8" : "#0f172a", color: "#fff",
+                  fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer",
+                }}>
+                  {loading ? "Mise à jour..." : "Changer le mot de passe"}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── NavBar ────────────────────────────────────────────────────────────────────
 export default function NavBar() {
   const path = usePathname();
-  const [email, setEmail] = useState<string | null>(null);
+  const [email, setEmail]           = useState<string | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
-  const [unread, setUnread] = useState(0);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const lastReadRef = useRef<string>('');
+  const [unread, setUnread]         = useState(0);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showPwdModal, setShowPwdModal] = useState(false);
+  const panelRef    = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+  const lastReadRef = useRef<string>("");
 
-  // Load current user
   useEffect(() => {
     let mounted = true;
     const load = async () => {
@@ -66,9 +204,7 @@ export default function NavBar() {
       if (!mounted) return;
       const userEmail = data?.user?.email ?? null;
       setEmail(userEmail);
-      if (userEmail) {
-        await loadLastRead(userEmail);
-      }
+      if (userEmail) await loadLastRead(userEmail);
     };
     load();
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -79,71 +215,57 @@ export default function NavBar() {
     return () => { mounted = false; sub?.subscription?.unsubscribe(); };
   }, []);
 
-  // Load last_read from DB for this user
   async function loadLastRead(userEmail: string) {
     const { data } = await supabase
-      .from('notification_reads')
-      .select('last_read_at')
-      .eq('user_email', userEmail)
-      .single();
-    const lastRead = data?.last_read_at ?? '';
+      .from("notification_reads").select("last_read_at")
+      .eq("user_email", userEmail).single();
+    const lastRead = data?.last_read_at ?? "";
     lastReadRef.current = lastRead;
     await loadActivities(lastRead);
   }
 
-  // Load activities + compute unread
   async function loadActivities(lastRead?: string) {
     const { data } = await supabase
-      .from('activity_log')
-      .select('id,user_email,action_type,entity_type,entity_name,detail,created_at')
-      .order('created_at', { ascending: false })
-      .limit(50);
+      .from("activity_log")
+      .select("id,user_email,action_type,entity_type,entity_name,detail,created_at")
+      .order("created_at", { ascending: false }).limit(50);
     if (data) {
       setActivities(data as Activity[]);
       const ref = lastRead ?? lastReadRef.current;
-      const newCount = ref
-        ? data.filter(a => a.created_at > ref).length
-        : Math.min(data.length, 5);
+      const newCount = ref ? data.filter(a => a.created_at > ref).length : Math.min(data.length, 5);
       setUnread(newCount);
     }
   }
 
-  // Real-time subscription
   useEffect(() => {
-    const channel = supabase
-      .channel('activity_log_realtime')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, (payload) => {
+    const channel = supabase.channel("activity_log_realtime")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "activity_log" }, (payload) => {
         const newAct = payload.new as Activity;
         setActivities(prev => [newAct, ...prev.slice(0, 49)]);
         setUnread(prev => prev + 1);
-      })
-      .subscribe();
+      }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Open panel + mark as read in DB
   async function openNotifs() {
-    setShowNotifs(true);
-    setUnread(0);
+    setShowNotifs(true); setUnread(0);
     const now = new Date().toISOString();
     lastReadRef.current = now;
     if (email) {
-      await supabase
-        .from('notification_reads')
-        .upsert({ user_email: email, last_read_at: now }, { onConflict: 'user_email' });
+      await supabase.from("notification_reads")
+        .upsert({ user_email: email, last_read_at: now }, { onConflict: "user_email" });
     }
   }
 
-  // Close on outside click
+  // Close panels on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        setShowNotifs(false);
-      }
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) setShowNotifs(false);
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) setShowUserMenu(false);
     }
-    if (showNotifs) document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showNotifs]);
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const logout = async () => {
     await supabase.auth.signOut();
@@ -151,119 +273,156 @@ export default function NavBar() {
   };
 
   return (
-    <div style={{ borderBottom: '1px solid #e2e8f0', background: '#fff', position: 'sticky', top: 0, zIndex: 100 }}>
-      <div style={{ maxWidth: 1600, margin: '0 auto', padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', gap: 8 }}>
+    <>
+      <div style={{ borderBottom: "1px solid #e2e8f0", background: "#fff", position: "sticky", top: 0, zIndex: 100 }}>
+        <div style={{ maxWidth: 1600, margin: "0 auto", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 8 }}>
 
-        <Link href="/dashboard-v3" style={{ fontWeight: 900, fontSize: 15, letterSpacing: '1.5px', color: '#0f172a', textDecoration: 'none', marginRight: 16 }}>
-          CRM-PIPE
-        </Link>
+          <Link href="/dashboard-v3" style={{ fontWeight: 900, fontSize: 15, letterSpacing: "1.5px", color: "#0f172a", textDecoration: "none", marginRight: 16 }}>
+            CRM-PIPE
+          </Link>
 
-        <nav style={{ display: 'flex', gap: 2, flex: 1 }}>
-          {NAV_ITEMS.map(it => {
-            const active = path === it.href || path.startsWith(it.href + "/");
-            return (
-              <Link key={it.href} href={it.href} style={{
-                padding: '5px 12px', borderRadius: 8, fontSize: 13, fontWeight: active ? 600 : 400,
-                color: active ? '#0f172a' : '#64748b', textDecoration: 'none',
-                background: active ? '#f1f5f9' : 'transparent',
-              }}>
-                {it.label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {email && (
-            <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>
-              {userName(email)}
-            </span>
-          )}
-
-          <div style={{ position: 'relative' }} ref={panelRef}>
-            <button
-              onClick={openNotifs}
-              style={{ position: 'relative', width: 36, height: 36, borderRadius: 10, border: '1px solid #e2e8f0', background: showNotifs ? '#f1f5f9' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Bell style={{ width: 16, height: 16, color: '#475569' }} />
-              {unread > 0 && (
-                <span style={{
-                  position: 'absolute', top: -4, right: -4, minWidth: 18, height: 18,
-                  borderRadius: 9, background: '#ef4444', color: '#fff', fontSize: 10,
-                  fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  padding: '0 4px', border: '2px solid #fff',
+          <nav style={{ display: "flex", gap: 2, flex: 1 }}>
+            {NAV_ITEMS.map(it => {
+              const active = path === it.href || path.startsWith(it.href + "/");
+              return (
+                <Link key={it.href} href={it.href} style={{
+                  padding: "5px 12px", borderRadius: 8, fontSize: 13,
+                  fontWeight: active ? 600 : 400,
+                  color: active ? "#0f172a" : "#64748b",
+                  textDecoration: "none",
+                  background: active ? "#f1f5f9" : "transparent",
                 }}>
-                  {unread > 9 ? '9+' : unread}
-                </span>
-              )}
-            </button>
+                  {it.label}
+                </Link>
+              );
+            })}
+          </nav>
 
-            {showNotifs && (
-              <div style={{
-                position: 'absolute', top: 44, right: 0, width: 380,
-                background: '#fff', border: '1px solid #e2e8f0', borderRadius: 14,
-                boxShadow: '0 10px 40px rgba(0,0,0,0.12)', overflow: 'hidden', zIndex: 200,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>Activité de l'équipe</span>
-                  <button onClick={() => setShowNotifs(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 4 }}>
-                    <X style={{ width: 14, height: 14, color: '#94a3b8' }} />
-                  </button>
-                </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 
-                <div style={{ maxHeight: 440, overflowY: 'auto' }}>
-                  {activities.length === 0 ? (
-                    <div style={{ padding: '30px 16px', textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>
-                      Aucune activité récente
+            {/* ── User menu ── */}
+            {email && (
+              <div style={{ position: "relative" }} ref={userMenuRef}>
+                <button
+                  onClick={() => setShowUserMenu(v => !v)}
+                  style={{
+                    display: "flex", alignItems: "center", gap: 6,
+                    height: 34, padding: "0 10px", borderRadius: 10,
+                    border: "1px solid #e2e8f0", background: showUserMenu ? "#f1f5f9" : "#fff",
+                    cursor: "pointer", fontSize: 13, fontWeight: 500, color: "#475569",
+                  }}
+                >
+                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#0f172a", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    {userName(email)[0]}
+                  </div>
+                  {userName(email)}
+                  <ChevronDown style={{ width: 12, height: 12, color: "#94a3b8", transform: showUserMenu ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+                </button>
+
+                {showUserMenu && (
+                  <div style={{
+                    position: "absolute", top: 42, right: 0, width: 200,
+                    background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14,
+                    boxShadow: "0 8px 30px rgba(0,0,0,0.10)", overflow: "hidden", zIndex: 200,
+                  }}>
+                    <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid #f1f5f9" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{userName(email)}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</div>
                     </div>
-                  ) : (
-                    activities.map((a, idx) => {
-                      const color = ACTION_COLOR[a.action_type] || '#64748b';
+                    <div style={{ padding: "6px" }}>
+                      <button
+                        onClick={() => { setShowUserMenu(false); setShowPwdModal(true); }}
+                        style={{
+                          width: "100%", display: "flex", alignItems: "center", gap: 9,
+                          padding: "9px 10px", borderRadius: 9, border: "none",
+                          background: "none", cursor: "pointer", fontSize: 13,
+                          color: "#374151", fontWeight: 500, textAlign: "left",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "#f8fafc")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                      >
+                        <KeyRound style={{ width: 14, height: 14, color: "#64748b" }} />
+                        Changer le mot de passe
+                      </button>
+                      <button
+                        onClick={logout}
+                        style={{
+                          width: "100%", display: "flex", alignItems: "center", gap: 9,
+                          padding: "9px 10px", borderRadius: 9, border: "none",
+                          background: "none", cursor: "pointer", fontSize: 13,
+                          color: "#dc2626", fontWeight: 500, textAlign: "left",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "#fef2f2")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                      >
+                        <LogOut style={{ width: 14, height: 14, color: "#dc2626" }} />
+                        Déconnexion
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Notifications ── */}
+            <div style={{ position: "relative" }} ref={panelRef}>
+              <button
+                onClick={openNotifs}
+                style={{ position: "relative", width: 36, height: 36, borderRadius: 10, border: "1px solid #e2e8f0", background: showNotifs ? "#f1f5f9" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+              >
+                <Bell style={{ width: 16, height: 16, color: "#475569" }} />
+                {unread > 0 && (
+                  <span style={{ position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, background: "#ef4444", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", border: "2px solid #fff" }}>
+                    {unread > 9 ? "9+" : unread}
+                  </span>
+                )}
+              </button>
+
+              {showNotifs && (
+                <div style={{ position: "absolute", top: 44, right: 0, width: 380, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, boxShadow: "0 10px 40px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 200 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Activité de l'équipe</span>
+                    <button onClick={() => setShowNotifs(false)} style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
+                      <X style={{ width: 14, height: 14, color: "#94a3b8" }} />
+                    </button>
+                  </div>
+                  <div style={{ maxHeight: 440, overflowY: "auto" }}>
+                    {activities.length === 0 ? (
+                      <div style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "#94a3b8" }}>Aucune activité récente</div>
+                    ) : activities.map((a, idx) => {
+                      const color = ACTION_COLOR[a.action_type] || "#64748b";
                       const label = ACTION_LABEL[a.action_type] || a.action_type;
                       const isNew = lastReadRef.current ? a.created_at > lastReadRef.current : idx < 5;
                       return (
-                        <div key={a.id} style={{
-                          display: 'flex', gap: 12, padding: '11px 16px',
-                          borderBottom: '1px solid #f8fafc',
-                          background: isNew ? '#fefce8' : '#fff',
-                        }}>
-                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, marginTop: 5, flexShrink: 0 }} />
+                        <div key={a.id} style={{ display: "flex", gap: 12, padding: "11px 16px", borderBottom: "1px solid #f8fafc", background: isNew ? "#fefce8" : "#fff" }}>
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, marginTop: 5, flexShrink: 0 }} />
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 12, color: '#0f172a', lineHeight: 1.5 }}>
-                              <b style={{ color: a.user_email === email ? '#2563eb' : '#0f172a' }}>
-                                {userName(a.user_email)}
-                              </b>
-                              {' '}<span style={{ color, fontWeight: 600 }}>{label}</span>
-                              {' '}<span style={{ fontWeight: 500 }}>{a.entity_name}</span>
+                            <div style={{ fontSize: 12, color: "#0f172a", lineHeight: 1.5 }}>
+                              <b style={{ color: a.user_email === email ? "#2563eb" : "#0f172a" }}>{userName(a.user_email)}</b>
+                              {" "}<span style={{ color, fontWeight: 600 }}>{label}</span>
+                              {" "}<span style={{ fontWeight: 500 }}>{a.entity_name}</span>
                             </div>
-                            {a.detail && (
-                              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {a.detail}
-                              </div>
-                            )}
-                            <div style={{ fontSize: 11, color: '#cbd5e1', marginTop: 2 }}>{timeAgo(a.created_at)}</div>
+                            {a.detail && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.detail}</div>}
+                            <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 2 }}>{timeAgo(a.created_at)}</div>
                           </div>
-                          {isNew && <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', marginTop: 6, flexShrink: 0 }} />}
+                          {isNew && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", marginTop: 6, flexShrink: 0 }} />}
                         </div>
                       );
-                    })
-                  )}
+                    })}
+                  </div>
+                  <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", textAlign: "center" }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>Toute l'activité de l'équipe (Nabil + Salim)</span>
+                  </div>
                 </div>
+              )}
+            </div>
 
-                <div style={{ padding: '10px 16px', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
-                  <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                    Toute l'activité de l'équipe (Nabil + Salim)
-                  </span>
-                </div>
-              </div>
-            )}
           </div>
-
-          <button onClick={logout} style={{ height: 34, borderRadius: 10, padding: '0 14px', fontSize: 12, fontWeight: 500, background: '#0f172a', color: '#fff', border: 'none', cursor: 'pointer' }}>
-            Déconnexion
-          </button>
         </div>
       </div>
-    </div>
+
+      {/* ── Password modal (outside navbar flow) ── */}
+      {showPwdModal && <PasswordModal onClose={() => setShowPwdModal(false)} />}
+    </>
   );
 }
