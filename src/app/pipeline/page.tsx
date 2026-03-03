@@ -3,335 +3,546 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { RefreshCw, Search, TrendingUp, Target, Zap, Trophy, Plus } from 'lucide-react'
+import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid } from 'lucide-react'
 
-type StageDef = { stage: string; sort_order: number }
-type Account = { id: string; name: string }
-type Opp = {
-  id: string; title: string; stage: string; prob: number | null
-  amount: number; booking_month: string | null; account_id: string
-  bu: string | null; status: string | null; next_step: string | null
+// ─── Types ────────────────────────────────────────────────────────────────────
+type DealRow = {
+  id: string
+  account_id: string
+  title: string
+  stage: string
+  status: 'Open' | 'Won' | 'Lost'
+  bu: string | null
+  vendor: string | null
+  amount: number
+  prob: number | null
+  booking_month: string | null
+  next_step: string | null
+  notes: string | null
+  multi_bu: boolean | null
+  bu_lines: any
+  po_number?: string | null
+  po_date?: string | null
+  accounts?: { name?: string } | null
 }
 
-const STAGE_CONFIG: Record<string, { color: string; light: string; border: string; dot: string }> = {
-  'Lead':               { color: '#64748b', light: '#f8fafc',   border: '#e2e8f0', dot: '#94a3b8' },
-  'Discovery':          { color: '#3b82f6', light: '#eff6ff',   border: '#bfdbfe', dot: '#3b82f6' },
-  'Qualified':          { color: '#8b5cf6', light: '#f5f3ff',   border: '#ddd6fe', dot: '#8b5cf6' },
-  'Solutioning':        { color: '#a855f7', light: '#faf5ff',   border: '#e9d5ff', dot: '#a855f7' },
-  'Proposal Sent':      { color: '#ec4899', light: '#fdf2f8',   border: '#fbcfe8', dot: '#ec4899' },
-  'Negotiation':        { color: '#f59e0b', light: '#fffbeb',   border: '#fde68a', dot: '#f59e0b' },
-  'Commit':             { color: '#f97316', light: '#fff7ed',   border: '#fed7aa', dot: '#f97316' },
-  'Won':                { color: '#10b981', light: '#ecfdf5',   border: '#a7f3d0', dot: '#10b981' },
-  'Lost / No decision': { color: '#ef4444', light: '#fef2f2',   border: '#fecaca', dot: '#ef4444' },
+// ─── Constants ────────────────────────────────────────────────────────────────
+const STAGES = ['Lead','Discovery','Qualified','Solutioning','Proposal Sent','Negotiation','Commit','Won','Lost / No decision'] as const
+const STAGE_NEXT: Record<string, string> = {
+  Lead: 'Discovery', Discovery: 'Qualified', Qualified: 'Solutioning',
+  Solutioning: 'Proposal Sent', 'Proposal Sent': 'Negotiation',
+  Negotiation: 'Commit', Commit: 'Won',
+}
+const STAGE_PROB: Record<string, number> = {
+  Lead:10, Discovery:20, Qualified:40, Solutioning:55,
+  'Proposal Sent':70, Negotiation:80, Commit:90, Won:100, 'Lost / No decision':0,
+}
+const STAGE_STYLE: Record<string, { bg: string; text: string; dot: string; border: string }> = {
+  Lead:              { bg:'bg-slate-100',  text:'text-slate-600',   dot:'bg-slate-400',   border:'border-slate-200' },
+  Discovery:         { bg:'bg-blue-50',    text:'text-blue-700',    dot:'bg-blue-400',    border:'border-blue-200'  },
+  Qualified:         { bg:'bg-cyan-50',    text:'text-cyan-700',    dot:'bg-cyan-400',    border:'border-cyan-200'  },
+  Solutioning:       { bg:'bg-violet-50',  text:'text-violet-700',  dot:'bg-violet-400',  border:'border-violet-200'},
+  'Proposal Sent':   { bg:'bg-amber-50',   text:'text-amber-700',   dot:'bg-amber-400',   border:'border-amber-200' },
+  Negotiation:       { bg:'bg-orange-50',  text:'text-orange-700',  dot:'bg-orange-400',  border:'border-orange-200'},
+  Commit:            { bg:'bg-emerald-50', text:'text-emerald-700', dot:'bg-emerald-500', border:'border-emerald-200'},
+  Won:               { bg:'bg-green-100',  text:'text-green-800',   dot:'bg-green-500',   border:'border-green-300' },
+  'Lost / No decision':{ bg:'bg-red-50',  text:'text-red-600',     dot:'bg-red-400',     border:'border-red-200'   },
+}
+const BUS = ['HCI','Network','Storage','Cyber','Service','CSG'] as const
+const BU_COLOR: Record<string,string> = {
+  HCI:'bg-indigo-50 text-indigo-700', Network:'bg-sky-50 text-sky-700',
+  Storage:'bg-teal-50 text-teal-700', Cyber:'bg-red-50 text-red-700',
+  Service:'bg-violet-50 text-violet-700', CSG:'bg-amber-50 text-amber-700',
+  MULTI:'bg-slate-100 text-slate-600',
+}
+const PIPE_STAGES = ['Lead','Discovery','Qualified','Solutioning','Proposal Sent','Negotiation','Commit'] as const
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const mad = (n: number) =>
+  new Intl.NumberFormat('fr-MA', { style:'currency', currency:'MAD', maximumFractionDigits:0 }).format(n||0)
+
+function fmtAmt(n: number) {
+  if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`
+  if (n >= 1000) return `${Math.round(n/1000)}K`
+  return String(Math.round(n))
 }
 
-const DEFAULT_STAGE = { color: '#64748b', light: '#f8fafc', border: '#e2e8f0', dot: '#94a3b8' }
-
-const BU_OPTIONS = ['Tous', 'HCI', 'Network', 'Storage', 'Cyber', 'Service', 'CSG']
-
-const BU_COLORS: Record<string, { bg: string; text: string }> = {
-  'HCI':     { bg: '#eff6ff', text: '#2563eb' },
-  'Network': { bg: '#f5f3ff', text: '#7c3aed' },
-  'Storage': { bg: '#fffbeb', text: '#d97706' },
-  'Cyber':   { bg: '#fef2f2', text: '#dc2626' },
-  'Service': { bg: '#ecfdf5', text: '#059669' },
-  'CSG':     { bg: '#f8fafc', text: '#475569' },
+function StageBadge({ stage }: { stage: string }) {
+  const c = STAGE_STYLE[stage] || STAGE_STYLE.Lead
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${c.bg} ${c.text}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />{stage}
+    </span>
+  )
 }
 
-const mad = (n: number) => new Intl.NumberFormat('fr-MA', { maximumFractionDigits: 0 }).format(n || 0)
-const madShort = (n: number) => {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}k`
-  return String(n || 0)
+function BuBadge({ bu }: { bu: string | null }) {
+  if (!bu) return <span className="text-slate-400">—</span>
+  const cls = BU_COLOR[bu] || 'bg-slate-100 text-slate-600'
+  return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${cls}`}>{bu}</span>
 }
 
+function ProbBar({ prob }: { prob: number }) {
+  const color = prob>=80?'bg-emerald-500':prob>=60?'bg-amber-400':prob>=30?'bg-orange-400':'bg-slate-300'
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-1.5 w-16 rounded-full bg-slate-100 overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width:`${prob}%` }} />
+      </div>
+      <span className="text-xs text-slate-500 tabular-nums">{prob}%</span>
+    </div>
+  )
+}
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PipelinePage() {
-  const [stages, setStages] = useState<StageDef[]>([])
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [items, setItems] = useState<Opp[]>([])
-  const [err, setErr] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [search, setSearch] = useState('')
-  const [buFilter, setBuFilter] = useState('Tous')
-  const [hideWonLost, setHideWonLost] = useState(true)
+  const [rows, setRows]         = useState<DealRow[]>([])
+  const [loading, setLoading]   = useState(true)
+  const [err, setErr]           = useState<string | null>(null)
+  const [info, setInfo]         = useState<string | null>(null)
+  const [view, setView]         = useState<'list' | 'kanban'>('list')
+
+  // Filters
+  const [stageFilter, setStageFilter] = useState<string>('Open')
+  const [buFilter, setBuFilter]       = useState<string>('Tous')
+  const [search, setSearch]           = useState('')
+  const [sortCol, setSortCol]         = useState<'amount'|'prob'|'booking_month'|'stage'>('booking_month')
+  const [sortAsc, setSortAsc]         = useState(true)
 
   async function load() {
-    setErr(null); setLoading(true)
-    const s = await supabase.from('stage_definitions').select('stage,sort_order').order('sort_order')
-    const a = await supabase.from('accounts').select('id,name').order('name')
-    const o = await supabase.from('opportunities')
-      .select('id,title,stage,prob,amount,booking_month,account_id,bu,status,next_step')
-      .order('amount', { ascending: false })
+    setLoading(true); setErr(null)
+    const { data, error } = await supabase.from('opportunities').select('*, accounts(name)').order('created_at', { ascending:false })
+    if (error) { setErr(error.message); setLoading(false); return }
+    setRows((data as DealRow[])||[])
     setLoading(false)
-    if (s.error) return setErr(s.error.message)
-    if (a.error) return setErr(a.error.message)
-    if (o.error) return setErr(o.error.message)
-    setStages((s.data ?? []) as StageDef[])
-    setAccounts((a.data ?? []) as Account[])
-    setItems((o.data ?? []) as Opp[])
   }
-
   useEffect(() => { load() }, [])
 
-  const accountNameById = useMemo(() => {
-    const m = new Map(accounts.map(a => [a.id, a.name] as const))
-    return (id: string) => m.get(id) ?? '—'
-  }, [accounts])
+  function toast(msg: string) { setInfo(msg); setTimeout(() => setInfo(null), 3000) }
 
-  const filteredItems = useMemo(() => items.filter(o => {
-    if (hideWonLost && (o.stage === 'Won' || o.stage === 'Lost / No decision')) return false
-    if (buFilter !== 'Tous' && o.bu !== buFilter) return false
-    if (search) {
-      const q = search.toLowerCase()
-      if (!o.title.toLowerCase().includes(q) && !accountNameById(o.account_id).toLowerCase().includes(q)) return false
-    }
-    return true
-  }), [items, search, buFilter, hideWonLost, accountNameById])
-
-  const visibleStages = useMemo(() =>
-    hideWonLost ? stages.filter(s => s.stage !== 'Won' && s.stage !== 'Lost / No decision') : stages,
-    [stages, hideWonLost]
-  )
-
-  const byStage = useMemo(() => {
-    const m = new Map<string, Opp[]>()
-    for (const st of visibleStages) m.set(st.stage, [])
-    for (const o of filteredItems) {
-      if (!m.has(o.stage)) m.set(o.stage, [])
-      m.get(o.stage)!.push(o)
-    }
-    return m
-  }, [filteredItems, visibleStages])
-
-  const kpis = useMemo(() => {
-    const open = filteredItems.filter(o => o.stage !== 'Won' && o.stage !== 'Lost / No decision')
-    const pipeline = open.reduce((s, o) => s + (o.amount || 0), 0)
-    const weighted = open.reduce((s, o) => s + (o.amount || 0) * ((o.prob || 0) / 100), 0)
-    const commit = open.filter(o => o.stage === 'Commit').reduce((s, o) => s + (o.amount || 0), 0)
-    const won = items.filter(o => o.stage === 'Won').reduce((s, o) => s + (o.amount || 0), 0)
-    return { pipeline, weighted, commit, won, count: open.length }
-  }, [filteredItems, items])
-
-  async function updateStage(id: string, newStage: string, oldStage: string) {
-    const { error } = await supabase.from('opportunities').update({ stage: newStage }).eq('id', id)
-    if (error) return setErr(error.message)
-    // Log activity
-    const { data: { user } } = await supabase.auth.getUser()
-    const deal = items.find(o => o.id === id)
-    if (user && deal) {
-      await supabase.from('activity_log').insert({
-        user_email: user.email,
-        action_type: 'stage',
-        entity_type: 'deal',
-        entity_name: deal.title,
-        detail: `${oldStage} → ${newStage}`,
-      })
-    }
-    setItems(prev => prev.map(o => (o.id === id ? { ...o, stage: newStage } : o)))
+  async function advanceStage(deal: DealRow) {
+    const next = STAGE_NEXT[deal.stage]; if (!next) return
+    const { error } = await supabase.from('opportunities').update({
+      stage: next, status: next==='Won'?'Won':'Open', prob: STAGE_PROB[next]??deal.prob
+    }).eq('id', deal.id)
+    if (error) { setErr(error.message); return }
+    toast(`${deal.title} → ${next}`); load()
   }
 
-  return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
-      <style>{`
-        .pipe-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; transition: all 0.15s; cursor: default; }
-        .pipe-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.08); border-color: #cbd5e1; transform: translateY(-1px); }
-        .pipe-scroll::-webkit-scrollbar { height: 5px; }
-        .pipe-scroll::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 3px; }
-        .pipe-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-        .stage-select { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 10px; font-size: 11px; color: #64748b; background: #f8fafc; outline: none; cursor: pointer; margin-top: 10px; }
-        .stage-select:hover { background: #f1f5f9; }
-        @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
-        .pipe-card { animation: fadeUp 0.25s ease both; }
-      `}</style>
+  // ── Stats ──────────────────────────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const open = rows.filter(r => r.status==='Open')
+    const won  = rows.filter(r => r.status==='Won')
+    const lost = rows.filter(r => r.status==='Lost')
+    const now  = new Date()
+    const thisM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+    const nextM = now.getMonth()===11
+      ? `${now.getFullYear()+1}-01`
+      : `${now.getFullYear()}-${String(now.getMonth()+2).padStart(2,'0')}`
+    const urgent = open.filter(r => r.booking_month===thisM||r.booking_month===nextM)
+    const bySt = Object.fromEntries(STAGES.map(s => [s, { count:0, amount:0 }]))
+    open.forEach(r => {
+      const k = r.stage||'Lead'
+      if (!bySt[k]) bySt[k] = { count:0, amount:0 }
+      bySt[k].count++; bySt[k].amount += Number(r.amount||0)
+    })
+    return {
+      totalOpen: open.length,
+      totalWon: won.length,
+      totalLost: lost.length,
+      pipeline: open.reduce((s,r)=>s+Number(r.amount||0),0),
+      forecast: open.reduce((s,r)=>s+Number(r.amount||0)*(Number(r.prob||0)/100),0),
+      wonTotal: won.reduce((s,r)=>s+Number(r.amount||0),0),
+      urgentCount: urgent.length,
+      urgentAmount: urgent.reduce((s,r)=>s+Number(r.amount||0),0),
+      winRate: won.length+lost.length>0 ? Math.round(won.length/(won.length+lost.length)*100) : 0,
+      bySt,
+    }
+  }, [rows])
 
-      <div style={{ maxWidth: 1700, margin: '0 auto', padding: '24px 20px' }}>
+  // ── Filtered rows ──────────────────────────────────────────────────────────
+  const displayRows = useMemo(() => {
+    let r = [...rows]
+    if (stageFilter==='Open')  r = r.filter(x => x.status==='Open')
+    else if (stageFilter==='Won')  r = r.filter(x => x.status==='Won')
+    else if (stageFilter==='Lost') r = r.filter(x => x.status==='Lost')
+    else r = r.filter(x => x.stage===stageFilter)
+    if (buFilter!=='Tous') r = r.filter(x => x.bu===buFilter||(x.multi_bu&&buFilter==='MULTI'))
+    const q = search.trim().toLowerCase()
+    if (q) r = r.filter(x =>
+      (x.accounts?.name||'').toLowerCase().includes(q)||
+      (x.title||'').toLowerCase().includes(q)||
+      (x.vendor||'').toLowerCase().includes(q)
+    )
+    r.sort((a,b) => {
+      let av:any,bv:any
+      if (sortCol==='amount') { av=a.amount; bv=b.amount }
+      else if (sortCol==='prob') { av=a.prob||0; bv=b.prob||0 }
+      else if (sortCol==='booking_month') { av=a.booking_month||''; bv=b.booking_month||'' }
+      else { av=STAGES.indexOf(a.stage as any); bv=STAGES.indexOf(b.stage as any) }
+      return sortAsc?(av>bv?1:-1):(av<bv?1:-1)
+    })
+    return r
+  }, [rows, stageFilter, buFilter, search, sortCol, sortAsc])
+
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol===col) setSortAsc(p=>!p)
+    else { setSortCol(col); setSortAsc(false) }
+  }
+  const si = (col: typeof sortCol) => <span className="ml-1 text-slate-300">{sortCol===col?(sortAsc?'↑':'↓'):'↕'}</span>
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="mx-auto max-w-[1500px] px-4 py-6">
 
         {/* Header */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 24 }}>
+        <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0 }}>Pipeline</h1>
-            <p style={{ fontSize: 13, color: '#64748b', margin: '3px 0 0 0' }}>
-              {kpis.count} deals actifs · {mad(kpis.pipeline)} MAD
-            </p>
+            <div className="text-2xl font-bold text-slate-900">Pipeline</div>
+            <div className="text-sm text-slate-500">
+              Deals actifs — {rows.filter(r=>r.status==='Open').length} opportunités ouvertes
+            </div>
           </div>
-
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            {/* Search */}
-            <div style={{ position: 'relative' }}>
-              <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: '#94a3b8' }} />
-              <input
-                placeholder="Chercher..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                style={{ height: 34, width: 200, borderRadius: 10, border: '1px solid #e2e8f0', background: '#fff', padding: '0 12px 0 32px', fontSize: 13, outline: 'none', color: '#0f172a' }}
-              />
-            </div>
-
-            {/* BU filters */}
-            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-              {BU_OPTIONS.map(bu => (
-                <button key={bu} onClick={() => setBuFilter(bu)} style={{
-                  height: 30, borderRadius: 20, padding: '0 12px', fontSize: 12, fontWeight: 500,
-                  border: `1px solid ${buFilter === bu ? '#0f172a' : '#e2e8f0'}`,
-                  background: buFilter === bu ? '#0f172a' : '#fff',
-                  color: buFilter === bu ? '#fff' : '#64748b',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}>
-                  {bu}
-                </button>
-              ))}
-            </div>
-
-            {/* Won/Lost toggle */}
-            <button onClick={() => setHideWonLost(v => !v)} style={{
-              height: 30, borderRadius: 20, padding: '0 12px', fontSize: 12, fontWeight: 500,
-              border: '1px solid #e2e8f0', background: !hideWonLost ? '#f1f5f9' : '#fff',
-              color: '#475569', cursor: 'pointer',
-            }}>
-              {hideWonLost ? '+ Won/Lost' : '− Won/Lost'}
-            </button>
-
-            <button onClick={load} disabled={loading} style={{ height: 30, borderRadius: 10, padding: '0 12px', fontSize: 12, border: '1px solid #e2e8f0', background: '#fff', color: '#475569', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-              <RefreshCw style={{ width: 12, height: 12 }} className={loading ? 'animate-spin' : ''} />
-              Rafraîchir
-            </button>
-
-            <Link href="/opportunities" style={{ height: 30, borderRadius: 10, padding: '0 14px', fontSize: 12, fontWeight: 600, background: '#0f172a', color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 5 }}>
-              <Plus style={{ width: 12, height: 12 }} /> Nouveau deal
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href="/opportunities"
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm text-white hover:bg-slate-800">
+              <Plus className="h-4 w-4" /> Nouveau deal
             </Link>
+            <button onClick={load} disabled={loading}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">
+              <RefreshCw className={`h-4 w-4 ${loading?'animate-spin':''}`} /> Rafraîchir
+            </button>
           </div>
         </div>
 
-        {/* KPI Bar */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 24 }}>
-          {[
-            { label: 'Pipeline Total', value: mad(kpis.pipeline), sub: `${kpis.count} deals`, icon: <TrendingUp style={{ width: 16, height: 16, color: '#3b82f6' }} />, bar: '#3b82f6', pct: 100 },
-            { label: 'Forecast Pondéré', value: mad(kpis.weighted), sub: `${kpis.pipeline ? ((kpis.weighted/kpis.pipeline)*100).toFixed(0) : 0}% du pipeline`, icon: <Target style={{ width: 16, height: 16, color: '#8b5cf6' }} />, bar: '#8b5cf6', pct: kpis.pipeline ? (kpis.weighted/kpis.pipeline)*100 : 0 },
-            { label: 'Commit', value: mad(kpis.commit), sub: 'Deals en commit', icon: <Zap style={{ width: 16, height: 16, color: '#f59e0b' }} />, bar: '#f59e0b', pct: kpis.pipeline ? (kpis.commit/kpis.pipeline)*100 : 0 },
-            { label: 'Won', value: mad(kpis.won), sub: 'Deals gagnés', icon: <Trophy style={{ width: 16, height: 16, color: '#10b981' }} />, bar: '#10b981', pct: 100 },
-          ].map(k => (
-            <div key={k.label} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                {k.icon}
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{k.label}</span>
-              </div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a', letterSpacing: '-0.3px' }}>{k.value}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>{k.sub} MAD</div>
-              <div style={{ height: 3, background: '#f1f5f9', borderRadius: 2, marginTop: 10 }}>
-                <div style={{ height: '100%', width: `${Math.min(k.pct, 100)}%`, background: k.bar, borderRadius: 2, transition: 'width 0.6s ease' }} />
-              </div>
+        {err  && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>}
+        {info && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{info}</div>}
+
+        {/* KPIs */}
+        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="rounded-2xl border bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wide">
+              <TrendingUp className="h-3.5 w-3.5" /> Pipeline actif
             </div>
-          ))}
+            <div className="text-xl font-bold text-slate-900">{mad(stats.pipeline)}</div>
+            <div className="mt-1 text-xs text-slate-500">{stats.totalOpen} deals ouverts</div>
+          </div>
+          <div className="rounded-2xl border bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wide">
+              <Target className="h-3.5 w-3.5" /> Forecast pondéré
+            </div>
+            <div className="text-xl font-bold text-violet-700">{mad(stats.forecast)}</div>
+            <div className="mt-1 text-xs text-slate-500">Prob × Montant</div>
+          </div>
+          <div className="rounded-2xl border bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wide">
+              <Award className="h-3.5 w-3.5" /> Won (PO reçus)
+            </div>
+            <div className="text-xl font-bold text-emerald-700">{mad(stats.wonTotal)}</div>
+            <div className="mt-1 text-xs text-slate-500">{stats.totalWon} deals · Win rate {stats.winRate}%</div>
+          </div>
+          <div className="rounded-2xl border bg-white p-4 shadow-sm">
+            <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wide">
+              <Clock className="h-3.5 w-3.5" /> Closing imminent
+            </div>
+            <div className="text-xl font-bold text-orange-600">{mad(stats.urgentAmount)}</div>
+            <div className="mt-1 text-xs text-slate-500">{stats.urgentCount} deals ce mois / mois prochain</div>
+          </div>
         </div>
 
-        {err && <div style={{ marginBottom: 16, padding: '12px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, color: '#dc2626', fontSize: 13 }}>{err}</div>}
-
-        {/* Kanban Board */}
-        <div className="pipe-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 16, alignItems: 'flex-start' }}>
-          {visibleStages.map(s => {
-            const list = byStage.get(s.stage) ?? []
-            const total = list.reduce((acc, x) => acc + Number(x.amount || 0), 0)
-            const cfg = STAGE_CONFIG[s.stage] || DEFAULT_STAGE
-
-            return (
-              <div key={s.stage} style={{ flexShrink: 0, width: 260, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {/* Column header */}
-                <div style={{ background: cfg.light, border: `1px solid ${cfg.border}`, borderRadius: 10, padding: '10px 12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: cfg.dot, flexShrink: 0 }} />
-                      <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>{s.stage}</span>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color, background: '#fff', border: `1px solid ${cfg.border}`, borderRadius: 20, padding: '1px 8px' }}>
-                      {list.length}
-                    </span>
+        {/* Funnel cliquable */}
+        <div className="mt-4 rounded-2xl border bg-white p-4 shadow-sm">
+          <div className="mb-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Funnel par étape</div>
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {PIPE_STAGES.map(s => {
+              const d = stats.bySt[s]||{ count:0, amount:0 }
+              const c = STAGE_STYLE[s]
+              const isActive = stageFilter===s
+              return (
+                <button key={s}
+                  onClick={() => setStageFilter(isActive?'Open':s)}
+                  className={`flex-1 min-w-[90px] rounded-xl border px-3 py-2.5 text-left transition-all hover:shadow-sm
+                    ${isActive ? `${c.bg} ${c.border} ${c.text}` : 'border-slate-100 hover:border-slate-200'}`}>
+                  <div className={`text-[10px] font-semibold uppercase tracking-wide truncate ${isActive?c.text:'text-slate-400'}`}>{s}</div>
+                  <div className={`mt-0.5 text-lg font-bold ${isActive?c.text:'text-slate-700'}`}>{d.count}</div>
+                  <div className={`text-[10px] tabular-nums ${isActive?c.text:'text-slate-400'}`}>
+                    {d.amount>0 ? `${fmtAmt(d.amount)} MAD` : '—'}
                   </div>
-                  {total > 0 && (
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 3, fontWeight: 500 }}>
-                      {madShort(total)} MAD
-                    </div>
-                  )}
-                </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
 
-                {/* Cards */}
-                {list.length === 0 ? (
-                  <div style={{ border: '1px dashed #e2e8f0', borderRadius: 10, padding: '20px 12px', textAlign: 'center', fontSize: 11, color: '#cbd5e1' }}>
-                    Aucun deal
-                  </div>
-                ) : (
-                  list.map((o, i) => {
-                    const prob = Number(o.prob ?? 0)
-                    const buCfg = o.bu ? (BU_COLORS[o.bu] || { bg: '#f8fafc', text: '#64748b' }) : null
+        {/* Toolbar */}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {/* Status */}
+          <div className="flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
+            {[
+              { key:'Open',  label:`Open (${stats.totalOpen})` },
+              { key:'Won',   label:`Won (${stats.totalWon})` },
+              { key:'Lost',  label:`Lost (${stats.totalLost})` },
+            ].map(({ key, label }) => (
+              <button key={key} onClick={() => setStageFilter(key)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors
+                  ${stageFilter===key
+                    ? key==='Won'?'bg-emerald-600 text-white':key==='Lost'?'bg-red-600 text-white':'bg-slate-900 text-white'
+                    : 'text-slate-500 hover:bg-slate-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
 
+          {/* BU */}
+          <div className="flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
+            {['Tous',...BUS].map(b => (
+              <button key={b} onClick={() => setBuFilter(b)}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors
+                  ${buFilter===b?'bg-slate-900 text-white':'text-slate-500 hover:bg-slate-50'}`}>{b}</button>
+            ))}
+          </div>
+
+          {/* Search */}
+          <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3 shadow-sm">
+            <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+            </svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Compte, titre, vendor…"
+              className="w-48 bg-transparent text-sm outline-none placeholder:text-slate-400" />
+          </div>
+
+          {/* View toggle */}
+          <div className="ml-auto flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
+            <button onClick={() => setView('list')}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors
+                ${view==='list'?'bg-slate-900 text-white':'text-slate-500 hover:bg-slate-50'}`}>
+              <List className="h-3.5 w-3.5" /> Liste
+            </button>
+            <button onClick={() => setView('kanban')}
+              className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors
+                ${view==='kanban'?'bg-slate-900 text-white':'text-slate-500 hover:bg-slate-50'}`}>
+              <LayoutGrid className="h-3.5 w-3.5" /> Kanban
+            </button>
+          </div>
+
+          <div className="text-xs text-slate-400">{displayRows.length} résultat{displayRows.length>1?'s':''}</div>
+        </div>
+
+        {/* ── LIST ─────────────────────────────────────────────────────────── */}
+        {view === 'list' && (
+          <div className="mt-3 rounded-2xl border bg-white shadow-sm overflow-hidden">
+            <div className="overflow-auto">
+              <table className="w-full min-w-[1100px] text-sm">
+                <thead>
+                  <tr className="border-b bg-slate-50 text-xs text-slate-500">
+                    <th className="px-4 py-3 text-left font-semibold">Compte</th>
+                    <th className="px-4 py-3 text-left font-semibold">Deal</th>
+                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none" onClick={()=>toggleSort('stage')}>Étape {si('stage')}</th>
+                    <th className="px-4 py-3 text-left font-semibold">BU</th>
+                    <th className="px-4 py-3 text-left font-semibold">Vendor</th>
+                    <th className="px-4 py-3 text-right font-semibold cursor-pointer select-none" onClick={()=>toggleSort('amount')}>Montant {si('amount')}</th>
+                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none" onClick={()=>toggleSort('prob')}>Prob {si('prob')}</th>
+                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none" onClick={()=>toggleSort('booking_month')}>Closing {si('booking_month')}</th>
+                    <th className="px-4 py-3 text-left font-semibold">Next Step</th>
+                    <th className="px-4 py-3 text-left font-semibold">PO</th>
+                    <th className="px-4 py-3 text-left font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {loading ? (
+                    <tr><td colSpan={11} className="py-16 text-center text-sm text-slate-400">
+                      <div className="flex items-center justify-center gap-2"><RefreshCw className="h-4 w-4 animate-spin" /> Chargement…</div>
+                    </td></tr>
+                  ) : displayRows.length===0 ? (
+                    <tr><td colSpan={11} className="py-12 text-center text-sm text-slate-400">Aucun deal.</td></tr>
+                  ) : displayRows.map(r => {
+                    const now = new Date()
+                    const thisM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+                    const isUrgent = r.booking_month===thisM
+                    const isPast = r.booking_month&&r.booking_month<thisM&&r.status==='Open'
+                    const nextS = STAGE_NEXT[r.stage]
+                    const vendorLabel = r.multi_bu&&Array.isArray(r.bu_lines)&&r.bu_lines.length>0
+                      ? r.bu_lines.map((l:any)=>l.card).filter(Boolean).join(', ')||r.vendor||'—'
+                      : r.vendor||'—'
                     return (
-                      <div key={o.id} className="pipe-card" style={{ animationDelay: `${i * 30}ms` }}>
-                        {/* BU + Prob */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                          {buCfg && o.bu ? (
-                            <span style={{ fontSize: 10, fontWeight: 600, borderRadius: 6, padding: '2px 7px', background: buCfg.bg, color: buCfg.text }}>
-                              {o.bu}
-                            </span>
-                          ) : <span />}
-                          {prob > 0 && (
-                            <span style={{ fontSize: 11, fontWeight: 700, color: prob >= 75 ? '#10b981' : prob >= 50 ? '#f59e0b' : '#94a3b8' }}>
-                              {prob}%
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Title */}
-                        <Link href={`/opportunities?edit=${o.id}`} style={{ textDecoration: 'none' }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', lineHeight: 1.4, marginBottom: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}
-                            className="hover:text-blue-600">
-                            {o.title}
+                      <tr key={r.id} className="group hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-slate-900">{r.accounts?.name||'—'}</td>
+                        <td className="px-4 py-3 max-w-[200px]">
+                          <Link href={`/opportunities/${r.id}`}
+                            className="block truncate font-medium text-slate-800 hover:text-slate-900 hover:underline" title={r.title}>
+                            {r.title}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3"><StageBadge stage={r.stage} /></td>
+                        <td className="px-4 py-3"><BuBadge bu={r.multi_bu?'MULTI':r.bu} /></td>
+                        <td className="px-4 py-3 max-w-[120px]">
+                          <span className="truncate text-xs text-slate-700">{vendorLabel}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-900 tabular-nums">{mad(Number(r.amount||0))}</td>
+                        <td className="px-4 py-3"><ProbBar prob={Number(r.prob||0)} /></td>
+                        <td className="px-4 py-3">
+                          <span className={`text-xs font-semibold tabular-nums
+                            ${isPast?'text-red-600':isUrgent?'text-orange-600':'text-slate-600'}`}>
+                            {isPast?'⚠ ':isUrgent?'🔥 ':''}{r.booking_month||'—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 max-w-[160px]">
+                          <div className="truncate text-xs text-slate-500">{r.next_step||<span className="italic text-slate-300">—</span>}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          {r.po_number ? (
+                            <div>
+                              <div className="text-xs font-semibold text-emerald-700">{r.po_number}</div>
+                              {r.po_date && <div className="text-[10px] text-slate-400">{new Date(r.po_date).toLocaleDateString('fr-MA')}</div>}
+                            </div>
+                          ) : <span className="text-slate-300 text-xs">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Link href={`/opportunities/${r.id}`}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-slate-500 hover:bg-slate-100">
+                              <Eye className="h-3.5 w-3.5" />
+                            </Link>
+                            {r.status!=='Won'&&r.status!=='Lost'&&nextS && (
+                              <button onClick={()=>advanceStage(r)}
+                                className="inline-flex h-8 items-center gap-1 rounded-lg border bg-slate-900 px-2 text-xs text-white hover:bg-slate-700">
+                                <ChevronRight className="h-3.5 w-3.5" />{nextS==='Won'?'Won ✓':nextS}
+                              </button>
+                            )}
+                            <Link href="/opportunities"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-slate-500 hover:bg-slate-100">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Link>
                           </div>
-                        </Link>
-
-                        {/* Account */}
-                        <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>{accountNameById(o.account_id)}</div>
-
-                        {/* Amount */}
-                        <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
-                          {mad(o.amount)}
-                          <span style={{ fontSize: 10, fontWeight: 400, color: '#cbd5e1', marginLeft: 3 }}>MAD</span>
-                        </div>
-
-                        {/* Prob bar */}
-                        {prob > 0 && (
-                          <div style={{ height: 3, background: '#f1f5f9', borderRadius: 2, marginTop: 8 }}>
-                            <div style={{ height: '100%', width: `${prob}%`, background: prob >= 75 ? '#10b981' : prob >= 50 ? '#f59e0b' : '#3b82f6', borderRadius: 2 }} />
-                          </div>
-                        )}
-
-                        {/* Closing */}
-                        {o.booking_month && (
-                          <div style={{ fontSize: 10, color: '#cbd5e1', marginTop: 6 }}>Closing : {o.booking_month}</div>
-                        )}
-
-                        {/* Next step */}
-                        {o.next_step && (
-                          <div style={{ marginTop: 8, padding: '5px 8px', borderRadius: 6, background: '#f8fafc', border: '1px solid #f1f5f9', fontSize: 10, color: '#94a3b8', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                            → {o.next_step}
-                          </div>
-                        )}
-
-                        {/* Stage selector */}
-                        <select
-                          value={o.stage}
-                          onChange={e => updateStage(o.id, e.target.value, o.stage)}
-                          className="stage-select"
-                          onClick={e => e.stopPropagation()}
-                        >
-                          {stages.map(ss => <option key={ss.stage} value={ss.stage}>{ss.stage}</option>)}
-                        </select>
-                      </div>
+                        </td>
+                      </tr>
                     )
-                  })
-                )}
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {displayRows.length>0 && (
+              <div className="flex items-center justify-between border-t bg-slate-50/50 px-4 py-2.5">
+                <div className="text-xs text-slate-400">{displayRows.length} deal{displayRows.length>1?'s':''}</div>
+                <div className="flex gap-4 text-xs text-slate-500">
+                  <span>Total: <strong className="text-slate-800">{mad(displayRows.reduce((s,r)=>s+Number(r.amount||0),0))}</strong></span>
+                  <span>Forecast: <strong className="text-violet-700">{mad(displayRows.reduce((s,r)=>s+Number(r.amount||0)*(Number(r.prob||0)/100),0))}</strong></span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── KANBAN ───────────────────────────────────────────────────────── */}
+        {view === 'kanban' && (
+          <div className="mt-3 flex gap-3 overflow-x-auto pb-4">
+            {(['Lead','Discovery','Qualified','Solutioning','Proposal Sent','Negotiation','Commit','Won'] as const).map(stage => {
+              const cards = displayRows.filter(r => r.stage===stage)
+              const st = STAGE_STYLE[stage]
+              const colAmt = cards.reduce((s,r)=>s+Number(r.amount||0),0)
+              return (
+                <div key={stage} className="min-w-[240px] w-[240px] flex-shrink-0">
+                  <div className={`mb-2 rounded-xl border px-3 py-2 ${st.bg} ${st.border}`}>
+                    <div className="flex items-center justify-between">
+                      <div className={`flex items-center gap-1.5 text-xs font-bold ${st.text}`}>
+                        <span className={`h-2 w-2 rounded-full ${st.dot}`} />{stage}
+                      </div>
+                      <span className={`rounded-full px-1.5 py-0.5 text-xs font-bold ${st.bg} ${st.text}`}>{cards.length}</span>
+                    </div>
+                    {colAmt>0 && (
+                      <div className={`mt-0.5 text-[11px] tabular-nums font-semibold ${st.text} opacity-70`}>{fmtAmt(colAmt)} MAD</div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {cards.map(r => {
+                      const now = new Date()
+                      const thisM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+                      const isUrgent = r.booking_month===thisM
+                      const isPast = r.booking_month&&r.booking_month<thisM&&r.status==='Open'
+                      const nextS = STAGE_NEXT[r.stage]
+                      return (
+                        <div key={r.id} className={`rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-shadow
+                          ${isPast?'border-red-200':'border-slate-100'}`}>
+                          <div className="font-semibold text-slate-900 text-xs leading-tight">{r.accounts?.name||'—'}</div>
+                          <Link href={`/opportunities/${r.id}`}
+                            className="mt-0.5 block truncate text-[11px] text-slate-500 hover:text-blue-600 hover:underline"
+                            title={r.title}>{r.title}</Link>
+
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <BuBadge bu={r.multi_bu?'MULTI':r.bu} />
+                            <span className="text-xs font-bold text-slate-900 tabular-nums">{fmtAmt(Number(r.amount||0))} MAD</span>
+                          </div>
+
+                          <div className="mt-1.5">
+                            <ProbBar prob={Number(r.prob||0)} />
+                          </div>
+
+                          {r.booking_month && (
+                            <div className={`mt-1 text-[11px] font-semibold ${isPast?'text-red-600':isUrgent?'text-orange-600':'text-slate-400'}`}>
+                              {isPast?'⚠ ':isUrgent?'🔥 ':''}{r.booking_month}
+                            </div>
+                          )}
+
+                          {r.next_step && (
+                            <div className="mt-1 text-[11px] text-slate-400 italic truncate">{r.next_step}</div>
+                          )}
+
+                          {r.po_number && (
+                            <div className="mt-1 text-[11px] font-semibold text-emerald-700">PO: {r.po_number}</div>
+                          )}
+
+                          <div className="mt-2 flex items-center gap-1.5 border-t pt-2">
+                            <Link href={`/opportunities/${r.id}`}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100">
+                              <Eye className="h-3 w-3" />
+                            </Link>
+                            {r.status!=='Won'&&r.status!=='Lost'&&nextS && (
+                              <button onClick={()=>advanceStage(r)}
+                                className="flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-lg border bg-slate-900 text-[11px] text-white hover:bg-slate-700">
+                                <ChevronRight className="h-3 w-3" />{nextS==='Won'?'Won ✓':nextS}
+                              </button>
+                            )}
+                            <Link href="/opportunities"
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100">
+                              <Pencil className="h-3 w-3" />
+                            </Link>
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {cards.length===0 && (
+                      <div className="rounded-xl border border-dashed border-slate-200 py-6 text-center text-xs text-slate-300">
+                        Aucun deal
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* BU Breakdown */}
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+          {BUS.map(bu => {
+            const buDeals = rows.filter(r => r.status==='Open'&&(r.bu===bu||(r.multi_bu&&Array.isArray(r.bu_lines)&&r.bu_lines.some((l:any)=>l.bu===bu))))
+            const buAmt = buDeals.reduce((s,r) => {
+              if (r.multi_bu&&Array.isArray(r.bu_lines))
+                return s+r.bu_lines.filter((l:any)=>l.bu===bu).reduce((ss:number,l:any)=>ss+Number(l.amount||0),0)
+              return s+Number(r.amount||0)
+            }, 0)
+            const cls = BU_COLOR[bu]||'bg-slate-50 text-slate-600'
+            return (
+              <div key={bu} className="rounded-2xl border bg-white p-3 shadow-sm">
+                <div className={`inline-flex rounded-md px-2 py-0.5 text-xs font-bold ${cls}`}>{bu}</div>
+                <div className="mt-2 text-lg font-bold text-slate-900">{buDeals.length}</div>
+                <div className="text-[11px] text-slate-400 tabular-nums">{mad(buAmt)}</div>
               </div>
             )
           })}
         </div>
+
       </div>
     </div>
   )
