@@ -50,24 +50,46 @@ const ACTION_LABEL: Record<string, string> = {
 };
 
 // ── Password modal ────────────────────────────────────────────────────────────
-function PasswordModal({ onClose }: { onClose: () => void }) {
-  const [newPwd, setNewPwd]       = useState("");
+function PasswordModal({ onClose, userEmail }: { onClose: () => void; userEmail: string }) {
+  const [currentPwd, setCurrentPwd] = useState("");
+  const [newPwd, setNewPwd]         = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
-  const [loading, setLoading]     = useState(false);
-  const [err, setErr]             = useState<string | null>(null);
-  const [success, setSuccess]     = useState(false);
+  const [loading, setLoading]       = useState(false);
+  const [err, setErr]               = useState<string | null>(null);
+  const [success, setSuccess]       = useState(false);
+
+  const strength = newPwd.length >= 12 ? 4 : newPwd.length >= 10 ? 3 : newPwd.length >= 8 ? 2 : newPwd.length >= 4 ? 1 : 0;
+  const strengthLabel = ["Trop court", "Faible", "Moyen", "Bon", "Fort"][strength];
+  const strengthColor = ["#ef4444", "#ef4444", "#f59e0b", "#3b82f6", "#16a34a"][strength];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
-    if (newPwd.length < 8) return setErr("Le mot de passe doit faire au moins 8 caractères.");
+
+    if (!currentPwd) return setErr("Saisis ton mot de passe actuel.");
+    if (newPwd.length < 8) return setErr("Le nouveau mot de passe doit faire au moins 8 caractères.");
     if (newPwd !== confirmPwd) return setErr("Les mots de passe ne correspondent pas.");
+    if (newPwd === currentPwd) return setErr("Le nouveau mot de passe doit être différent de l'actuel.");
+
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPwd });
-      if (error) throw error;
+      // Étape 1 : vérifier le mot de passe actuel
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: userEmail,
+        password: currentPwd,
+      });
+      if (signInError) {
+        setErr("Mot de passe actuel incorrect.");
+        setLoading(false);
+        return;
+      }
+
+      // Étape 2 : mettre à jour avec le nouveau
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPwd });
+      if (updateError) throw updateError;
+
       setSuccess(true);
-      setTimeout(() => onClose(), 2000);
+      setTimeout(() => onClose(), 2500);
     } catch (e: any) {
       setErr(e?.message || "Erreur lors du changement de mot de passe.");
     } finally {
@@ -75,25 +97,32 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const inputStyle = (focused?: boolean): React.CSSProperties => ({
+    width: "100%", height: 42, borderRadius: 12,
+    border: `1px solid ${focused ? "#0f172a" : "#e2e8f0"}`,
+    padding: "0 14px", fontSize: 14, outline: "none",
+    boxSizing: "border-box", transition: "border 0.15s",
+  });
+
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 999,
-      background: "rgba(0,0,0,0.35)",
+      background: "rgba(0,0,0,0.40)",
       display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
     }}>
       <div style={{
         background: "#fff", borderRadius: 20, width: "100%", maxWidth: 420,
-        boxShadow: "0 20px 60px rgba(0,0,0,0.15)", overflow: "hidden",
+        boxShadow: "0 24px 60px rgba(0,0,0,0.18)", overflow: "hidden",
       }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: "1px solid #f1f5f9" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <KeyRound style={{ width: 16, height: 16, color: "#475569" }} />
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <KeyRound style={{ width: 17, height: 17, color: "#475569" }} />
             </div>
             <div>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Changer le mot de passe</div>
-              <div style={{ fontSize: 11, color: "#94a3b8" }}>Compte CRM-PIPE</div>
+              <div style={{ fontSize: 11, color: "#94a3b8" }}>{userEmail}</div>
             </div>
           </div>
           <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", padding: 6, borderRadius: 8 }}>
@@ -104,64 +133,86 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
         {/* Body */}
         <div style={{ padding: "20px" }}>
           {success ? (
-            <div style={{ textAlign: "center", padding: "20px 0" }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+            <div style={{ textAlign: "center", padding: "24px 0" }}>
+              <div style={{ fontSize: 44, marginBottom: 14 }}>✅</div>
               <div style={{ fontSize: 15, fontWeight: 700, color: "#16a34a" }}>Mot de passe mis à jour !</div>
               <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>Fermeture automatique...</div>
             </div>
           ) : (
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+              {/* Mot de passe actuel */}
               <div>
                 <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 6 }}>
-                  Nouveau mot de passe
+                  Mot de passe actuel *
+                </label>
+                <input
+                  type="password"
+                  value={currentPwd}
+                  onChange={e => setCurrentPwd(e.target.value)}
+                  placeholder="Ton mot de passe actuel"
+                  autoFocus
+                  style={inputStyle()}
+                />
+              </div>
+
+              <div style={{ borderTop: "1px dashed #e2e8f0", margin: "0 -2px" }} />
+
+              {/* Nouveau */}
+              <div>
+                <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 6 }}>
+                  Nouveau mot de passe *
                 </label>
                 <input
                   type="password"
                   value={newPwd}
                   onChange={e => setNewPwd(e.target.value)}
                   placeholder="Min. 8 caractères"
-                  autoFocus
-                  style={{ width: "100%", height: 42, borderRadius: 12, border: "1px solid #e2e8f0", padding: "0 14px", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                  style={inputStyle()}
                 />
+                {/* Force */}
+                {newPwd.length > 0 && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
+                      {[1,2,3,4].map(i => (
+                        <div key={i} style={{
+                          flex: 1, height: 3, borderRadius: 2, transition: "background 0.2s",
+                          background: strength >= i ? strengthColor : "#e2e8f0",
+                        }}/>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: strengthColor, fontWeight: 600 }}>{strengthLabel}</div>
+                  </div>
+                )}
               </div>
+
+              {/* Confirmer */}
               <div>
                 <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "#475569", marginBottom: 6 }}>
-                  Confirmer le mot de passe
+                  Confirmer le nouveau mot de passe *
                 </label>
                 <input
                   type="password"
                   value={confirmPwd}
                   onChange={e => setConfirmPwd(e.target.value)}
                   placeholder="Retape le même mot de passe"
-                  style={{ width: "100%", height: 42, borderRadius: 12, border: "1px solid #e2e8f0", padding: "0 14px", fontSize: 14, outline: "none", boxSizing: "border-box" }}
+                  style={inputStyle()}
                 />
+                {/* Match indicator */}
+                {confirmPwd.length > 0 && (
+                  <div style={{ fontSize: 11, marginTop: 5, fontWeight: 600, color: confirmPwd === newPwd ? "#16a34a" : "#ef4444" }}>
+                    {confirmPwd === newPwd ? "✓ Les mots de passe correspondent" : "✗ Ne correspondent pas"}
+                  </div>
+                )}
               </div>
 
               {err && (
-                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#dc2626" }}>
-                  {err}
+                <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#dc2626", display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 14 }}>⚠️</span> {err}
                 </div>
               )}
 
-              {/* Strength indicator */}
-              {newPwd.length > 0 && (
-                <div>
-                  <div style={{ display: "flex", gap: 4, marginBottom: 4 }}>
-                    {[1,2,3,4].map(i => (
-                      <div key={i} style={{
-                        flex: 1, height: 3, borderRadius: 2,
-                        background: newPwd.length >= i * 3 ? (newPwd.length >= 12 ? "#16a34a" : newPwd.length >= 8 ? "#f59e0b" : "#ef4444") : "#e2e8f0",
-                        transition: "background 0.2s",
-                      }}/>
-                    ))}
-                  </div>
-                  <div style={{ fontSize: 11, color: newPwd.length >= 12 ? "#16a34a" : newPwd.length >= 8 ? "#f59e0b" : "#ef4444" }}>
-                    {newPwd.length >= 12 ? "Fort" : newPwd.length >= 8 ? "Moyen" : "Trop court"}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+              <div style={{ display: "flex", gap: 10, marginTop: 2 }}>
                 <button type="button" onClick={onClose} style={{
                   flex: 1, height: 42, borderRadius: 12, border: "1px solid #e2e8f0",
                   background: "#fff", fontSize: 13, fontWeight: 500, color: "#475569", cursor: "pointer",
@@ -173,7 +224,7 @@ function PasswordModal({ onClose }: { onClose: () => void }) {
                   background: loading ? "#94a3b8" : "#0f172a", color: "#fff",
                   fontSize: 13, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer",
                 }}>
-                  {loading ? "Mise à jour..." : "Changer le mot de passe"}
+                  {loading ? "Vérification..." : "Changer le mot de passe"}
                 </button>
               </div>
             </form>
@@ -422,7 +473,7 @@ export default function NavBar() {
       </div>
 
       {/* ── Password modal (outside navbar flow) ── */}
-      {showPwdModal && <PasswordModal onClose={() => setShowPwdModal(false)} />}
+      {showPwdModal && <PasswordModal onClose={() => setShowPwdModal(false)} userEmail={email || ""} />}
     </>
   );
 }
