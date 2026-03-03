@@ -951,7 +951,7 @@ export default function Dashboard() {
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie data={mixBU.data} dataKey="value" nameKey="name" innerRadius={68} outerRadius={96} paddingAngle={4} strokeWidth={0}
-                        label={({cx,cy,midAngle,outerRadius:or,name,value})=>{
+                        label={({cx,cy,midAngle=0,outerRadius:or,name,value})=>{
                           const RADIAN=Math.PI/180, rx=cx+((or||0)+20)*Math.cos(-midAngle*RADIAN), ry=cy+((or||0)+20)*Math.sin(-midAngle*RADIAN)
                           return <text x={rx} y={ry} textAnchor={rx>cx?'start':'end'} fill="#475569" fontSize={11} fontWeight={700}>{name} {pct(value,mixBU.total)}%</text>
                         }}>
