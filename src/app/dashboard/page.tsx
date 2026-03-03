@@ -127,30 +127,34 @@ function KpiCard({ label, value, sub, color, icon, delta, deltaLabel }: {
   delta?: 'up'|'down'|'neutral'; deltaLabel?: string
 }) {
   const cfg = {
-    blue:   { grad:'from-blue-600 to-blue-500',    ring:'ring-blue-100',   bg:'bg-blue-50',    num:'text-blue-700'    },
-    violet: { grad:'from-violet-600 to-violet-500', ring:'ring-violet-100', bg:'bg-violet-50',  num:'text-violet-700'  },
-    amber:  { grad:'from-amber-500 to-amber-400',   ring:'ring-amber-100',  bg:'bg-amber-50',   num:'text-amber-700'   },
-    green:  { grad:'from-emerald-600 to-emerald-500',ring:'ring-emerald-100',bg:'bg-emerald-50',num:'text-emerald-700' },
-    red:    { grad:'from-red-600 to-red-500',       ring:'ring-red-100',    bg:'bg-red-50',     num:'text-red-700'     },
-    slate:  { grad:'from-slate-700 to-slate-600',   ring:'ring-slate-200',  bg:'bg-slate-50',   num:'text-slate-800'   },
+    blue:   { grad:'from-blue-600 to-blue-400',     accent:'bg-blue-500',   num:'text-slate-900', bar:'from-blue-500 to-blue-300'  },
+    violet: { grad:'from-violet-600 to-violet-400', accent:'bg-violet-500', num:'text-slate-900', bar:'from-violet-500 to-violet-300'},
+    amber:  { grad:'from-amber-500 to-orange-400',  accent:'bg-amber-500',  num:'text-slate-900', bar:'from-amber-400 to-orange-300'},
+    green:  { grad:'from-emerald-600 to-teal-400',  accent:'bg-emerald-500',num:'text-slate-900', bar:'from-emerald-500 to-teal-300'},
+    red:    { grad:'from-red-600 to-rose-400',       accent:'bg-red-500',    num:'text-slate-900', bar:'from-red-500 to-rose-300'  },
+    slate:  { grad:'from-slate-800 to-slate-600',   accent:'bg-slate-600',  num:'text-slate-900', bar:'from-slate-500 to-slate-300'},
   }[color]
   return (
-    <div className={`relative overflow-hidden rounded-2xl ${cfg.bg} ring-1 ${cfg.ring} p-5`}>
-      <div className="flex items-start justify-between">
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${cfg.grad} text-white shadow-md`}>
-          {icon}
+    <div className="relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+      {/* top accent bar */}
+      <div className={`h-1 w-full bg-gradient-to-r ${cfg.bar}`}/>
+      <div className="p-5">
+        <div className="flex items-start justify-between">
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${cfg.grad} text-white shadow-md`}>
+            {icon}
+          </div>
+          {delta && deltaLabel && (
+            <span className={`flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold
+              ${delta==='up'?'bg-emerald-100 text-emerald-700':delta==='down'?'bg-red-100 text-red-600':'bg-slate-100 text-slate-500'}`}>
+              {delta==='up'?<ArrowUp className="h-3 w-3"/>:delta==='down'?<ArrowDown className="h-3 w-3"/>:null}
+              {deltaLabel}
+            </span>
+          )}
         </div>
-        {delta && deltaLabel && (
-          <span className={`flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold
-            ${delta==='up'?'bg-emerald-100 text-emerald-700':delta==='down'?'bg-red-100 text-red-600':'bg-slate-100 text-slate-500'}`}>
-            {delta==='up'?<ArrowUp className="h-3 w-3"/>:delta==='down'?<ArrowDown className="h-3 w-3"/>:null}
-            {deltaLabel}
-          </span>
-        )}
+        <div className={`mt-4 text-[1.6rem] font-black tracking-tight leading-none ${cfg.num}`}>{value}</div>
+        <div className="mt-1.5 text-sm font-semibold text-slate-600">{label}</div>
+        {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
       </div>
-      <div className={`mt-3 text-2xl font-black tracking-tight ${cfg.num}`}>{value}</div>
-      <div className="mt-0.5 text-sm font-semibold text-slate-700">{label}</div>
-      {sub && <div className="mt-1 text-xs text-slate-500">{sub}</div>}
     </div>
   )
 }
@@ -159,11 +163,14 @@ function Panel({ title, sub, children, className, action }: {
   title: string; sub?: string; children: React.ReactNode; className?: string; action?: React.ReactNode
 }) {
   return (
-    <div className={`rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden ${className||''}`}>
-      <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-5 py-3.5">
-        <div>
-          <div className="text-sm font-bold text-slate-900">{title}</div>
-          {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
+    <div className={`rounded-2xl bg-white ring-1 ring-slate-200/80 shadow-sm overflow-hidden ${className||''}`}>
+      <div className="flex items-center justify-between gap-2 px-5 py-4 border-b border-slate-100">
+        <div className="flex items-center gap-3">
+          <div className="h-5 w-1 rounded-full bg-gradient-to-b from-blue-500 to-violet-500 shrink-0"/>
+          <div>
+            <div className="text-sm font-bold text-slate-900">{title}</div>
+            {sub && <div className="text-xs text-slate-400 mt-0.5">{sub}</div>}
+          </div>
         </div>
         {action}
       </div>
@@ -911,24 +918,24 @@ export default function Dashboard() {
           <Panel title="Répartition statuts" sub="Montant MAD · Période">
             {donut.total<=0?<Empty/>:(
               <>
-                <div className="h-48">
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={donut.d} dataKey="value" nameKey="name" innerRadius={50} outerRadius={72} paddingAngle={3}>
+                      <Pie data={donut.d} dataKey="value" nameKey="name" innerRadius={68} outerRadius={96} paddingAngle={4} strokeWidth={0}>
                         {donut.d.map((e,i)=><Cell key={i} fill={e.color}/>)}
                       </Pie>
                       <Tooltip content={<ChartTip isAmt={true}/>}/>
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="mt-3 flex justify-around">
+                <div className="mt-2 grid grid-cols-3 divide-x divide-slate-100">
                   {donut.d.map(e=>(
-                    <div key={e.name} className="text-center">
-                      <div className="text-lg font-black text-slate-900">{fmt(e.value)}</div>
-                      <div className="flex items-center gap-1 justify-center text-xs text-slate-500">
+                    <div key={e.name} className="text-center px-2 py-1">
+                      <div className="text-xl font-black text-slate-900">{fmt(e.value)}</div>
+                      <div className="flex items-center gap-1 justify-center text-xs text-slate-500 mt-0.5">
                         <span className="h-2 w-2 rounded-full" style={{background:e.color}}/>{e.name}
                       </div>
-                      <div className="text-xs font-semibold text-slate-400">{pct(e.value,donut.total)}%</div>
+                      <div className={`text-sm font-bold mt-0.5`} style={{color:e.color}}>{pct(e.value,donut.total)}%</div>
                     </div>
                   ))}
                 </div>
@@ -940,24 +947,28 @@ export default function Dashboard() {
           <Panel title="Mix CSG vs CIRS" sub="Open · répartition BU">
             {mixBU.total<=0?<Empty/>:(
               <>
-                <div className="h-48">
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={mixBU.data} dataKey="value" nameKey="name" innerRadius={50} outerRadius={72} paddingAngle={3}>
+                      <Pie data={mixBU.data} dataKey="value" nameKey="name" innerRadius={68} outerRadius={96} paddingAngle={4} strokeWidth={0}
+                        label={({cx,cy,midAngle,outerRadius:or,name,value})=>{
+                          const RADIAN=Math.PI/180, rx=cx+((or||0)+20)*Math.cos(-midAngle*RADIAN), ry=cy+((or||0)+20)*Math.sin(-midAngle*RADIAN)
+                          return <text x={rx} y={ry} textAnchor={rx>cx?'start':'end'} fill="#475569" fontSize={11} fontWeight={700}>{name} {pct(value,mixBU.total)}%</text>
+                        }}>
                         {mixBU.data.map((e,i)=><Cell key={i} fill={e.color}/>)}
                       </Pie>
                       <Tooltip content={<ChartTip isAmt={true}/>}/>
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="mt-3 flex justify-around">
+                <div className="mt-2 grid grid-cols-2 divide-x divide-slate-100">
                   {mixBU.data.map(e=>(
-                    <div key={e.name} className="text-center">
-                      <div className="text-2xl font-black text-slate-900">{pct(e.value,mixBU.total)}%</div>
-                      <div className="flex items-center gap-1 justify-center text-xs text-slate-500">
-                        <span className="h-2 w-2 rounded-full" style={{background:e.color}}/>{e.name}
+                    <div key={e.name} className="text-center px-4 py-1">
+                      <div className="text-3xl font-black text-slate-900">{pct(e.value,mixBU.total)}%</div>
+                      <div className="flex items-center gap-1 justify-center text-xs text-slate-500 mt-0.5">
+                        <span className="h-2.5 w-2.5 rounded-full" style={{background:e.color}}/><span className="font-semibold">{e.name}</span>
                       </div>
-                      <div className="text-xs text-slate-400">{fmt(e.value)+' MAD'}</div>
+                      <div className="text-xs text-slate-400 mt-0.5">{fmt(e.value)} MAD</div>
                     </div>
                   ))}
                 </div>
@@ -968,15 +979,19 @@ export default function Dashboard() {
           {/* Pipeline by stage (mini bars) */}
           <Panel title="Répartition par étape" sub="Open · MAD">
             {byStage.length===0?<Empty/>:(
-              <div className="h-64">
+              <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={byStage} layout="vertical" margin={{top:0,right:44,bottom:0,left:0}}>
-                    <CartesianGrid stroke={C.grid} strokeDasharray="3 3" horizontal={false}/>
+                  <BarChart data={byStage} layout="vertical" margin={{top:2,right:54,bottom:2,left:0}}>
+                    <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4" horizontal={false}/>
                     <XAxis type="number" tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={fmt}/>
-                    <YAxis type="category" dataKey="stage" tick={{fontSize:10,fill:'#64748b'}} axisLine={false} tickLine={false} width={108}/>
+                    <YAxis type="category" dataKey="stage" tick={{fontSize:11,fill:'#475569'}} axisLine={false} tickLine={false} width={112}/>
                     <Tooltip content={<ChartTip isAmt={true}/>}/>
-                    <Bar dataKey="total" name="Total" fill="#6366f1" radius={[0,4,4,0]}>
-                      <LabelList dataKey="total" position="right" formatter={(v:any)=>fmt(v)} style={{fontSize:9,fill:'#94a3b8'}}/>
+                    <Bar dataKey="total" name="Montant" radius={[0,6,6,0]}>
+                      {byStage.map((e,i)=>{
+                        const colors=['#94a3b8','#3b82f6','#06b6d4','#8b5cf6','#f59e0b','#f97316','#10b981','#16a34a','#ef4444']
+                        return <Cell key={i} fill={colors[i%colors.length]}/>
+                      })}
+                      <LabelList dataKey="total" position="right" formatter={(v:any)=>fmt(v)} style={{fontSize:10,fill:'#64748b',fontWeight:600}}/>
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -1050,16 +1065,17 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <Panel title="Pipeline par BU" sub={`Open · Total vs Forecast vs Won`}>
             {bySBU.length===0?<Empty/>:(
-              <div className="h-64">
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={bySBU} margin={{top:5,right:10,bottom:5,left:0}} barGap={2}>
-                    <CartesianGrid stroke={C.grid} strokeDasharray="3 3" vertical={false}/>
-                    <XAxis dataKey="sbu" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
-                    <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={48} tickFormatter={fmt}/>
+                  <BarChart data={bySBU} margin={{top:10,right:10,bottom:10,left:0}} barGap={3} barCategoryGap="30%">
+                    <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4" vertical={false}/>
+                    <XAxis dataKey="sbu" tick={{fontSize:12,fill:'#475569',fontWeight:600}} axisLine={false} tickLine={false}/>
+                    <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
                     <Tooltip content={<ChartTip isAmt={true}/>}/>
-                    <Bar name="Total Open" dataKey="total"    fill="#1e293b" radius={[4,4,0,0]}/>
-                    <Bar name="Forecast"   dataKey="forecast" fill="#3b82f6" radius={[4,4,0,0]}/>
-                    <Bar name="Won"        dataKey="won"      fill="#10b981" radius={[4,4,0,0]}/>
+                    <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
+                    <Bar name="Total Open" dataKey="total"    fill="#1e293b" radius={[5,5,0,0]}/>
+                    <Bar name="Forecast"   dataKey="forecast" fill="#3b82f6" radius={[5,5,0,0]}/>
+                    <Bar name="Won"        dataKey="won"      fill="#10b981" radius={[5,5,0,0]}/>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1067,17 +1083,24 @@ export default function Dashboard() {
           </Panel>
 
           <Panel title={`Tendance ${year}`} sub="Total Open / Forecast / Commit / Won — par mois">
-            <div className="h-64">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={trend} margin={{top:5,right:10,bottom:5,left:0}}>
-                  <CartesianGrid stroke={C.grid} strokeDasharray="3 3"/>
-                  <XAxis dataKey="month" tick={{fontSize:10,fill:'#64748b'}} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={48} tickFormatter={fmt}/>
+                <ComposedChart data={trend} margin={{top:10,right:10,bottom:5,left:0}}>
+                  <defs>
+                    <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4"/>
+                  <XAxis dataKey="month" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
                   <Tooltip content={<ChartTip isAmt={true}/>}/>
-                  <Area type="monotone" dataKey="total" name="Total Open" fill="#dbeafe" stroke={C.csg} strokeWidth={2} fillOpacity={0.3} dot={false}/>
-                  <Line type="monotone" dataKey="forecast" name="Forecast" stroke={C.pipeline} strokeWidth={2} dot={false} strokeDasharray="5 3"/>
-                  <Line type="monotone" dataKey="commit"   name="Commit"   stroke={C.commit}   strokeWidth={2} dot={false}/>
-                  <Line type="monotone" dataKey="won"      name="Won"      stroke={C.won}      strokeWidth={2.5} dot={false}/>
+                  <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
+                  <Area type="monotone" dataKey="total" name="Total Open" fill="url(#gradTotal)" stroke="#1e293b" strokeWidth={2.5} fillOpacity={1} dot={false}/>
+                  <Line type="monotone" dataKey="forecast" name="Forecast" stroke="#3b82f6" strokeWidth={2} dot={false} strokeDasharray="6 3"/>
+                  <Line type="monotone" dataKey="commit"   name="Commit"   stroke="#f59e0b" strokeWidth={2.5} dot={false}/>
+                  <Line type="monotone" dataKey="won"      name="Won"      stroke="#10b981" strokeWidth={3} dot={{r:3,fill:'#10b981'}} activeDot={{r:5}}/>
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
@@ -1088,15 +1111,16 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <Panel title="Top 5 Clients" sub={`${scope==='open_only'?'Open':'Open+Won'} · CSG vs CIRS`}>
             {topClients.length===0?<Empty/>:(
-              <div className="h-60">
+              <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topClients} margin={{top:5,right:10,bottom:28,left:0}}>
-                    <CartesianGrid stroke={C.grid} strokeDasharray="3 3" vertical={false}/>
-                    <XAxis dataKey="client" tick={{fontSize:9,fill:'#64748b'}} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={42}/>
-                    <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={48} tickFormatter={fmt}/>
+                  <BarChart data={topClients} margin={{top:10,right:10,bottom:36,left:0}}>
+                    <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4" vertical={false}/>
+                    <XAxis dataKey="client" tick={{fontSize:10,fill:'#475569'}} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={48}/>
+                    <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
                     <Tooltip content={<ChartTip isAmt={true}/>}/>
-                    <Bar name="CIRS" dataKey="cirs" stackId="a" fill={C.cirs}/>
-                    <Bar name="CSG"  dataKey="csg"  stackId="a" fill={C.csg} radius={[4,4,0,0]}/>
+                    <Legend wrapperStyle={{fontSize:11,paddingTop:4}}/>
+                    <Bar name="CIRS" dataKey="cirs" stackId="a" fill="#64748b"/>
+                    <Bar name="CSG"  dataKey="csg"  stackId="a" fill="#1e293b" radius={[6,6,0,0]}/>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1105,15 +1129,19 @@ export default function Dashboard() {
 
           <Panel title="Top Constructeurs / Cartes" sub={`${scope==='open_only'?'Open':'Open+Won'}`}>
             {topVendors.length===0?<Empty/>:(
-              <div className="h-60">
+              <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topVendors} layout="vertical" margin={{top:0,right:48,bottom:0,left:0}}>
-                    <CartesianGrid stroke={C.grid} strokeDasharray="3 3" horizontal={false}/>
+                  <BarChart data={topVendors} layout="vertical" margin={{top:4,right:54,bottom:4,left:0}}>
+                    <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4" horizontal={false}/>
                     <XAxis type="number" tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} tickFormatter={fmt}/>
-                    <YAxis type="category" dataKey="card" tick={{fontSize:10,fill:'#64748b'}} axisLine={false} tickLine={false} width={110}/>
+                    <YAxis type="category" dataKey="card" tick={{fontSize:11,fill:'#475569'}} axisLine={false} tickLine={false} width={112}/>
                     <Tooltip content={<ChartTip isAmt={true}/>}/>
-                    <Bar name="Total" dataKey="total" fill="#8b5cf6" radius={[0,4,4,0]}>
-                      <LabelList dataKey="pct" position="right" formatter={(v:any)=>`${v}%`} style={{fontSize:9,fill:'#94a3b8'}}/>
+                    <Bar name="Total" dataKey="total" radius={[0,6,6,0]}>
+                      {topVendors.map((_,i)=>{
+                        const palette=['#6366f1','#3b82f6','#8b5cf6','#06b6d4','#f59e0b','#10b981','#f97316','#ef4444']
+                        return <Cell key={i} fill={palette[i%palette.length]}/>
+                      })}
+                      <LabelList dataKey="pct" position="right" formatter={(v:any)=>`${v}%`} style={{fontSize:10,fill:'#64748b',fontWeight:600}}/>
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -1127,44 +1155,48 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Panel title="Pipeline par Région" sub={`Via comptes associés · ${scope==='open_only'?'Open':'Open+Won'}`}>
               {byRegion.length===0?<Empty/>:(
-                <div className="space-y-2.5">
-                  {byRegion.map(x=>(
-                    <div key={x.region} className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5 w-28 text-xs font-medium text-slate-700 shrink-0">
-                        <MapPin className="h-3 w-3 text-slate-400"/>{x.region}
+                <div className="space-y-3.5">
+                  {byRegion.map((x,i)=>{
+                    const colors=['#3b82f6','#6366f1','#8b5cf6','#06b6d4','#10b981','#f59e0b']
+                    const color=colors[i%colors.length]
+                    const w=pct(x.total,byRegion[0]?.total||1)
+                    return (
+                      <div key={x.region} className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5 w-28 text-xs font-semibold text-slate-700 shrink-0">
+                          <MapPin className="h-3 w-3 shrink-0" style={{color}}/>{x.region}
+                        </div>
+                        <div className="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{width:`${w}%`,background:color}}/>
+                        </div>
+                        <div className="text-xs font-bold text-slate-700 w-20 text-right tabular-nums">{fmt(x.total)} MAD</div>
+                        <div className="text-xs text-slate-400 w-12 text-right">{x.count}</div>
                       </div>
-                      <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
-                        <div className="h-full rounded-full bg-blue-500 transition-all"
-                          style={{width:`${pct(x.total,byRegion[0]?.total||1)*100/100}%`}}/>
-                      </div>
-                      <div className="text-xs font-bold text-slate-700 w-20 text-right tabular-nums">
-                        {fmt(x.total)+' MAD'}
-                      </div>
-                      <div className="text-xs text-slate-400 w-12 text-right">{x.count} deals</div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </Panel>
 
             <Panel title="Pipeline par Secteur d'activité" sub={`Via comptes associés · ${scope==='open_only'?'Open':'Open+Won'}`}>
               {bySector.length===0?<Empty/>:(
-                <div className="space-y-2.5">
-                  {bySector.map(x=>(
-                    <div key={x.sector} className="flex items-center gap-3">
-                      <div className="flex items-center gap-1.5 w-32 text-xs font-medium text-slate-700 shrink-0 truncate" title={x.sector}>
-                        <Building2 className="h-3 w-3 text-slate-400 shrink-0"/>{x.sector}
+                <div className="space-y-3.5">
+                  {bySector.map((x,i)=>{
+                    const colors=['#f59e0b','#f97316','#ef4444','#8b5cf6','#3b82f6','#06b6d4','#10b981','#64748b']
+                    const color=colors[i%colors.length]
+                    const w=pct(x.total,bySector[0]?.total||1)
+                    return (
+                      <div key={x.sector} className="flex items-center gap-3">
+                        <div className="flex items-center gap-1.5 w-32 text-xs font-semibold text-slate-700 shrink-0 truncate" title={x.sector}>
+                          <Building2 className="h-3 w-3 shrink-0" style={{color}}/>{x.sector}
+                        </div>
+                        <div className="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden">
+                          <div className="h-full rounded-full transition-all" style={{width:`${w}%`,background:color}}/>
+                        </div>
+                        <div className="text-xs font-bold text-slate-700 w-20 text-right tabular-nums">{fmt(x.total)} MAD</div>
+                        <div className="text-xs text-slate-400 w-12 text-right">{x.count}</div>
                       </div>
-                      <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
-                        <div className="h-full rounded-full bg-violet-400 transition-all"
-                          style={{width:`${pct(x.total,bySector[0]?.total||1)*100/100}%`}}/>
-                      </div>
-                      <div className="text-xs font-bold text-slate-700 w-20 text-right tabular-nums">
-                        {fmt(x.total)+' MAD'}
-                      </div>
-                      <div className="text-xs text-slate-400 w-12 text-right">{x.count} deals</div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </Panel>
