@@ -1224,7 +1224,7 @@ export default function Dashboard() {
                       <tr key={d.id} className="hover:bg-slate-50/60 transition-colors">
                         <td className="py-2 pr-3 font-bold text-slate-900 text-xs whitespace-nowrap">{d.account_name}</td>
                         <td className="py-2 pr-3 text-xs text-slate-600 max-w-[130px] truncate">
-                          <Link href={`/opportunities?edit=${d.id}`} className="hover:text-blue-600 hover:underline">{d.title}</Link>
+                          <Link href={`/pipeline?edit=${d.id}`} className="hover:text-blue-600 hover:underline">{d.title}</Link>
                         </td>
                         <td className="py-2 pr-3"><StagePill stage={d.stage}/></td>
                         <td className="py-2 text-right font-black text-slate-900 tabular-nums text-xs whitespace-nowrap">{fmt(d.amount)}</td>
@@ -1260,7 +1260,7 @@ export default function Dashboard() {
                         <tr key={d.id} className="hover:bg-emerald-50/30 transition-colors">
                           <td className="py-2 pr-3 font-bold text-slate-900 text-xs whitespace-nowrap">{d.account_name}</td>
                           <td className="py-2 pr-3 text-xs text-slate-600 max-w-[150px] truncate">
-                            <Link href={`/opportunities?edit=${d.id}`} className="hover:text-emerald-600 hover:underline">{d.title}</Link>
+                            <Link href={`/pipeline?edit=${d.id}`} className="hover:text-emerald-600 hover:underline">{d.title}</Link>
                           </td>
                           <td className="py-2 pr-3">
                             <span className="text-xs font-semibold" style={{color:SBU_COLORS[String(best?.sbu)]||'#64748b'}}>{String(best?.sbu||'—')}</span>
@@ -1367,7 +1367,7 @@ export default function Dashboard() {
                       <tr key={d.id} className={`transition-colors ${isLate?'hover:bg-red-50/20':'hover:bg-slate-50/60'}`}>
                         <td className="px-4 py-2.5 font-bold text-slate-900 text-xs whitespace-nowrap">{d.account_name}</td>
                         <td className="px-4 py-2.5 max-w-[160px]">
-                          <Link href={`/opportunities?edit=${d.id}`} className="block truncate text-xs text-slate-600 hover:text-blue-600 hover:underline" title={d.title}>{d.title}</Link>
+                          <Link href={`/pipeline?edit=${d.id}`} className="block truncate text-xs text-slate-600 hover:text-blue-600 hover:underline" title={d.title}>{d.title}</Link>
                         </td>
                         <td className="px-4 py-2.5"><StagePill stage={d.stage}/></td>
                         <td className="px-4 py-2.5">
