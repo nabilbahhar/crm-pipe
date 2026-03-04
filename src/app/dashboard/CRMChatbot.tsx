@@ -146,58 +146,84 @@ STYLE DE RÉPONSE:
 }
 
 // ─────────────────────────────────────────────────────────────
-// CSV GENERATOR — no external deps, opens perfectly in Excel
+// EXCEL GENERATOR — real .xlsx via SheetJS
 // ─────────────────────────────────────────────────────────────
-function generateExcel(spec: ExcelSpec) {
-  // Build one CSV per sheet, separated by blank lines
-  const lines: string[] = []
+async function generateExcel(spec: ExcelSpec) {
+  const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs' as any)
+
+  const wb = XLSX.utils.book_new()
 
   for (const sheet of spec.sheets) {
-    // Sheet name as section title
-    lines.push(`=== ${sheet.name} ===`)
-    if (sheet.title) lines.push(sheet.title)
-    lines.push('')
+    const wsData: any[][] = []
 
-    // Headers
-    lines.push(sheet.headers.map(csvCell).join(','))
+    if (sheet.title) { wsData.push([sheet.title]); wsData.push([]) }
+    wsData.push(sheet.headers)
+    for (const row of sheet.rows) wsData.push(row)
+    if (sheet.totalsRow) wsData.push(sheet.totalsRow)
+    if (sheet.notes) { wsData.push([]); wsData.push([`Note: ${sheet.notes}`]) }
 
-    // Rows
-    for (const row of sheet.rows) {
-      lines.push(row.map(csvCell).join(','))
+    const ws = XLSX.utils.aoa_to_sheet(wsData)
+
+    // Column widths
+    const colWidths: number[] = []
+    for (const row of wsData) {
+      ;(row as any[]).forEach((cell: any, i: number) => {
+        const len = String(cell ?? '').length
+        colWidths[i] = Math.max(colWidths[i] || 8, Math.min(len + 2, 45))
+      })
     }
+    ws['!cols'] = colWidths.map(w => ({ wch: w }))
 
-    // Totals
+    // Header row styling
+    const headerRow = sheet.title ? 2 : 0
+    sheet.headers.forEach((_: any, c: number) => {
+      const ref = XLSX.utils.encode_cell({ r: headerRow, c })
+      if (!ws[ref]) return
+      ws[ref].s = {
+        font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
+        fill: { patternType: 'solid', fgColor: { rgb: '1E293B' } },
+        alignment: { horizontal: 'center', vertical: 'center' },
+        border: {
+          bottom: { style: 'medium', color: { rgb: '3B82F6' } }
+        }
+      }
+    })
+
+    // Totals row styling
     if (sheet.totalsRow) {
-      lines.push(sheet.totalsRow.map(csvCell).join(','))
+      const totalRow = headerRow + sheet.rows.length + 1
+      sheet.totalsRow.forEach((_: any, c: number) => {
+        const ref = XLSX.utils.encode_cell({ r: totalRow, c })
+        if (!ws[ref]) return
+        ws[ref].s = {
+          font: { bold: true, color: { rgb: '1E293B' }, sz: 11 },
+          fill: { patternType: 'solid', fgColor: { rgb: 'F1F5F9' } },
+          border: { top: { style: 'medium', color: { rgb: '1E293B' } } }
+        }
+      })
     }
 
-    // Notes
-    if (sheet.notes) {
-      lines.push('')
-      lines.push(csvCell(`Note: ${sheet.notes}`))
+    // Alternate row colors
+    for (let r = headerRow + 1; r < headerRow + 1 + sheet.rows.length; r++) {
+      if (r % 2 === 0) continue
+      sheet.headers.forEach((_: any, c: number) => {
+        const ref = XLSX.utils.encode_cell({ r, c })
+        if (!ws[ref]) ws[ref] = { t: 's', v: '' }
+        ws[ref].s = { fill: { patternType: 'solid', fgColor: { rgb: 'F8FAFC' } } }
+      })
     }
 
-    lines.push('')
-    lines.push('')
+    XLSX.utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31))
   }
 
-  const csvContent = '\uFEFF' + lines.join('\n') // BOM for Excel UTF-8
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true })
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = spec.filename.replace('.xlsx', '.csv')
+  a.download = spec.filename.endsWith('.xlsx') ? spec.filename : spec.filename + '.xlsx'
   a.click()
   URL.revokeObjectURL(url)
-}
-
-function csvCell(val: string | number | null | undefined): string {
-  if (val === null || val === undefined) return ''
-  const s = String(val)
-  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
-    return `"${s.replace(/"/g, '""')}"`
-  }
-  return s
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -425,7 +451,7 @@ export default function CRMChatbot({ deals = [], accounts = [], periodLabel = 'P
                   {/* Excel download button */}
                   {msg.excelData && (
                     <button type="button"
-                      onClick={() => generateExcel(msg.excelData!)}
+                      onClick={() => generateExcel(msg.excelData!).catch(console.error)}
                       className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-400/50 transition-all">
                       <FileSpreadsheet className="h-3.5 w-3.5" />
                       Télécharger {msg.excelData.filename}
