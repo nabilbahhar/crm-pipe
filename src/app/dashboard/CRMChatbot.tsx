@@ -4,7 +4,6 @@ import {
   MessageCircle, X, Send, FileSpreadsheet, Bot, User,
   Loader2, Download, Sparkles, ChevronDown, Minimize2,
 } from 'lucide-react'
-import * as XLSX from 'xlsx'
 
 // ─────────────────────────────────────────────────────────────
 // TYPES
@@ -147,70 +146,58 @@ STYLE DE RÉPONSE:
 }
 
 // ─────────────────────────────────────────────────────────────
-// EXCEL GENERATOR
+// CSV GENERATOR — no external deps, opens perfectly in Excel
 // ─────────────────────────────────────────────────────────────
 function generateExcel(spec: ExcelSpec) {
-  const wb = XLSX.utils.book_new()
+  // Build one CSV per sheet, separated by blank lines
+  const lines: string[] = []
 
   for (const sheet of spec.sheets) {
-    const wsData: any[][] = []
-
-    // Title row
-    if (sheet.title) {
-      wsData.push([sheet.title])
-      wsData.push([]) // empty row
-    }
+    // Sheet name as section title
+    lines.push(`=== ${sheet.name} ===`)
+    if (sheet.title) lines.push(sheet.title)
+    lines.push('')
 
     // Headers
-    wsData.push(sheet.headers)
+    lines.push(sheet.headers.map(csvCell).join(','))
 
-    // Data rows
-    for (const row of sheet.rows) wsData.push(row)
+    // Rows
+    for (const row of sheet.rows) {
+      lines.push(row.map(csvCell).join(','))
+    }
 
-    // Totals row
-    if (sheet.totalsRow) wsData.push(sheet.totalsRow)
+    // Totals
+    if (sheet.totalsRow) {
+      lines.push(sheet.totalsRow.map(csvCell).join(','))
+    }
 
     // Notes
     if (sheet.notes) {
-      wsData.push([])
-      wsData.push([`Note: ${sheet.notes}`])
+      lines.push('')
+      lines.push(csvCell(`Note: ${sheet.notes}`))
     }
 
-    const ws = XLSX.utils.aoa_to_sheet(wsData)
-
-    // Auto column widths
-    const colWidths: number[] = []
-    for (const row of wsData) {
-      row.forEach((cell, i) => {
-        const len = String(cell ?? '').length
-        colWidths[i] = Math.max(colWidths[i] || 10, Math.min(len + 2, 40))
-      })
-    }
-    ws['!cols'] = colWidths.map(w => ({ wch: w }))
-
-    // Style the header row
-    const headerRowIdx = sheet.title ? 2 : 0
-    sheet.headers.forEach((_, colIdx) => {
-      const cellRef = XLSX.utils.encode_cell({ r: headerRowIdx, c: colIdx })
-      if (!ws[cellRef]) return
-      ws[cellRef].s = {
-        font: { bold: true, color: { rgb: 'FFFFFF' } },
-        fill: { fgColor: { rgb: '1E293B' } },
-        alignment: { horizontal: 'center' },
-      }
-    })
-
-    XLSX.utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31))
+    lines.push('')
+    lines.push('')
   }
 
-  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
-  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const csvContent = '\uFEFF' + lines.join('\n') // BOM for Excel UTF-8
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = spec.filename
+  a.download = spec.filename.replace('.xlsx', '.csv')
   a.click()
   URL.revokeObjectURL(url)
+}
+
+function csvCell(val: string | number | null | undefined): string {
+  if (val === null || val === undefined) return ''
+  const s = String(val)
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return `"${s.replace(/"/g, '""')}"`
+  }
+  return s
 }
 
 // ─────────────────────────────────────────────────────────────
