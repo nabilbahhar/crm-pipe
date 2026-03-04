@@ -13,6 +13,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line,
   LabelList, FunnelChart, Funnel, ComposedChart, Area,
 } from 'recharts'
+import CRMChatbot from './CRMChatbot'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONSTANTS
@@ -1409,6 +1410,10 @@ export default function Dashboard() {
         </Panel>
 
       </div>
+
+      {/* ══ AI CHATBOT ══ */}
+      <CRMChatbot deals={deals} accounts={accounts} periodLabel={periodLabel} />
+
     </div>
   )
 }
