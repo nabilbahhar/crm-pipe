@@ -146,84 +146,220 @@ STYLE DE RÉPONSE:
 }
 
 // ─────────────────────────────────────────────────────────────
-// EXCEL GENERATOR — real .xlsx via SheetJS
+// EXCEL GENERATOR — pure JS, no deps, real .xlsx
 // ─────────────────────────────────────────────────────────────
-async function generateExcel(spec: ExcelSpec) {
-  const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs' as any)
-
-  const wb = XLSX.utils.book_new()
+function generateExcel(spec: ExcelSpec) {
+  const sheets: string[] = []
+  const sheetNames: string[] = []
 
   for (const sheet of spec.sheets) {
-    const wsData: any[][] = []
+    sheetNames.push(sheet.name.slice(0, 31))
+    const rows: (string | number | null)[][] = []
+    if (sheet.title) { rows.push([sheet.title]); rows.push([]) }
+    rows.push(sheet.headers)
+    for (const row of sheet.rows) rows.push(row)
+    if (sheet.totalsRow) rows.push(sheet.totalsRow)
 
-    if (sheet.title) { wsData.push([sheet.title]); wsData.push([]) }
-    wsData.push(sheet.headers)
-    for (const row of sheet.rows) wsData.push(row)
-    if (sheet.totalsRow) wsData.push(sheet.totalsRow)
-    if (sheet.notes) { wsData.push([]); wsData.push([`Note: ${sheet.notes}`]) }
+    const maxCol = Math.max(...rows.map(r => r.length))
+    const colWidths = Array(maxCol).fill(10)
+    rows.forEach(row => row.forEach((cell, i) => {
+      colWidths[i] = Math.max(colWidths[i], Math.min(String(cell ?? '').length + 2, 40))
+    }))
 
-    const ws = XLSX.utils.aoa_to_sheet(wsData)
+    const headerRowIdx = sheet.title ? 2 : 0
 
-    // Column widths
-    const colWidths: number[] = []
-    for (const row of wsData) {
-      ;(row as any[]).forEach((cell: any, i: number) => {
-        const len = String(cell ?? '').length
-        colWidths[i] = Math.max(colWidths[i] || 8, Math.min(len + 2, 45))
-      })
-    }
-    ws['!cols'] = colWidths.map(w => ({ wch: w }))
+    let xml = `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`
+    xml += `<cols>${colWidths.map((w, i) => `<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('')}</cols>`
+    xml += `<sheetData>`
 
-    // Header row styling
-    const headerRow = sheet.title ? 2 : 0
-    sheet.headers.forEach((_: any, c: number) => {
-      const ref = XLSX.utils.encode_cell({ r: headerRow, c })
-      if (!ws[ref]) return
-      ws[ref].s = {
-        font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 },
-        fill: { patternType: 'solid', fgColor: { rgb: '1E293B' } },
-        alignment: { horizontal: 'center', vertical: 'center' },
-        border: {
-          bottom: { style: 'medium', color: { rgb: '3B82F6' } }
+    rows.forEach((row, ri) => {
+      xml += `<row r="${ri+1}">`
+      row.forEach((cell, ci) => {
+        const ref = `${colLetter(ci)}${ri+1}`
+        const isHeader = ri === headerRowIdx
+        const isTotal = sheet.totalsRow && ri === rows.length - 1
+        const styleIdx = isHeader ? 1 : isTotal ? 2 : 0
+
+        if (typeof cell === 'number') {
+          xml += `<c r="${ref}" s="${styleIdx}" t="n"><v>${cell}</v></c>`
+        } else if (cell !== null && cell !== undefined && cell !== '') {
+          const escaped = String(cell).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+          xml += `<c r="${ref}" s="${styleIdx}" t="inlineStr"><is><t>${escaped}</t></is></c>`
+        } else {
+          xml += `<c r="${ref}" s="${styleIdx}"/>`
         }
-      }
+      })
+      xml += `</row>`
     })
 
-    // Totals row styling
-    if (sheet.totalsRow) {
-      const totalRow = headerRow + sheet.rows.length + 1
-      sheet.totalsRow.forEach((_: any, c: number) => {
-        const ref = XLSX.utils.encode_cell({ r: totalRow, c })
-        if (!ws[ref]) return
-        ws[ref].s = {
-          font: { bold: true, color: { rgb: '1E293B' }, sz: 11 },
-          fill: { patternType: 'solid', fgColor: { rgb: 'F1F5F9' } },
-          border: { top: { style: 'medium', color: { rgb: '1E293B' } } }
-        }
-      })
-    }
-
-    // Alternate row colors
-    for (let r = headerRow + 1; r < headerRow + 1 + sheet.rows.length; r++) {
-      if (r % 2 === 0) continue
-      sheet.headers.forEach((_: any, c: number) => {
-        const ref = XLSX.utils.encode_cell({ r, c })
-        if (!ws[ref]) ws[ref] = { t: 's', v: '' }
-        ws[ref].s = { fill: { patternType: 'solid', fgColor: { rgb: 'F8FAFC' } } }
-      })
-    }
-
-    XLSX.utils.book_append_sheet(wb, ws, sheet.name.slice(0, 31))
+    xml += `</sheetData></worksheet>`
+    sheets.push(xml)
   }
 
-  const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array', cellStyles: true })
-  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  // Build workbook XML parts
+  const workbookXml = `<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets>${sheetNames.map((n,i)=>`<sheet name="${n}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join('')}</sheets>
+</workbook>`
+
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="3">
+<font><sz val="11"/><name val="Arial"/></font>
+<font><sz val="11"/><b/><name val="Arial"/><color rgb="FFFFFFFF"/></font>
+<font><sz val="11"/><b/><name val="Arial"/></font>
+</fonts>
+<fills count="4">
+<fill><patternFill patternType="none"/></fill>
+<fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF1E293B"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFF1F5F9"/></patternFill></fill>
+</fills>
+<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="3">
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0"><alignment horizontal="center"/></xf>
+<xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0"/>
+</cellXfs>
+</styleSheet>`
+
+  const relsWorkbook = `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+${sheetNames.map((_,i)=>`<Relationship Id="rId${i+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('\n')}
+<Relationship Id="rId${sheetNames.length+1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`
+
+  const relsRoot = `<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+</Relationships>`
+
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+${sheetNames.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('\n')}
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+</Types>`
+
+  // Zip it all up
+  const files: Record<string, string> = {
+    '[Content_Types].xml': contentTypes,
+    '_rels/.rels': relsRoot,
+    'xl/workbook.xml': workbookXml,
+    'xl/_rels/workbook.xml.rels': relsWorkbook,
+    'xl/styles.xml': stylesXml,
+  }
+  sheets.forEach((s, i) => { files[`xl/worksheets/sheet${i+1}.xml`] = s })
+
+  const zip = buildZip(files)
+  const blob = new Blob([zip], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = spec.filename.endsWith('.xlsx') ? spec.filename : spec.filename + '.xlsx'
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  document.body.removeChild(a)
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function colLetter(n: number): string {
+  let s = ''
+  n++
+  while (n > 0) { n--; s = String.fromCharCode(65 + n % 26) + s; n = Math.floor(n / 26) }
+  return s
+}
+
+function buildZip(files: Record<string, string>): Uint8Array {
+  // Simple ZIP builder (store, no compression)
+  const enc = new TextEncoder()
+  const entries: { name: Uint8Array; data: Uint8Array; offset: number }[] = []
+  let offset = 0
+  const parts: Uint8Array[] = []
+
+  for (const [name, content] of Object.entries(files)) {
+    const nameBytes = enc.encode(name)
+    const dataBytes = enc.encode(content)
+    const crc = crc32(dataBytes)
+
+    // Local file header
+    const lh = new Uint8Array(30 + nameBytes.length)
+    const lhv = new DataView(lh.buffer)
+    lhv.setUint32(0, 0x04034b50, true) // signature
+    lhv.setUint16(4, 20, true)          // version
+    lhv.setUint16(6, 0, true)           // flags
+    lhv.setUint16(8, 0, true)           // compression (store)
+    lhv.setUint16(10, 0, true)          // mod time
+    lhv.setUint16(12, 0, true)          // mod date
+    lhv.setUint32(14, crc, true)        // crc32
+    lhv.setUint32(18, dataBytes.length, true)
+    lhv.setUint32(22, dataBytes.length, true)
+    lhv.setUint16(26, nameBytes.length, true)
+    lhv.setUint16(28, 0, true)
+    lh.set(nameBytes, 30)
+
+    entries.push({ name: nameBytes, data: dataBytes, offset })
+    offset += lh.length + dataBytes.length
+    parts.push(lh, dataBytes)
+  }
+
+  // Central directory
+  const cdParts: Uint8Array[] = []
+  for (const e of entries) {
+    const crc = crc32(e.data)
+    const cd = new Uint8Array(46 + e.name.length)
+    const cdv = new DataView(cd.buffer)
+    cdv.setUint32(0, 0x02014b50, true)
+    cdv.setUint16(4, 20, true)
+    cdv.setUint16(6, 20, true)
+    cdv.setUint16(8, 0, true)
+    cdv.setUint16(10, 0, true)
+    cdv.setUint16(12, 0, true)
+    cdv.setUint16(14, 0, true)
+    cdv.setUint32(16, crc, true)
+    cdv.setUint32(20, e.data.length, true)
+    cdv.setUint32(24, e.data.length, true)
+    cdv.setUint16(28, e.name.length, true)
+    cdv.setUint16(30, 0, true)
+    cdv.setUint16(32, 0, true)
+    cdv.setUint16(34, 0, true)
+    cdv.setUint16(36, 0, true)
+    cdv.setUint32(38, 0, true)
+    cdv.setUint32(42, e.offset, true)
+    cd.set(e.name, 46)
+    cdParts.push(cd)
+  }
+
+  const cdSize = cdParts.reduce((s, p) => s + p.length, 0)
+  const eocd = new Uint8Array(22)
+  const eocdv = new DataView(eocd.buffer)
+  eocdv.setUint32(0, 0x06054b50, true)
+  eocdv.setUint16(4, 0, true)
+  eocdv.setUint16(6, 0, true)
+  eocdv.setUint16(8, entries.length, true)
+  eocdv.setUint16(10, entries.length, true)
+  eocdv.setUint32(12, cdSize, true)
+  eocdv.setUint32(16, offset, true)
+  eocdv.setUint16(20, 0, true)
+
+  const allParts = [...parts, ...cdParts, eocd]
+  const total = allParts.reduce((s, p) => s + p.length, 0)
+  const out = new Uint8Array(total)
+  let pos = 0
+  for (const p of allParts) { out.set(p, pos); pos += p.length }
+  return out
+}
+
+function crc32(data: Uint8Array): number {
+  let crc = 0xFFFFFFFF
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i]
+    for (let j = 0; j < 8; j++) crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0)
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -451,7 +587,7 @@ export default function CRMChatbot({ deals = [], accounts = [], periodLabel = 'P
                   {/* Excel download button */}
                   {msg.excelData && (
                     <button type="button"
-                      onClick={() => generateExcel(msg.excelData!).catch(console.error)}
+                      onClick={() => generateExcel(msg.excelData!)}
                       className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 hover:border-emerald-400/50 transition-all">
                       <FileSpreadsheet className="h-3.5 w-3.5" />
                       Télécharger {msg.excelData.filename}
