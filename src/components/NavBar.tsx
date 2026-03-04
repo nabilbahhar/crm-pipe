@@ -7,12 +7,13 @@ import { supabase } from "@/lib/supabaseClient";
 import { Bell, X, ChevronDown, KeyRound, LogOut } from "lucide-react";
 
 const NAV_ITEMS = [
-  { label: "Dashboard",   href: "/dashboard-v3" },
+  { label: "Dashboard",   href: "/dashboard" },
   { label: "Prospection", href: "/prospection" },
   { label: "Pipeline",    href: "/pipeline" },
   { label: "Comptes",     href: "/accounts" },
   { label: "Deals",       href: "/opportunities" },
   { label: "KPI",         href: "/kpi" },
+  { label: "Inside",      href: "/inside" },
 ];
 
 type Activity = {
@@ -327,7 +328,7 @@ export default function NavBar() {
       <div style={{ borderBottom: "1px solid #e2e8f0", background: "#fff", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: 1600, margin: "0 auto", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 8 }}>
 
-          <Link href="/dashboard-v3" style={{ fontWeight: 900, fontSize: 15, letterSpacing: "1.5px", color: "#0f172a", textDecoration: "none", marginRight: 16 }}>
+          <Link href="/dashboard" style={{ fontWeight: 900, fontSize: 15, letterSpacing: "1.5px", color: "#0f172a", textDecoration: "none", marginRight: 16 }}>
             CRM-PIPE
           </Link>
 
