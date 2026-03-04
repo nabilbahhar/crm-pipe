@@ -275,7 +275,7 @@ export default function CRMChatbot({ deals = [], accounts = [], periodLabel = 'P
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-6',
           max_tokens: 2000,
           system: buildSystemPrompt() + '\n\nDONNÉES CRM ACTUELLES:\n' + context,
           messages: [...history, { role: 'user', content: text.trim() }],
@@ -283,7 +283,8 @@ export default function CRMChatbot({ deals = [], accounts = [], periodLabel = 'P
       })
 
       const data = await response.json()
-      const raw = data?.content?.[0]?.text || 'Désolé, je n\'ai pas pu traiter cette demande.'
+      const raw = data?.content?.[0]?.text || data?.error || 'Réponse vide'
+      if (typeof raw !== 'string') throw new Error(JSON.stringify(raw))
       const { text: msgText, excel } = parseResponse(raw)
 
       const assistantMsg: Message = {
