@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 
 // ─────────────────────────────────────────────────────────────
-// TYPE
+// TYPES
 // ─────────────────────────────────────────────────────────────
 interface Deal {
   id: string
@@ -276,7 +276,7 @@ export default function CRMChatbot({ deals = [], accounts = [], periodLabel = 'P
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: 'claude-sonnet-4-6',
-          max_tokens: 2000,
+          max_tokens: 8000,
           system: buildSystemPrompt() + '\n\nDONNÉES CRM ACTUELLES:\n' + context,
           messages: [...history, { role: 'user', content: text.trim() }],
         }),
