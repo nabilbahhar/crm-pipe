@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabaseClient'
 import {
   Search, RefreshCw, Plus, Pencil, Eye, X, ChevronDown,
   TrendingUp, CheckCircle2, XCircle, Clock, AlertTriangle,
-  ArrowUp, ArrowDown, ChevronsUpDown, Filter,
+  ArrowUp, ArrowDown, ChevronsUpDown, Filter, Save,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -120,15 +120,66 @@ function DealsPageInner() {
   const [sortKey, setSortKey]   = useState<SortKey>('amount')
   const [sortDir, setSortDir]   = useState<'asc'|'desc'>('desc')
 
-  // ── Redirect ?edit=ID → Pipeline where the edit modal lives ──
+  // ── Edit modal ──
   const searchParams = useSearchParams()
   const router = useRouter()
+  const [editDeal, setEditDeal] = useState<Deal|null>(null)
+  const [saving, setSaving]     = useState(false)
+  const [saveErr, setSaveErr]   = useState<string|null>(null)
+  // Edit form fields
+  const [eTitle, setETitle]           = useState('')
+  const [eStage, setEStage]           = useState('')
+  const [eStatus, setEStatus]         = useState<'Open'|'Won'|'Lost'>('Open')
+  const [eAmount, setEAmount]         = useState('')
+  const [eProb, setEProb]             = useState('')
+  const [eClosing, setEClosing]       = useState('')
+  const [eNextStep, setENextStep]     = useState('')
+  const [eNotes, setENotes]           = useState('')
+
+  // Open modal from ?edit= param after data loads
   useEffect(() => {
     const editId = searchParams.get('edit')
-    if (editId) {
-      router.replace(`/pipeline?edit=${editId}`)
+    if (editId && rows.length > 0) {
+      const found = rows.find(r => r.id === editId)
+      if (found) openEdit(found)
     }
-  }, [searchParams, router])
+  }, [searchParams, rows])
+
+  function openEdit(d: Deal) {
+    setEditDeal(d)
+    setETitle(d.title || '')
+    setEStage(d.stage || '')
+    setEStatus(normStatus(d))
+    setEAmount(String(d.amount || ''))
+    setEProb(String(d.prob ?? ''))
+    setEClosing(d.booking_month || '')
+    setENextStep(d.next_step || '')
+    setENotes(d.notes || '')
+    setSaveErr(null)
+  }
+
+  async function handleSave() {
+    if (!editDeal) return
+    setSaving(true); setSaveErr(null)
+    try {
+      const { error } = await supabase.from('opportunities').update({
+        title: eTitle.trim(),
+        stage: eStage,
+        status: eStatus,
+        amount: parseFloat(eAmount) || 0,
+        prob: parseInt(eProb) || 0,
+        booking_month: eClosing || null,
+        next_step: eNextStep.trim() || null,
+        notes: eNotes.trim() || null,
+      }).eq('id', editDeal.id)
+      if (error) throw error
+      setEditDeal(null)
+      // Remove ?edit= from URL
+      router.replace('/opportunities')
+      load()
+    } catch(e: any) { setSaveErr(e?.message || 'Erreur sauvegarde') }
+    finally { setSaving(false) }
+  }
 
 
   const load = async () => {
@@ -394,10 +445,10 @@ function DealsPageInner() {
                               className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">
                               <Eye className="h-3.5 w-3.5" />
                             </Link>
-                            <Link href={`/pipeline?edit=${d.id}`}
+                            <button onClick={() => openEdit(d)}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">
                               <Pencil className="h-3.5 w-3.5" />
-                            </Link>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -424,6 +475,100 @@ function DealsPageInner() {
             </div>
           )}
         </div>
+
+      {/* ── Edit Modal ── */}
+      {editDeal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+          onClick={e => { if (e.target === e.currentTarget) { setEditDeal(null); router.replace('/opportunities') } }}>
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl ring-1 ring-slate-200 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+              <div>
+                <div className="text-sm font-bold text-slate-900 truncate max-w-xs">{editDeal.title}</div>
+                <div className="text-xs text-slate-400 mt-0.5">{editDeal.accounts?.name || '—'}</div>
+              </div>
+              <button onClick={() => { setEditDeal(null); router.replace('/opportunities') }}
+                className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Title */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Titre du deal *</label>
+                <input value={eTitle} onChange={e => setETitle(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+              </div>
+              {/* Stage + Status */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Étape</label>
+                  <select value={eStage} onChange={e => setEStage(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 bg-white">
+                    {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Statut</label>
+                  <select value={eStatus} onChange={e => setEStatus(e.target.value as 'Open'|'Won'|'Lost')}
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 bg-white">
+                    <option value="Open">Open</option>
+                    <option value="Won">Won</option>
+                    <option value="Lost">Lost</option>
+                  </select>
+                </div>
+              </div>
+              {/* Amount + Prob */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Montant (MAD)</label>
+                  <input type="number" value={eAmount} onChange={e => setEAmount(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Probabilité (%)</label>
+                  <input type="number" min="0" max="100" value={eProb} onChange={e => setEProb(e.target.value)}
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                </div>
+              </div>
+              {/* Closing */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Closing (YYYY-MM)</label>
+                <input value={eClosing} onChange={e => setEClosing(e.target.value)} placeholder="2026-03"
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+              </div>
+              {/* Next Step */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Next Step</label>
+                <input value={eNextStep} onChange={e => setENextStep(e.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+              </div>
+              {/* Notes */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Notes</label>
+                <textarea value={eNotes} onChange={e => setENotes(e.target.value)} rows={3}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none" />
+              </div>
+              {saveErr && (
+                <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">⚠️ {saveErr}</div>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="flex gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50">
+              <button onClick={() => { setEditDeal(null); router.replace('/opportunities') }}
+                className="flex-1 h-10 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                Annuler
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="flex-[2] h-10 rounded-xl bg-slate-900 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+                <Save className="h-4 w-4" />
+                {saving ? 'Sauvegarde…' : 'Sauvegarder'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       </div>
     </div>
