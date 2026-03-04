@@ -12,7 +12,7 @@ export default function Home() {
     if (loading) return
 
     // Si connecté -> dashboard principal
-    if (user) router.replace('/dashboard-v2')
+    if (user) router.replace('/dashboard')
     // Sinon -> login
     else router.replace('/login')
   }, [user, loading, router])
