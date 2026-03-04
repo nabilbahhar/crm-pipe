@@ -1,4 +1,5 @@
 'use client'
+import DealFormModal from '@/components/DealFormModal'
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
@@ -96,6 +97,8 @@ function ProbBar({ prob }: { prob: number }) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function PipelinePage() {
+  const [showNewDeal, setShowNewDeal] = useState(false)
+  const [editRow, setEditRow] = useState<any>(null)
   const [rows, setRows]         = useState<DealRow[]>([])
   const [loading, setLoading]   = useState(true)
   const [err, setErr]           = useState<string | null>(null)
@@ -205,10 +208,10 @@ export default function PipelinePage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/opportunities"
+            <button onClick={() => setShowNewDeal(true)}
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm text-white hover:bg-slate-800">
               <Plus className="h-4 w-4" /> Nouveau deal
-            </Link>
+            </button>
             <button onClick={load} disabled={loading}
               className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">
               <RefreshCw className={`h-4 w-4 ${loading?'animate-spin':''}`} /> Rafraîchir
@@ -410,10 +413,10 @@ export default function PipelinePage() {
                                 <ChevronRight className="h-3.5 w-3.5" />{nextS==='Won'?'Won ✓':nextS}
                               </button>
                             )}
-                            <Link href="/opportunities"
+                            <button onClick={() => setEditRow(r)}
                               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-slate-500 hover:bg-slate-100">
                               <Pencil className="h-3.5 w-3.5" />
-                            </Link>
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -503,10 +506,10 @@ export default function PipelinePage() {
                                 <ChevronRight className="h-3 w-3" />{nextS==='Won'?'Won ✓':nextS}
                               </button>
                             )}
-                            <Link href="/opportunities"
+                            <button onClick={() => setEditRow(deal)}
                               className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100">
                               <Pencil className="h-3 w-3" />
-                            </Link>
+                            </button>
                           </div>
                         </div>
                       )
@@ -544,6 +547,15 @@ export default function PipelinePage() {
         </div>
 
       </div>
+      {/* ── New / Edit Deal Modal ── */}
+      {(showNewDeal || editRow) && (
+        <DealFormModal
+          editRow={editRow || null}
+          onClose={() => { setShowNewDeal(false); setEditRow(null) }}
+          onSaved={() => { load(); setShowNewDeal(false); setEditRow(null) }}
+        />
+      )}
+
     </div>
   )
 }
