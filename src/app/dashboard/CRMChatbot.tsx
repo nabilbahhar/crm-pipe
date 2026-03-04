@@ -183,7 +183,7 @@ function generateExcel(spec: ExcelSpec) {
         if (typeof cell === 'number') {
           xml += `<c r="${ref}" s="${styleIdx}" t="n"><v>${cell}</v></c>`
         } else if (cell !== null && cell !== undefined && cell !== '') {
-          const escaped = String(cell).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+          const escaped = String(cell).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '')
           xml += `<c r="${ref}" s="${styleIdx}" t="inlineStr"><is><t>${escaped}</t></is></c>`
         } else {
           xml += `<c r="${ref}" s="${styleIdx}"/>`
