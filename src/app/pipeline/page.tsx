@@ -506,7 +506,7 @@ export default function PipelinePage() {
                                 <ChevronRight className="h-3 w-3" />{nextS==='Won'?'Won ✓':nextS}
                               </button>
                             )}
-                            <button onClick={() => setEditRow(deal)}
+                            <button onClick={() => setEditRow(r)}
                               className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100">
                               <Pencil className="h-3 w-3" />
                             </button>
