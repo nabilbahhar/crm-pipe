@@ -2,14 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
   try {
+    const allKeys = Object.keys(process.env).filter(k => k.includes('ANTHRO'))
     const apiKey = process.env.ANTHROPIC_API_KEY
-    console.log('KEY exists:', !!process.env.ANTHROPIC_API_KEY, 'length:', process.env.ANTHROPIC_API_KEY?.length)
+
     if (!apiKey) {
-      return NextResponse.json({ error: 'ANTHROPIC_API_KEY manquante' }, { status: 500 })
+      return NextResponse.json({
+        error: `ANTHROPIC_API_KEY manquante. Clés trouvées: ${allKeys.join(', ') || 'aucune'}`
+      }, { status: 500 })
     }
 
     const body = await req.json()
-
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -21,16 +23,9 @@ export async function POST(req: NextRequest) {
     })
 
     const data = await response.json()
-
-    if (!response.ok) {
-      console.error('Anthropic error:', data)
-      return NextResponse.json({ error: data?.error?.message || 'Erreur API' }, { status: response.status })
-    }
-
+    if (!response.ok) return NextResponse.json({ error: data?.error?.message }, { status: response.status })
     return NextResponse.json(data)
   } catch (err: any) {
-    console.error('Route error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
-// v3
