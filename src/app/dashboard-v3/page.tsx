@@ -1065,7 +1065,7 @@ export default function DashboardV3Page() {
                       {lateBooking.map(d => (
                         <tr key={d.id} className="border-t">
                           <td className="px-3 py-2 font-medium text-slate-900">{d.account_name}</td>
-                          <td className="px-3 py-2"><a href={`/opportunities?edit=${d.id}`} className="text-blue-600 hover:underline cursor-pointer">{d.title}</a></td>
+                          <td className="px-3 py-2"><a href={`/opportunities/${d.id}`} className="text-blue-600 hover:underline cursor-pointer">{d.title}</a></td>
                           <td className="px-3 py-2">{d.stage}</td>
                           <td className="px-3 py-2">{d.closingYmReal}</td>
                           <td className="px-3 py-2 text-right font-medium text-slate-900">{mad(d.amount)}</td>
@@ -1101,7 +1101,7 @@ export default function DashboardV3Page() {
                       {topOpenDeals.map(d => (
                         <tr key={d.id} className="border-t">
                           <td className="px-3 py-2 font-medium text-slate-900">{d.account_name}</td>
-                          <td className="px-3 py-2"><a href={`/opportunities?edit=${d.id}`} className="text-blue-600 hover:underline cursor-pointer">{d.title}</a></td>
+                          <td className="px-3 py-2"><a href={`/opportunities/${d.id}`} className="text-blue-600 hover:underline cursor-pointer">{d.title}</a></td>
                           <td className="px-3 py-2">{d.stage}</td>
                           <td className="px-3 py-2 font-medium text-slate-900">{mad(d.amount)}</td>
                           <td className="px-3 py-2">{d.prob}%</td>
@@ -1133,7 +1133,7 @@ export default function DashboardV3Page() {
                       {topWonDeals.map(d => (
                         <tr key={d.id} className="border-t">
                           <td className="px-3 py-2 font-medium text-slate-900">{d.account_name}</td>
-                          <td className="px-3 py-2"><a href={`/opportunities?edit=${d.id}`} className="text-blue-600 hover:underline cursor-pointer">{d.title}</a></td>
+                          <td className="px-3 py-2"><a href={`/opportunities/${d.id}`} className="text-blue-600 hover:underline cursor-pointer">{d.title}</a></td>
                           <td className="px-3 py-2">{d.stage}</td>
                           <td className="px-3 py-2 text-right font-medium text-slate-900">{mad(d.amount)}</td>
                         </tr>
@@ -1174,7 +1174,7 @@ export default function DashboardV3Page() {
                       return (
                         <tr key={d.id} className="border-t">
                           <td className="px-3 py-2 font-medium text-slate-900">{d.account_name}</td>
-                          <td className="px-3 py-2"><a href={`/opportunities?edit=${d.id}`} className="text-blue-600 hover:underline cursor-pointer">{d.title}</a></td>
+                          <td className="px-3 py-2"><a href={`/opportunities/${d.id}`} className="text-blue-600 hover:underline cursor-pointer">{d.title}</a></td>
                           <td className="px-3 py-2">{d.stage}</td>
                           <td className="px-3 py-2">{String(mainSbu)}</td>
                           <td className="px-3 py-2">{mainCard}</td>
