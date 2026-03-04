@@ -1,112 +1,154 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
+import { supabase } from '@/lib/supabaseClient'
+import { Eye, EyeOff } from 'lucide-react'
 
-const ALLOWED_EMAILS = new Set([
+const ALLOWED_EMAILS = [
   'nabil.imdh@gmail.com',
   's.chitachny@compucom.ma',
-])
+]
 
 export default function LoginPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('')
+  const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
-  const [showPwd, setShowPwd] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [showPwd, setShowPwd]   = useState(false)
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState<string | null>(null)
 
-  const emailNormalized = useMemo(() => email.trim().toLowerCase(), [email])
-
-  async function onSubmit(e: React.FormEvent) {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setErr(null)
-    if (!emailNormalized) return setErr('Merci de saisir ton email.')
-    if (!password) return setErr('Merci de saisir ton mot de passe.')
-    if (!ALLOWED_EMAILS.has(emailNormalized)) return setErr("Accès refusé : cet email n'est pas autorisé.")
-
+    setError(null)
     setLoading(true)
-    const { data, error } = await supabase.auth.signInWithPassword({ email: emailNormalized, password })
-    setLoading(false)
 
-    if (error) return setErr(error.message)
-
-    const signedEmail = (data?.user?.email || '').toLowerCase()
-    if (!ALLOWED_EMAILS.has(signedEmail)) {
-      await supabase.auth.signOut()
-      return setErr("Accès refusé.")
+    const allowed = new Set(ALLOWED_EMAILS.map(e => e.toLowerCase()))
+    if (!allowed.has(email.trim().toLowerCase())) {
+      setError('Accès refusé.')
+      setLoading(false)
+      return
     }
 
-    router.replace('/dashboard-v3')
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    })
+
+    if (signInError) {
+      setError('Email ou mot de passe incorrect.')
+      setLoading(false)
+      return
+    }
+
+    router.replace('/dashboard')
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#f8fafc' }}>
-      <div className="w-full max-w-sm">
+      <div style={{
+        width: '100%', maxWidth: 400,
+        background: '#fff', borderRadius: 20,
+        boxShadow: '0 8px 40px rgba(0,0,0,0.08)',
+        padding: '40px 36px',
+      }}>
         {/* Logo */}
-        <div className="mb-8 text-center">
-          <div className="text-3xl font-black tracking-tight text-slate-900">CRM-PIPE</div>
-          <div className="mt-1 text-sm text-slate-500">Connectez-vous à votre espace</div>
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 48, height: 48, borderRadius: 14, background: '#0f172a',
+            marginBottom: 16,
+          }}>
+            <span style={{ color: '#fff', fontWeight: 900, fontSize: 16, letterSpacing: '1px' }}>CP</span>
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: '#0f172a', letterSpacing: '1.5px' }}>CRM-PIPE</div>
+          <div style={{ fontSize: 13, color: '#94a3b8', marginTop: 4 }}>Connectez-vous à votre espace</div>
         </div>
 
-        <div className="rounded-2xl bg-white p-7 shadow-sm border border-slate-100">
-          {err && (
-            <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
-              {err}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Email */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="votre@email.com"
+              required
+              style={{
+                width: '100%', height: 44, borderRadius: 12,
+                border: '1px solid #e2e8f0', padding: '0 14px',
+                fontSize: 14, outline: 'none', boxSizing: 'border-box',
+                transition: 'border 0.15s',
+              }}
+            />
+          </div>
+
+          {/* Password */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#475569', marginBottom: 6 }}>
+              Mot de passe
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                type={showPwd ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                style={{
+                  width: '100%', height: 44, borderRadius: 12,
+                  border: '1px solid #e2e8f0', padding: '0 44px 0 14px',
+                  fontSize: 14, outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPwd(v => !v)}
+                style={{
+                  position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                  border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', padding: 4,
+                }}
+              >
+                {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div style={{
+              background: '#fef2f2', border: '1px solid #fecaca',
+              borderRadius: 10, padding: '10px 14px',
+              fontSize: 12, color: '#dc2626',
+            }}>
+              ⚠️ {error}
             </div>
           )}
 
-          <form onSubmit={onSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
-              <input
-                className="w-full h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors"
-                placeholder="votre@email.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                autoComplete="email"
-                type="email"
-              />
-            </div>
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              height: 44, borderRadius: 12, border: 'none',
+              background: loading ? '#94a3b8' : '#0f172a',
+              color: '#fff', fontSize: 14, fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              marginTop: 4,
+            }}
+          >
+            {loading ? 'Connexion…' : 'Se connecter'}
+          </button>
 
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">Mot de passe</label>
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 h-11 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none focus:border-slate-400 focus:bg-white transition-colors"
-                  placeholder="••••••••"
-                  type={showPwd ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPwd(v => !v)}
-                  className="h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-600 hover:bg-slate-100 transition-colors"
-                >
-                  {showPwd ? 'Masquer' : 'Voir'}
-                </button>
-              </div>
-            </div>
-
-            <button
-              disabled={loading}
-              type="submit"
-              className="w-full h-11 rounded-xl bg-slate-900 text-white text-sm font-semibold hover:bg-slate-800 disabled:opacity-60 transition-colors mt-2"
-            >
-              {loading ? 'Connexion…' : 'Se connecter'}
-            </button>
-          </form>
-
-          <div className="mt-4 text-center">
-            <Link href="/reset-password" className="text-sm text-slate-500 hover:text-slate-800 transition-colors">
+          <div style={{ textAlign: 'center' }}>
+            <a href="/reset-password" style={{ fontSize: 12, color: '#94a3b8', textDecoration: 'none' }}>
               Mot de passe oublié ?
-            </Link>
+            </a>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   )
