@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.ANTHROPIC_API_KEY
+    console.log('KEY exists:', !!process.env.ANTHROPIC_API_KEY, 'length:', process.env.ANTHROPIC_API_KEY?.length)
     if (!apiKey) {
       return NextResponse.json({ error: 'ANTHROPIC_API_KEY manquante' }, { status: 500 })
     }
