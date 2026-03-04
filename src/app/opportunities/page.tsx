@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
@@ -104,7 +104,7 @@ function ProbBar({ prob }: { prob: number }) {
 type SortKey = 'account'|'title'|'stage'|'bu'|'vendor'|'amount'|'prob'|'closing'|'status'
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function DealsPage() {
+function DealsPageInner() {
   const [rows, setRows]       = useState<Deal[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr]         = useState<string|null>(null)
@@ -427,5 +427,13 @@ export default function DealsPage() {
 
       </div>
     </div>
+  )
+}
+
+export default function DealsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-sm text-slate-400">Chargement…</div>}>
+      <DealsPageInner />
+    </Suspense>
   )
 }
