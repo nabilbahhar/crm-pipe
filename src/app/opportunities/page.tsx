@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import {
@@ -118,6 +119,17 @@ export default function DealsPage() {
   // Sort
   const [sortKey, setSortKey]   = useState<SortKey>('amount')
   const [sortDir, setSortDir]   = useState<'asc'|'desc'>('desc')
+
+  // ── Redirect ?edit=ID → Pipeline where the edit modal lives ──
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  useEffect(() => {
+    const editId = searchParams.get('edit')
+    if (editId) {
+      router.replace(`/pipeline?edit=${editId}`)
+    }
+  }, [searchParams, router])
+
 
   const load = async () => {
     setLoading(true); setErr(null)
