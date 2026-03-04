@@ -255,7 +255,7 @@ ${sheetNames.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" Con
   sheets.forEach((s, i) => { files[`xl/worksheets/sheet${i+1}.xml`] = s })
 
   const zip = buildZip(files)
-  const blob = new Blob([zip], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const blob = new Blob([zip.buffer as ArrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
