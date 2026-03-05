@@ -21,6 +21,7 @@ type Activity = {
   user_email: string;
   action_type: string;
   entity_type: string;
+  entity_id: string | null;
   entity_name: string;
   detail: string | null;
   created_at: string;
@@ -284,7 +285,7 @@ export default function NavBar() {
   async function loadActivities(lastRead?: string) {
     const { data } = await supabase
       .from("activity_log")
-      .select("id,user_email,action_type,entity_type,entity_name,detail,created_at")
+      .select("id,user_email,action_type,entity_type,entity_id,entity_name,detail,created_at")
       .order("created_at", { ascending: false }).limit(100);
     if (data) {
       setActivities(data as Activity[]);
