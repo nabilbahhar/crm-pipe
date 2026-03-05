@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabaseClient'
+import { logActivity } from '@/lib/logActivity'
 import { X, Plus, Trash2, Save, ChevronDown, ExternalLink } from 'lucide-react'
 import Link from 'next/link'
 
@@ -477,9 +478,23 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
       if (isEdit) {
         const { error } = await supabase.from('opportunities').update(payload).eq('id', editRow.id)
         if (error) throw error
+        await logActivity({
+          action_type: status === 'Won' ? 'won' : status === 'Lost' ? 'lost' : 'update',
+          entity_type: 'deal',
+          entity_id: editRow.id,
+          entity_name: title.trim(),
+          detail: `${stage} · ${payload.bu || ''} · ${payload.amount ? payload.amount + ' MAD' : ''}`.trim(),
+        })
       } else {
-        const { error } = await supabase.from('opportunities').insert(payload)
+        const { data: inserted, error } = await supabase.from('opportunities').insert(payload).select('id').single()
         if (error) throw error
+        await logActivity({
+          action_type: 'create',
+          entity_type: 'deal',
+          entity_id: inserted?.id ?? undefined,
+          entity_name: title.trim(),
+          detail: `${stage} · ${payload.bu || ''} · ${payload.amount ? payload.amount + ' MAD' : ''}`.trim(),
+        })
       }
 
       onSaved()
