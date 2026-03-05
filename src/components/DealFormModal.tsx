@@ -17,13 +17,14 @@ export type DealFormData = {
   account_id: string
   title: string
   stage: string
-  status: 'Open' | 'Won' | 'Lost'
   multi_bu: boolean
+  auto_prob: boolean
   // Single BU mode
   bu: string
   vendor: string
   card: string
   amount: string
+  extra_cards: string[]  // additional cartes
   // Multi BU mode
   bu_lines: BuLine[]
   prob: string
@@ -60,13 +61,22 @@ const CARTES: Record<string, string[]> = {
   CSG:     ['Dell','HPE','Lenovo','Apple','Samsung','Zebra','Cisco','HP Inc','Multi'],
 }
 
+
+const STAGE_PROB: Record<string, number> = {
+  Lead: 10, Discovery: 20, Qualified: 40, Solutioning: 55,
+  'Proposal Sent': 70, Negotiation: 80, Commit: 90,
+  Won: 100, 'Lost / No decision': 0,
+}
+
 const EMPTY_LINE: BuLine = { bu: 'CSG', vendor: '', card: '', amount: '' }
 
 function emptyForm(): DealFormData {
   return {
-    account_id: '', title: '', stage: 'Solutioning', status: 'Open',
+    account_id: '', title: '', stage: 'Solutioning',
     multi_bu: false,
+    auto_prob: true,
     bu: 'CSG', vendor: '', card: '', amount: '',
+    extra_cards: [],
     bu_lines: [{ ...EMPTY_LINE }],
     prob: '50', booking_month: '', next_step: '', notes: '',
     po_number: '', po_date: '',
@@ -79,12 +89,13 @@ export function dealFromRow(row: any): DealFormData {
     account_id: row.account_id || '',
     title: row.title || '',
     stage: row.stage || 'Solutioning',
-    status: (row.status || 'Open') as 'Open'|'Won'|'Lost',
     multi_bu: isMulti,
+    auto_prob: false,
     bu: row.bu || 'CSG',
     vendor: row.vendor || '',
     card: row.card || '',
     amount: String(row.amount || ''),
+    extra_cards: [],
     bu_lines: isMulti && Array.isArray(row.bu_lines) && row.bu_lines.length > 0
       ? row.bu_lines.map((l: any) => ({
           bu: l.bu || 'CSG',
@@ -124,7 +135,16 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
   }, [])
 
   function set(key: keyof DealFormData, val: any) {
-    setForm(f => ({ ...f, [key]: val }))
+    setForm(f => {
+      const next = { ...f, [key]: val }
+      if (key === 'stage' && f.auto_prob) {
+        next.prob = String(STAGE_PROB[val as string] ?? f.prob)
+      }
+      if (key === 'auto_prob' && val === true) {
+        next.prob = String(STAGE_PROB[f.stage] ?? f.prob)
+      }
+      return next
+    })
   }
 
   // BU line helpers
@@ -157,7 +177,7 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
       account_id: form.account_id,
       title: form.title.trim(),
       stage: form.stage,
-      status: form.status,
+      status: 'Open',
       prob: parseInt(form.prob) || 0,
       booking_month: form.booking_month || null,
       next_step: form.next_step.trim() || null,
@@ -258,8 +278,8 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
             </div>
           </div>
 
-          {/* Stage + Status + Prob */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Stage + Prob + AUTO */}
+          <div className="grid grid-cols-3 gap-3 items-end">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">Étape</label>
               <div className="relative">
@@ -271,22 +291,20 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Statut</label>
-              <div className="relative">
-                <select value={form.status} onChange={e => set('status', e.target.value as any)}
-                  className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-8 text-sm outline-none focus:border-blue-400 bg-white appearance-none">
-                  <option value="Open">Open</option>
-                  <option value="Won">Won</option>
-                  <option value="Lost">Lost</option>
-                </select>
-                <ChevronDown className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Probabilité (%)</label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                Probabilité (%)
+              </label>
               <input type="number" min="0" max="100"
                 value={form.prob} onChange={e => set('prob', e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                disabled={form.auto_prob}
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-400" />
+            </div>
+            <div className="h-10 flex items-center gap-2 px-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer"
+              onClick={() => set('auto_prob', !form.auto_prob)}>
+              <div className={`h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${form.auto_prob ? 'bg-slate-900 border-slate-900' : 'border-slate-400 bg-white'}`}>
+                {form.auto_prob && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+              </div>
+              <span className="text-xs font-semibold text-slate-700 select-none">AUTO</span>
             </div>
           </div>
 
@@ -349,6 +367,28 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
               </div>
             </div>
+            {/* Extra cartes */}
+            {form.extra_cards.map((c, i) => (
+              <div key={i} className="flex items-center gap-2 mt-2">
+                <div className="relative flex-1">
+                  <select value={c} onChange={e => {
+                    const cards = [...form.extra_cards]; cards[i] = e.target.value; set('extra_cards', cards)
+                  }} className="h-9 w-full rounded-lg border border-slate-200 pl-3 pr-7 text-sm outline-none focus:border-blue-400 bg-white appearance-none">
+                    <option value="">-- Carte --</option>
+                    {(CARTES[form.bu] || []).map(c2 => <option key={c2} value={c2}>{c2}</option>)}
+                  </select>
+                  <ChevronDown className="absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                </div>
+                <button onClick={() => set('extra_cards', form.extra_cards.filter((_, j) => j !== i))}
+                  className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+            <button onClick={() => set('extra_cards', [...form.extra_cards, ''])} type="button"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700">
+              <Plus className="h-3.5 w-3.5" /> Nouvelle carte
+            </button>
           )}
 
           {/* ── MULTI BU LINES ── */}
