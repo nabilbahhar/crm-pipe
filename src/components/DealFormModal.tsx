@@ -19,13 +19,11 @@ export type DealFormData = {
   stage: string
   multi_bu: boolean
   auto_prob: boolean
-  // Single BU mode
   bu: string
   vendor: string
   card: string
   amount: string
-  extra_cards: string[]  // additional cartes
-  // Multi BU mode
+  extra_cards: string[]
   bu_lines: BuLine[]
   prob: string
   booking_month: string
@@ -61,7 +59,6 @@ const CARTES: Record<string, string[]> = {
   CSG:     ['Dell','HPE','Lenovo','Apple','Samsung','Zebra','Cisco','HP Inc','Multi'],
 }
 
-
 const STAGE_PROB: Record<string, number> = {
   Lead: 10, Discovery: 20, Qualified: 40, Solutioning: 55,
   'Proposal Sent': 70, Negotiation: 80, Commit: 90,
@@ -73,12 +70,11 @@ const EMPTY_LINE: BuLine = { bu: 'CSG', vendor: '', card: '', amount: '' }
 function emptyForm(): DealFormData {
   return {
     account_id: '', title: '', stage: 'Solutioning',
-    multi_bu: false,
-    auto_prob: true,
+    multi_bu: false, auto_prob: true,
     bu: 'CSG', vendor: '', card: '', amount: '',
     extra_cards: [],
     bu_lines: [{ ...EMPTY_LINE }],
-    prob: '50', booking_month: '', next_step: '', notes: '',
+    prob: '55', booking_month: '', next_step: '', notes: '',
     po_number: '', po_date: '',
   }
 }
@@ -115,7 +111,6 @@ export function dealFromRow(row: any): DealFormData {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 interface Props {
-  /** null = create mode, object = edit mode */
   editRow?: any | null
   onClose: () => void
   onSaved: () => void
@@ -128,7 +123,6 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState<string | null>(null)
 
-  // Load accounts for dropdown
   useEffect(() => {
     supabase.from('accounts').select('id, name').order('name')
       .then(({ data }) => setAccounts((data || []) as Account[]))
@@ -147,7 +141,6 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
     })
   }
 
-  // BU line helpers
   function setLine(i: number, key: keyof BuLine, val: string) {
     setForm(f => {
       const lines = [...f.bu_lines]
@@ -155,14 +148,15 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
       return { ...f, bu_lines: lines }
     })
   }
+
   function addLine() {
     setForm(f => ({ ...f, bu_lines: [...f.bu_lines, { ...EMPTY_LINE }] }))
   }
+
   function removeLine(i: number) {
     setForm(f => ({ ...f, bu_lines: f.bu_lines.filter((_, idx) => idx !== i) }))
   }
 
-  // Compute total amount
   const totalAmount = form.multi_bu
     ? form.bu_lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0)
     : parseFloat(form.amount) || 0
@@ -177,7 +171,7 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
       account_id: form.account_id,
       title: form.title.trim(),
       stage: form.stage,
-      status: 'Open',
+      status: isEdit ? (editRow.status || 'Open') : 'Open',
       prob: parseInt(form.prob) || 0,
       booking_month: form.booking_month || null,
       next_step: form.next_step.trim() || null,
@@ -230,7 +224,7 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
     >
       <div className="w-full max-w-2xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl ring-1 ring-slate-200 flex flex-col max-h-[95vh]">
 
-        {/* ── Header ── */}
+        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <div>
             <div className="text-base font-bold text-slate-900">
@@ -246,7 +240,7 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
           </button>
         </div>
 
-        {/* ── Body ── */}
+        {/* Body */}
         <div className="overflow-y-auto px-6 py-5 space-y-5">
 
           {/* Compte + Titre */}
@@ -291,18 +285,24 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                Probabilité (%)
-              </label>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">Probabilité (%)</label>
               <input type="number" min="0" max="100"
-                value={form.prob} onChange={e => set('prob', e.target.value)}
+                value={form.prob}
+                onChange={e => set('prob', e.target.value)}
                 disabled={form.auto_prob}
-                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-400" />
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-50 disabled:text-slate-400"
+              />
             </div>
-            <div className="h-10 flex items-center gap-2 px-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer"
-              onClick={() => set('auto_prob', !form.auto_prob)}>
+            <div
+              className="h-10 flex items-center gap-2 px-3 bg-slate-50 rounded-xl border border-slate-200 cursor-pointer"
+              onClick={() => set('auto_prob', !form.auto_prob)}
+            >
               <div className={`h-4 w-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${form.auto_prob ? 'bg-slate-900 border-slate-900' : 'border-slate-400 bg-white'}`}>
-                {form.auto_prob && <svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                {form.auto_prob && (
+                  <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                    <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
               </div>
               <span className="text-xs font-semibold text-slate-700 select-none">AUTO</span>
             </div>
@@ -325,73 +325,92 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
             )}
           </div>
 
-          {/* ── SINGLE BU ── */}
+          {/* SINGLE BU */}
           {!form.multi_bu && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">BU</label>
-                <div className="relative">
-                  <select value={form.bu} onChange={e => { set('bu', e.target.value); set('vendor', ''); set('card', '') }}
-                    className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-8 text-sm outline-none focus:border-blue-400 bg-white appearance-none">
-                    {BUS.map(b => <option key={b} value={b}>{b}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">BU</label>
+                  <div className="relative">
+                    <select
+                      value={form.bu}
+                      onChange={e => setForm(f => ({ ...f, bu: e.target.value, vendor: '', card: '', extra_cards: [] }))}
+                      className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-8 text-sm outline-none focus:border-blue-400 bg-white appearance-none"
+                    >
+                      {BUS.map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Vendor</label>
+                  <div className="relative">
+                    <select value={form.vendor} onChange={e => set('vendor', e.target.value)}
+                      className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-8 text-sm outline-none focus:border-blue-400 bg-white appearance-none">
+                      <option value="">--</option>
+                      {(VENDORS[form.bu] || []).map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Carte</label>
+                  <div className="relative">
+                    <select value={form.card} onChange={e => set('card', e.target.value)}
+                      className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-8 text-sm outline-none focus:border-blue-400 bg-white appearance-none">
+                      <option value="">--</option>
+                      {(CARTES[form.bu] || []).map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">Montant (MAD)</label>
+                  <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)}
+                    placeholder="0"
+                    className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Vendor</label>
-                <div className="relative">
-                  <select value={form.vendor} onChange={e => set('vendor', e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-8 text-sm outline-none focus:border-blue-400 bg-white appearance-none">
-                    <option value="">--</option>
-                    {(VENDORS[form.bu] || []).map(v => <option key={v} value={v}>{v}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
+
+              {form.extra_cards.map((c, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <select
+                      value={c}
+                      onChange={e => {
+                        const cards = [...form.extra_cards]
+                        cards[i] = e.target.value
+                        set('extra_cards', cards)
+                      }}
+                      className="h-9 w-full rounded-lg border border-slate-200 pl-3 pr-7 text-sm outline-none focus:border-blue-400 bg-white appearance-none"
+                    >
+                      <option value="">-- Carte --</option>
+                      {(CARTES[form.bu] || []).map(c2 => <option key={c2} value={c2}>{c2}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => set('extra_cards', form.extra_cards.filter((_, j) => j !== i))}
+                    className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Carte</label>
-                <div className="relative">
-                  <select value={form.card} onChange={e => set('card', e.target.value)}
-                    className="h-10 w-full rounded-xl border border-slate-200 pl-3 pr-8 text-sm outline-none focus:border-blue-400 bg-white appearance-none">
-                    <option value="">--</option>
-                    {(CARTES[form.bu] || []).map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2.5 top-3 h-4 w-4 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1.5">Montant (MAD)</label>
-                <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)}
-                  placeholder="0"
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-              </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => set('extra_cards', [...form.extra_cards, ''])}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700"
+              >
+                <Plus className="h-3.5 w-3.5" /> Nouvelle carte
+              </button>
             </div>
-            {/* Extra cartes */}
-            {form.extra_cards.map((c, i) => (
-              <div key={i} className="flex items-center gap-2 mt-2">
-                <div className="relative flex-1">
-                  <select value={c} onChange={e => {
-                    const cards = [...form.extra_cards]; cards[i] = e.target.value; set('extra_cards', cards)
-                  }} className="h-9 w-full rounded-lg border border-slate-200 pl-3 pr-7 text-sm outline-none focus:border-blue-400 bg-white appearance-none">
-                    <option value="">-- Carte --</option>
-                    {(CARTES[form.bu] || []).map(c2 => <option key={c2} value={c2}>{c2}</option>)}
-                  </select>
-                  <ChevronDown className="absolute right-2 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
-                </div>
-                <button onClick={() => set('extra_cards', form.extra_cards.filter((_, j) => j !== i))}
-                  className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-            <button onClick={() => set('extra_cards', [...form.extra_cards, ''])} type="button"
-              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700">
-              <Plus className="h-3.5 w-3.5" /> Nouvelle carte
-            </button>
           )}
 
-          {/* ── MULTI BU LINES ── */}
+          {/* MULTI BU LINES */}
           {form.multi_bu && (
             <div className="space-y-2">
               <div className="flex items-center justify-between mb-1">
@@ -403,18 +422,17 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
               </div>
               {form.bu_lines.map((line, i) => (
                 <div key={i} className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-2 items-end bg-slate-50 rounded-xl p-3">
-                  {/* BU */}
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-500 mb-1">BU</label>
                     <div className="relative">
-                      <select value={line.bu} onChange={e => { setLine(i, 'bu', e.target.value); setLine(i, 'vendor', ''); setLine(i, 'card', '') }}
+                      <select value={line.bu}
+                        onChange={e => { setLine(i, 'bu', e.target.value); setLine(i, 'vendor', ''); setLine(i, 'card', '') }}
                         className="h-9 w-full rounded-lg border border-slate-200 pl-2 pr-6 text-sm outline-none focus:border-blue-400 bg-white appearance-none">
                         {BUS.map(b => <option key={b} value={b}>{b}</option>)}
                       </select>
                       <ChevronDown className="absolute right-1.5 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                     </div>
                   </div>
-                  {/* Vendor */}
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-500 mb-1">Vendor</label>
                     <div className="relative">
@@ -426,7 +444,6 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                       <ChevronDown className="absolute right-1.5 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                     </div>
                   </div>
-                  {/* Carte */}
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-500 mb-1">Carte</label>
                     <div className="relative">
@@ -438,14 +455,13 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                       <ChevronDown className="absolute right-1.5 top-2.5 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
                     </div>
                   </div>
-                  {/* Montant */}
                   <div>
                     <label className="block text-[11px] font-semibold text-slate-500 mb-1">Montant</label>
                     <input type="number" value={line.amount} onChange={e => setLine(i, 'amount', e.target.value)}
                       placeholder="0"
-                      className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm outline-none focus:border-blue-400" />
+                      className="h-9 w-full rounded-lg border border-slate-200 px-2 text-sm outline-none focus:border-blue-400"
+                    />
                   </div>
-                  {/* Remove */}
                   <button onClick={() => removeLine(i)} type="button" disabled={form.bu_lines.length <= 1}
                     className="h-9 w-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 disabled:opacity-30 transition-colors">
                     <Trash2 className="h-3.5 w-3.5" />
@@ -461,13 +477,15 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">Closing (YYYY-MM)</label>
               <input value={form.booking_month} onChange={e => set('booking_month', e.target.value)}
                 placeholder="2026-03"
-                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">Next Step</label>
               <input value={form.next_step} onChange={e => set('next_step', e.target.value)}
                 placeholder="Ex: Relancer le client..."
-                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
             </div>
           </div>
 
@@ -477,12 +495,14 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">N° PO</label>
               <input value={form.po_number} onChange={e => set('po_number', e.target.value)}
                 placeholder="PO-2026-XXXX"
-                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">Date PO</label>
               <input type="date" value={form.po_date} onChange={e => set('po_date', e.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              />
             </div>
           </div>
 
@@ -491,10 +511,10 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
             <label className="block text-xs font-semibold text-slate-600 mb-1.5">Notes</label>
             <textarea value={form.notes} onChange={e => set('notes', e.target.value)}
               rows={3} placeholder="Informations complémentaires..."
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none" />
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none"
+            />
           </div>
 
-          {/* Error */}
           {err && (
             <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-600">
               ⚠️ {err}
@@ -502,7 +522,7 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
           )}
         </div>
 
-        {/* ── Footer ── */}
+        {/* Footer */}
         <div className="flex gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50 shrink-0">
           <button onClick={onClose}
             className="flex-1 h-10 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
