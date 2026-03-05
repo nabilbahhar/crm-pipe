@@ -235,8 +235,14 @@ function PasswordModal({ onClose, userEmail }: { onClose: () => void; userEmail:
 }
 
 // ── NavBar ────────────────────────────────────────────────────────────────────
+const AUTH_PAGES = ['/login', '/reset-password']
+
 export default function NavBar() {
   const path = usePathname();
+
+  // Cacher la navbar sur les pages d'authentification
+  if (AUTH_PAGES.some(p => path === p || path.startsWith(p))) return null
+
   const [email, setEmail]           = useState<string | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
