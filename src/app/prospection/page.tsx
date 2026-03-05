@@ -438,18 +438,19 @@ export default function ProspectionPage() {
                     <th className="px-4 py-3 text-left font-semibold">Next Step</th>
                     <th className="px-4 py-3 text-left font-semibold">Relance</th>
                     <th className="px-4 py-3 text-left font-semibold">Source</th>
+                    <th className="px-4 py-3 text-left font-semibold">Créé le</th>
                     <th className="px-4 py-3 text-left font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {loading ? (
-                    <tr><td colSpan={9} className="py-16 text-center text-sm text-slate-400">
+                    <tr><td colSpan={10} className="py-16 text-center text-sm text-slate-400">
                       <div className="flex items-center justify-center gap-2">
                         <RefreshCw className="h-4 w-4 animate-spin" /> Chargement…
                       </div>
                     </td></tr>
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan={9} className="py-12 text-center text-sm text-slate-400">Aucun prospect.</td></tr>
+                    <tr><td colSpan={10} className="py-12 text-center text-sm text-slate-400">Aucun prospect.</td></tr>
                   ) : filtered.map(p => {
                     const overdue = isOverdue(p.next_date) && p.status !== 'Qualifié ✓'
                     const todayFlag = isToday(p.next_date)
@@ -508,6 +509,11 @@ export default function ProspectionPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-400">{p.source || '—'}</td>
+                        <td className="px-4 py-3 text-xs text-slate-400 tabular-nums whitespace-nowrap">
+                          {p.created_at
+                            ? new Date(p.created_at).toLocaleDateString('fr-MA', { day:'2-digit', month:'short', year:'numeric' })
+                            : <span className="text-slate-200">—</span>}
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             {nextS && (
