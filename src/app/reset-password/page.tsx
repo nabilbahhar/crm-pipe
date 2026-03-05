@@ -28,16 +28,17 @@ function ResetPasswordInner() {
   const sp = useSearchParams()
   const code = sp.get('code')
 
-  const [email, setEmail] = useState('')
-  const [newPwd, setNewPwd] = useState('')
+  const [email, setEmail]           = useState('')
+  const [newPwd, setNewPwd]         = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')
-  const [step, setStep] = useState<'request' | 'exchanging' | 'update'>(code ? 'exchanging' : 'request')
-  const [loading, setLoading] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
+  const [step, setStep]             = useState<'request' | 'exchanging' | 'update'>(code ? 'exchanging' : 'request')
+  const [loading, setLoading]       = useState(false)
+  const [err, setErr]               = useState<string | null>(null)
+  const [info, setInfo]             = useState<string | null>(null)
 
   const emailNormalized = useMemo(() => email.trim().toLowerCase(), [email])
 
+  // Cas 1 : lien avec ?code= (PKCE flow)
   useEffect(() => {
     let cancelled = false
     async function run() {
@@ -46,7 +47,7 @@ function ResetPasswordInner() {
       const { error } = await supabase.auth.exchangeCodeForSession(code)
       if (cancelled) return
       if (error) {
-        setErr("Lien invalide ou expiré. Recommence depuis la page Login.")
+        setErr('Lien invalide ou expiré. Recommence depuis la page Login.')
         setStep('request')
         return
       }
@@ -56,13 +57,26 @@ function ResetPasswordInner() {
     return () => { cancelled = true }
   }, [code])
 
+  // Cas 2 : lien avec #access_token (implicit flow)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setStep('update')
+        setErr(null)
+        setInfo(null)
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
   async function requestReset(e: React.FormEvent) {
-    e.preventDefault(); setErr(null); setInfo(null)
+    e.preventDefault()
+    setErr(null); setInfo(null)
     if (!emailNormalized) return setErr('Saisis ton email.')
     if (!ALLOWED_EMAILS.has(emailNormalized)) return setErr("Cet email n'est pas autorisé.")
     setLoading(true)
     const { error } = await supabase.auth.resetPasswordForEmail(emailNormalized, {
-      redirectTo: `${window.location.origin}/reset-password`
+      redirectTo: `${window.location.origin}/reset-password`,
     })
     setLoading(false)
     if (error) return setErr(error.message)
@@ -70,7 +84,8 @@ function ResetPasswordInner() {
   }
 
   async function updatePassword(e: React.FormEvent) {
-    e.preventDefault(); setErr(null); setInfo(null)
+    e.preventDefault()
+    setErr(null); setInfo(null)
     if (!newPwd || newPwd.length < 8) return setErr('Mot de passe trop court (8 caractères minimum).')
     if (newPwd !== confirmPwd) return setErr('Les deux mots de passe ne correspondent pas.')
     setLoading(true)
@@ -92,7 +107,7 @@ function ResetPasswordInner() {
         </div>
 
         <div className="rounded-2xl bg-white p-7 shadow-sm border border-slate-100">
-          {err && <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{err}</div>}
+          {err  && <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{err}</div>}
           {info && <div className="mb-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-700">{info}</div>}
 
           {step === 'exchanging' && (
