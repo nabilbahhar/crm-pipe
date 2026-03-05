@@ -441,8 +441,8 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                         </td>
                         <td className="px-4 py-3"><StageBadge stage={r.stage} /></td>
                         <td className="px-4 py-3"><BuBadge bu={r.multi_bu?'MULTI':r.bu} /></td>
-                        <td className="px-4 py-3 max-w-[120px]">
-                          <span className="truncate text-xs text-slate-700">{vendorLabel}</span>
+                        <td className="px-4 py-3 max-w-[140px] overflow-hidden">
+                          <div className="truncate text-xs text-slate-700" title={vendorLabel}>{vendorLabel}</div>
                         </td>
                         <td className="px-4 py-3 text-right font-semibold text-slate-900 tabular-nums">{mad(Number(r.amount||0))}</td>
                         <td className="px-4 py-3"><ProbBar prob={Number(r.prob||0)} /></td>
