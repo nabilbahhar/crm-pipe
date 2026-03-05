@@ -106,9 +106,11 @@ export default function PipelinePage() {
   const [view, setView]         = useState<'list' | 'kanban'>('list')
 
   // Filters
-  const [stageFilter, setStageFilter] = useState<string>('Open')
+  const [stageFilter, setStageFilter] = useState<string>('Tous')
   const [buFilter, setBuFilter]       = useState<string>('Tous')
   const [search, setSearch]           = useState('')
+  const [accountFilter, setAccountFilter] = useState<string>('Tous')
+  const [vendorFilter, setVendorFilter]   = useState<string>('Tous')
   const [sortCol, setSortCol]         = useState<'amount'|'prob'|'booking_month'|'stage'>('booking_month')
   const [sortAsc, setSortAsc]         = useState(true)
 
@@ -125,6 +127,11 @@ export default function PipelinePage() {
 
   async function advanceStage(deal: DealRow) {
     const next = STAGE_NEXT[deal.stage]; if (!next) return
+    if (next === 'Won') {
+      if (!confirm(`⚠️ Marquer "${deal.title}" comme WON ?
+
+Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
+    }
     const { error } = await supabase.from('opportunities').update({
       stage: next, status: next==='Won'?'Won':'Open', prob: STAGE_PROB[next]??deal.prob
     }).eq('id', deal.id)
@@ -171,13 +178,31 @@ export default function PipelinePage() {
   }, [rows])
 
   // ── Filtered rows ──────────────────────────────────────────────────────────
+  // Computed lists for dropdowns
+  const accountOptions = useMemo(() => {
+    const names = [...new Set(rows.map(r => r.accounts?.name||'').filter(Boolean))].sort()
+    return ['Tous', ...names]
+  }, [rows])
+
+  const vendorOptions = useMemo(() => {
+    const vendors = [...new Set(rows.map(r => r.vendor||'').filter(v => v && v !== 'MULTI'))].sort()
+    return ['Tous', ...vendors]
+  }, [rows])
+
   const displayRows = useMemo(() => {
     let r = [...rows]
+    // Status / Stage filter
     if (stageFilter==='Open')  r = r.filter(x => x.status==='Open')
     else if (stageFilter==='Won')  r = r.filter(x => x.status==='Won')
     else if (stageFilter==='Lost') r = r.filter(x => x.status==='Lost')
-    else r = r.filter(x => x.stage===stageFilter)
+    else if (stageFilter!=='Tous') r = r.filter(x => x.stage===stageFilter)
+    // BU filter
     if (buFilter!=='Tous') r = r.filter(x => x.bu===buFilter||(x.multi_bu&&buFilter==='MULTI'))
+    // Account filter
+    if (accountFilter!=='Tous') r = r.filter(x => (x.accounts?.name||'')=== accountFilter)
+    // Vendor filter
+    if (vendorFilter!=='Tous') r = r.filter(x => (x.vendor||'')=== vendorFilter)
+    // Search
     const q = search.trim().toLowerCase()
     if (q) r = r.filter(x =>
       (x.accounts?.name||'').toLowerCase().includes(q)||
@@ -193,7 +218,7 @@ export default function PipelinePage() {
       return sortAsc?(av>bv?1:-1):(av<bv?1:-1)
     })
     return r
-  }, [rows, stageFilter, buFilter, search, sortCol, sortAsc])
+  }, [rows, stageFilter, buFilter, accountFilter, vendorFilter, search, sortCol, sortAsc])
 
   function toggleSort(col: typeof sortCol) {
     if (sortCol===col) setSortAsc(p=>!p)
@@ -271,7 +296,7 @@ export default function PipelinePage() {
               const isActive = stageFilter===s
               return (
                 <button key={s}
-                  onClick={() => setStageFilter(isActive?'Open':s)}
+                  onClick={() => setStageFilter(isActive?'Tous':s)}
                   className={`flex-1 min-w-[90px] rounded-xl border px-3 py-2.5 text-left transition-all hover:shadow-sm
                     ${isActive ? `${c.bg} ${c.border} ${c.text}` : 'border-slate-100 hover:border-slate-200'}`}>
                   <div className={`text-[10px] font-semibold uppercase tracking-wide truncate ${isActive?c.text:'text-slate-400'}`}>{s}</div>
@@ -290,6 +315,7 @@ export default function PipelinePage() {
           {/* Status */}
           <div className="flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
             {[
+              { key:'Tous', label:`Tous (${rows.length})` },
               { key:'Open',  label:`Open (${stats.totalOpen})` },
               { key:'Won',   label:`Won (${stats.totalWon})` },
               { key:'Lost',  label:`Lost (${stats.totalLost})` },
@@ -304,6 +330,23 @@ export default function PipelinePage() {
             ))}
           </div>
 
+          {/* Stage filter - pipeline order */}
+          <div className="flex gap-1 rounded-xl border bg-white p-1 shadow-sm overflow-x-auto">
+            {['Tous',...STAGES].map(s => {
+              const st = STAGE_STYLE[s]
+              const isActive = stageFilter===s
+              return (
+                <button key={s} onClick={() => setStageFilter(s)}
+                  className={`whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors
+                    ${isActive
+                      ? s==='Won'?'bg-emerald-600 text-white':s.includes('Lost')?'bg-red-600 text-white':'bg-slate-900 text-white'
+                      : 'text-slate-500 hover:bg-slate-50'}`}>
+                  {s==='Tous' ? 'Toutes étapes' : s}
+                </button>
+              )
+            })}
+          </div>
+
           {/* BU */}
           <div className="flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
             {['Tous',...BUS].map(b => (
@@ -312,6 +355,18 @@ export default function PipelinePage() {
                   ${buFilter===b?'bg-slate-900 text-white':'text-slate-500 hover:bg-slate-50'}`}>{b}</button>
             ))}
           </div>
+
+          {/* Compte */}
+          <select value={accountFilter} onChange={e => setAccountFilter(e.target.value)}
+            className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none cursor-pointer">
+            {accountOptions.map(a => <option key={a} value={a}>{a==='Tous'?'Tous comptes':a}</option>)}
+          </select>
+
+          {/* Vendor / Carte */}
+          <select value={vendorFilter} onChange={e => setVendorFilter(e.target.value)}
+            className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none cursor-pointer">
+            {vendorOptions.map(v => <option key={v} value={v}>{v==='Tous'?'Tous vendors':v}</option>)}
+          </select>
 
           {/* Search */}
           <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3 shadow-sm">
@@ -451,7 +506,7 @@ export default function PipelinePage() {
         {/* ── KANBAN ───────────────────────────────────────────────────────── */}
         {view === 'kanban' && (
           <div className="mt-3 flex gap-3 overflow-x-auto pb-4">
-            {(['Lead','Discovery','Qualified','Solutioning','Proposal Sent','Negotiation','Commit','Won'] as const).map(stage => {
+            {(['Lead','Discovery','Qualified','Solutioning','Proposal Sent','Negotiation','Commit','Won','Lost / No decision'] as const).map(stage => {
               const cards = displayRows.filter(r => r.stage===stage)
               const st = STAGE_STYLE[stage]
               const colAmt = cards.reduce((s,r)=>s+Number(r.amount||0),0)
