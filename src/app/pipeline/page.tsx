@@ -1,11 +1,12 @@
 'use client'
 import DealFormModal from '@/components/DealFormModal'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { logActivity } from '@/lib/logActivity'
-import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2 } from 'lucide-react'
+import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2, X } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DealRow = {
@@ -97,7 +98,9 @@ function ProbBar({ prob }: { prob: number }) {
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
-export default function PipelinePage() {
+function PipelineContent() {
+  const searchParams = useSearchParams()
+
   const [showNewDeal, setShowNewDeal] = useState(false)
   const [editRow, setEditRow] = useState<any>(null)
   const [rows, setRows]         = useState<DealRow[]>([])
@@ -106,14 +109,21 @@ export default function PipelinePage() {
   const [info, setInfo]         = useState<string | null>(null)
   const [view, setView]         = useState<'list' | 'kanban'>('list')
 
-  // Filters
+  // Filters — accountFilter initialisé depuis ?account= si présent
   const [stageFilter, setStageFilter] = useState<string>('Tous')
   const [buFilter, setBuFilter]       = useState<string>('Tous')
   const [search, setSearch]           = useState('')
-  const [accountFilter, setAccountFilter] = useState<string>('Tous')
+  const [accountFilter, setAccountFilter] = useState<string>(() => searchParams.get('account') || 'Tous')
   const [vendorFilter, setVendorFilter]   = useState<string>('Tous')
   const [sortCol, setSortCol]         = useState<'amount'|'prob'|'booking_month'|'stage'|'account'|'vendor'>('booking_month')
   const [sortAsc, setSortAsc]         = useState(true)
+
+  // Sync si navigation back/forward change le param URL
+  useEffect(() => {
+    const acc = searchParams.get('account')
+    if (acc) setAccountFilter(acc)
+    else setAccountFilter('Tous')
+  }, [searchParams])
 
   async function load() {
     setLoading(true); setErr(null)
@@ -274,6 +284,21 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
 
         {err  && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>}
         {info && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{info}</div>}
+
+        {/* Bandeau filtre compte actif (depuis Comptes) */}
+        {accountFilter !== 'Tous' && searchParams.get('account') && (
+          <div className="mt-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5">
+            <span className="text-xs font-semibold text-blue-700">
+              🏢 Pipeline filtré pour : <span className="font-black">{accountFilter}</span>
+            </span>
+            <button
+              onClick={() => setAccountFilter('Tous')}
+              className="ml-auto inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-white px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
+            >
+              <X className="h-3 w-3" /> Voir tout le pipeline
+            </button>
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -660,5 +685,20 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       )}
 
     </div>
+  )
+}
+
+// Suspense wrapper requis par Next.js pour useSearchParams()
+export default function PipelinePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex items-center gap-2 text-slate-400 text-sm">
+          <RefreshCw className="h-4 w-4 animate-spin" /> Chargement…
+        </div>
+      </div>
+    }>
+      <PipelineContent />
+    </Suspense>
   )
 }
