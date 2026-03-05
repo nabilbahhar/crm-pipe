@@ -4,6 +4,7 @@ import DealFormModal from '@/components/DealFormModal'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { logActivity } from '@/lib/logActivity'
 import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -136,6 +137,13 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       stage: next, status: next==='Won'?'Won':'Open', prob: STAGE_PROB[next]??deal.prob
     }).eq('id', deal.id)
     if (error) { setErr(error.message); return }
+    await logActivity({
+      action_type: next === 'Won' ? 'won' : 'stage',
+      entity_type: 'deal',
+      entity_id: deal.id,
+      entity_name: deal.title,
+      detail: `${deal.stage} → ${next}`,
+    })
     toast(`${deal.title} → ${next}`); load()
   }
 
@@ -143,6 +151,13 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
     if (!confirm(`Supprimer "${deal.title}" ? Cette action est irréversible.`)) return
     const { error } = await supabase.from('opportunities').delete().eq('id', deal.id)
     if (error) { setErr(error.message); return }
+    await logActivity({
+      action_type: 'delete',
+      entity_type: 'deal',
+      entity_id: deal.id,
+      entity_name: deal.title,
+      detail: `${deal.stage} · ${deal.bu || ''} · ${deal.amount ? deal.amount + ' MAD' : ''}`.trim(),
+    })
     toast(`${deal.title} supprimé.`); load()
   }
 
