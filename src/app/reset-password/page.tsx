@@ -78,7 +78,7 @@ function ResetPasswordInner() {
     setLoading(false)
     if (error) return setErr(error.message)
     setInfo('Mot de passe mis à jour ! Redirection…')
-    setTimeout(() => router.replace('/dashboard-v3'), 1500)
+    setTimeout(() => router.replace('/dashboard'), 1500)
   }
 
   return (
