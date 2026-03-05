@@ -111,7 +111,7 @@ export default function PipelinePage() {
   const [search, setSearch]           = useState('')
   const [accountFilter, setAccountFilter] = useState<string>('Tous')
   const [vendorFilter, setVendorFilter]   = useState<string>('Tous')
-  const [sortCol, setSortCol]         = useState<'amount'|'prob'|'booking_month'|'stage'>('booking_month')
+  const [sortCol, setSortCol]         = useState<'amount'|'prob'|'booking_month'|'stage'|'account'|'vendor'>('booking_month')
   const [sortAsc, setSortAsc]         = useState(true)
 
   async function load() {
@@ -214,17 +214,23 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       if (sortCol==='amount') { av=a.amount; bv=b.amount }
       else if (sortCol==='prob') { av=a.prob||0; bv=b.prob||0 }
       else if (sortCol==='booking_month') { av=a.booking_month||''; bv=b.booking_month||'' }
+      else if (sortCol==='account') { av=(a.accounts?.name||'').toLowerCase(); bv=(b.accounts?.name||'').toLowerCase() }
+      else if (sortCol==='vendor') { av=(a.vendor||'').toLowerCase(); bv=(b.vendor||'').toLowerCase() }
       else { av=STAGES.indexOf(a.stage as any); bv=STAGES.indexOf(b.stage as any) }
       return sortAsc?(av>bv?1:-1):(av<bv?1:-1)
     })
     return r
   }, [rows, stageFilter, buFilter, accountFilter, vendorFilter, search, sortCol, sortAsc])
 
-  function toggleSort(col: typeof sortCol) {
+  function toggleSort(col: 'amount'|'prob'|'booking_month'|'stage'|'account'|'vendor') {
     if (sortCol===col) setSortAsc(p=>!p)
     else { setSortCol(col); setSortAsc(false) }
   }
-  const si = (col: typeof sortCol) => <span className="ml-1 text-slate-300">{sortCol===col?(sortAsc?'↑':'↓'):'↕'}</span>
+  const si = (col: 'amount'|'prob'|'booking_month'|'stage'|'account'|'vendor') => (
+    <span className={`text-xs ml-0.5 ${sortCol===col ? 'text-slate-800 font-bold' : 'text-slate-300'}`}>
+      {sortCol===col ? (sortAsc ? '↑' : '↓') : '↕'}
+    </span>
+  )
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -401,14 +407,26 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
               <table className="w-full min-w-[1100px] text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50 text-xs text-slate-500">
-                    <th className="px-4 py-3 text-left font-semibold">Compte</th>
+                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-slate-800 hover:bg-slate-100 transition-colors" onClick={()=>toggleSort('account')}>
+                      <div className="flex items-center gap-1">Compte {si('account')}</div>
+                    </th>
                     <th className="px-4 py-3 text-left font-semibold">Deal</th>
-                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none" onClick={()=>toggleSort('stage')}>Étape {si('stage')}</th>
+                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-slate-800 hover:bg-slate-100 transition-colors" onClick={()=>toggleSort('stage')}>
+                      <div className="flex items-center gap-1">Étape {si('stage')}</div>
+                    </th>
                     <th className="px-4 py-3 text-left font-semibold">BU</th>
-                    <th className="px-4 py-3 text-left font-semibold">Vendor</th>
-                    <th className="px-4 py-3 text-right font-semibold cursor-pointer select-none" onClick={()=>toggleSort('amount')}>Montant {si('amount')}</th>
-                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none" onClick={()=>toggleSort('prob')}>Prob {si('prob')}</th>
-                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none" onClick={()=>toggleSort('booking_month')}>Closing {si('booking_month')}</th>
+                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-slate-800 hover:bg-slate-100 transition-colors" onClick={()=>toggleSort('vendor')}>
+                      <div className="flex items-center gap-1">Vendor {si('vendor')}</div>
+                    </th>
+                    <th className="px-4 py-3 text-right font-semibold cursor-pointer select-none hover:text-slate-800 hover:bg-slate-100 transition-colors" onClick={()=>toggleSort('amount')}>
+                      <div className="flex items-center justify-end gap-1">Montant {si('amount')}</div>
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-slate-800 hover:bg-slate-100 transition-colors" onClick={()=>toggleSort('prob')}>
+                      <div className="flex items-center gap-1">Prob {si('prob')}</div>
+                    </th>
+                    <th className="px-4 py-3 text-left font-semibold cursor-pointer select-none hover:text-slate-800 hover:bg-slate-100 transition-colors" onClick={()=>toggleSort('booking_month')}>
+                      <div className="flex items-center gap-1">Closing {si('booking_month')}</div>
+                    </th>
                     <th className="px-4 py-3 text-left font-semibold">Next Step</th>
                     <th className="px-4 py-3 text-left font-semibold">PO</th>
                     <th className="px-4 py-3 text-left font-semibold">Actions</th>
