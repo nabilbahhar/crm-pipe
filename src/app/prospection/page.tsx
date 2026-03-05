@@ -156,6 +156,8 @@ export default function ProspectionPage() {
   const [heatFilter, setHeatFilter]   = useState('Tous')
   const [typeFilter, setTypeFilter]   = useState('Tous')
   const [showOverdue, setShowOverdue] = useState(false)
+  const [dateFrom, setDateFrom]       = useState('')
+  const [dateTo, setDateTo]           = useState('')
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false)
@@ -195,6 +197,8 @@ export default function ProspectionPage() {
     if (heatFilter !== 'Tous') r = r.filter(x => x.heat === heatFilter)
     if (typeFilter !== 'Tous') r = r.filter(x => x.type === typeFilter)
     if (showOverdue) r = r.filter(x => isOverdue(x.next_date) && x.status !== 'Qualifié ✓')
+    if (dateFrom) r = r.filter(x => (x.created_at || '') >= dateFrom)
+    if (dateTo)   r = r.filter(x => (x.created_at || '') <= dateTo + 'T23:59:59')
     return r
   }, [rows, search, heatFilter, typeFilter, showOverdue])
 
@@ -406,6 +410,22 @@ export default function ProspectionPage() {
             ))}
           </div>
 
+          {/* Date range */}
+          <div className="flex items-center gap-1.5 rounded-xl border bg-white px-3 py-1 shadow-sm">
+            <span className="text-[10px] font-semibold text-slate-400">Du</span>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold text-slate-700 focus:outline-none focus:border-slate-400" />
+            <span className="text-[10px] text-slate-400">au</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold text-slate-700 focus:outline-none focus:border-slate-400" />
+            {(dateFrom || dateTo) && (
+              <button onClick={() => { setDateFrom(''); setDateTo('') }}
+                className="inline-flex h-5 w-5 items-center justify-center rounded text-slate-300 hover:text-red-500">
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
           {/* View toggle */}
           <div className="ml-auto flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
             <button onClick={() => setView('list')}
@@ -430,6 +450,7 @@ export default function ProspectionPage() {
               <table className="w-full min-w-[1100px] text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50 text-xs text-slate-500">
+                    <th className="px-3 py-3 text-left w-[78px]">Créé</th>
                     <th className="px-4 py-3 text-left font-semibold">Société</th>
                     <th className="px-4 py-3 text-left font-semibold">Contact</th>
                     <th className="px-4 py-3 text-left font-semibold">Type</th>
@@ -438,25 +459,34 @@ export default function ProspectionPage() {
                     <th className="px-4 py-3 text-left font-semibold">Next Step</th>
                     <th className="px-4 py-3 text-left font-semibold">Relance</th>
                     <th className="px-4 py-3 text-left font-semibold">Source</th>
-                    <th className="px-4 py-3 text-left font-semibold">Créé le</th>
                     <th className="px-4 py-3 text-left font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {loading ? (
-                    <tr><td colSpan={10} className="py-16 text-center text-sm text-slate-400">
+                    <tr><td colSpan={9} className="py-16 text-center text-sm text-slate-400">
                       <div className="flex items-center justify-center gap-2">
                         <RefreshCw className="h-4 w-4 animate-spin" /> Chargement…
                       </div>
                     </td></tr>
                   ) : filtered.length === 0 ? (
-                    <tr><td colSpan={10} className="py-12 text-center text-sm text-slate-400">Aucun prospect.</td></tr>
+                    <tr><td colSpan={9} className="py-12 text-center text-sm text-slate-400">Aucun prospect.</td></tr>
                   ) : filtered.map(p => {
                     const overdue = isOverdue(p.next_date) && p.status !== 'Qualifié ✓'
                     const todayFlag = isToday(p.next_date)
                     const nextS = STATUS_NEXT[p.status]
                     return (
                       <tr key={p.id} className={`group hover:bg-slate-50/60 transition-colors ${overdue ? 'bg-red-50/30' : ''}`}>
+                        <td className="w-[78px] min-w-[78px] pl-3 pr-1 py-2.5">
+                          <div className="flex flex-col gap-0.5 leading-none">
+                            <span className="text-[10px] font-semibold text-slate-500 tabular-nums whitespace-nowrap">
+                              `${new Date(p.created_at).toLocaleDateString('fr-MA', { day: '2-digit', month: 'short' })} ${String(new Date(p.created_at).getFullYear()).slice(-2)}`
+                            </span>
+                            <span className="text-[9px] text-slate-300 tabular-nums">
+                              {new Date(p.created_at).toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                          </div>
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <HeatIcon heat={p.heat} />
@@ -509,11 +539,6 @@ export default function ProspectionPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-400">{p.source || '—'}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400 tabular-nums whitespace-nowrap">
-                          {p.created_at
-                            ? new Date(p.created_at).toLocaleDateString('fr-MA', { day:'2-digit', month:'short', year:'numeric' })
-                            : <span className="text-slate-200">—</span>}
-                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             {nextS && (
