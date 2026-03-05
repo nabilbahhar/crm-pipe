@@ -13,7 +13,6 @@ const NAV_ITEMS = [
   { label: "Comptes",     href: "/accounts" },
   { label: "Deals",       href: "/opportunities" },
   { label: "KPI",         href: "/kpi" },
-  { label: "Inside",      href: "/inside" },
 ];
 
 type Activity = {
