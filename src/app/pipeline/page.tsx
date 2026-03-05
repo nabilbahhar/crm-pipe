@@ -4,7 +4,7 @@ import DealFormModal from '@/components/DealFormModal'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid } from 'lucide-react'
+import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DealRow = {
@@ -130,6 +130,13 @@ export default function PipelinePage() {
     }).eq('id', deal.id)
     if (error) { setErr(error.message); return }
     toast(`${deal.title} → ${next}`); load()
+  }
+
+  async function deleteDeal(deal: DealRow) {
+    if (!confirm(`Supprimer "${deal.title}" ? Cette action est irréversible.`)) return
+    const { error } = await supabase.from('opportunities').delete().eq('id', deal.id)
+    if (error) { setErr(error.message); return }
+    toast(`${deal.title} supprimé.`); load()
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
@@ -385,7 +392,7 @@ export default function PipelinePage() {
                         <td className="px-4 py-3 text-right font-semibold text-slate-900 tabular-nums">{mad(Number(r.amount||0))}</td>
                         <td className="px-4 py-3"><ProbBar prob={Number(r.prob||0)} /></td>
                         <td className="px-4 py-3">
-                          <span className={`text-xs font-semibold tabular-nums
+                          <span className={`whitespace-nowrap text-xs font-semibold tabular-nums
                             ${isPast?'text-red-600':isUrgent?'text-orange-600':'text-slate-600'}`}>
                             {isPast?'⚠ ':isUrgent?'🔥 ':''}{r.booking_month||'—'}
                           </span>
@@ -416,6 +423,10 @@ export default function PipelinePage() {
                             <button onClick={() => setEditRow(r)}
                               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-slate-500 hover:bg-slate-100">
                               <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => deleteDeal(r)}
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-red-300 hover:bg-red-50 hover:text-red-600">
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         </td>
@@ -509,6 +520,10 @@ export default function PipelinePage() {
                             <button onClick={() => setEditRow(r)}
                               className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100">
                               <Pencil className="h-3 w-3" />
+                            </button>
+                            <button onClick={() => deleteDeal(r)}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-red-300 hover:bg-red-50 hover:text-red-500">
+                              <Trash2 className="h-3 w-3" />
                             </button>
                           </div>
                         </div>
