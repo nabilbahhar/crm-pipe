@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { Eye, EyeOff } from 'lucide-react'
@@ -16,7 +16,19 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [showPwd, setShowPwd]   = useState(false)
   const [loading, setLoading]   = useState(false)
+  const [checking, setChecking] = useState(true)
   const [error, setError]       = useState<string | null>(null)
+
+  // ── Redirect si déjà connecté ────────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        router.replace('/dashboard')
+      } else {
+        setChecking(false)
+      }
+    })
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -43,6 +55,13 @@ export default function LoginPage() {
 
     router.replace('/dashboard')
   }
+
+  // Pendant la vérification de session → écran vide
+  if (checking) return (
+    <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ fontSize: 13, color: '#94a3b8' }}>Chargement…</div>
+    </div>
+  )
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4" style={{ background: '#f8fafc' }}>
