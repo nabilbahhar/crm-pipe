@@ -134,6 +134,10 @@ export default function AccountsPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
   const uniqueSectors = useMemo(() => [...new Set(accounts.map(a => a.segment).filter(Boolean) as string[])].sort(), [accounts])
+
+  // Date filters
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo]     = useState('')
   const existsName = (n: string, excludeId?: string) => accounts.some(a => a.id !== excludeId && (a.name || '').trim().toLowerCase() === n.trim().toLowerCase())
 
   // ── Load ─────────────────────────────────────────────────────────────────
@@ -290,7 +294,9 @@ export default function AccountsPage() {
     return accounts.filter(a =>
       (!q || (a.name||'').toLowerCase().includes(q) || (a.segment||'').toLowerCase().includes(q) || (a.region||'').toLowerCase().includes(q)) &&
       (segFilter === 'Tous' || a.sector === segFilter) &&
-      (regFilter === 'Tous' || a.region === regFilter)
+      (regFilter === 'Tous' || a.region === regFilter) &&
+      (!dateFrom || (a.created_at || '') >= dateFrom) &&
+      (!dateTo   || (a.created_at || '') <= dateTo + 'T23:59:59')
     )
   }, [accounts, search, segFilter, regFilter])
 
@@ -465,11 +471,27 @@ export default function AccountsPage() {
 
             <div className="ml-auto flex items-center gap-2 text-xs text-slate-400">
               {filtered.length} / {accounts.length} comptes
-              {(search || segFilter !== 'Tous' || regFilter !== 'Tous') && (
-                <button onClick={() => { setSearch(''); setSegFilter('Tous'); setRegFilter('Tous') }}
+              {(search || segFilter !== 'Tous' || regFilter !== 'Tous' || dateFrom || dateTo) && (
+                <button onClick={() => { setSearch(''); setSegFilter('Tous'); setRegFilter('Tous'); setDateFrom(''); setDateTo('') }}
                   className="text-blue-600 hover:underline font-semibold">Réinitialiser</button>
               )}
             </div>
+          </div>
+
+          {/* Date filter row */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/50 px-5 py-2">
+            <span className="text-xs font-semibold text-slate-400">Créé du :</span>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              className="h-7 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400" />
+            <span className="text-xs text-slate-400">au</span>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              className="h-7 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400" />
+            {(dateFrom || dateTo) && (
+              <button onClick={() => { setDateFrom(''); setDateTo('') }}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200">
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </div>
 
           {/* Table */}
@@ -477,24 +499,36 @@ export default function AccountsPage() {
             <table className="w-full min-w-[760px] text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/70 text-xs font-semibold text-slate-400">
+                  <th className="px-3 py-3 text-left w-[78px]">Créé</th>
                   <th className="px-5 py-3 text-left">Client</th>
                   <th className="px-4 py-3 text-left">Segment</th>
                   <th className="px-4 py-3 text-left">Secteur d'activité</th>
                   <th className="px-4 py-3 text-left">Région</th>
                   <th className="px-4 py-3 text-left">Deals actifs</th>
-                  <th className="px-4 py-3 text-left">Créé le</th>
                   <th className="px-4 py-3 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={7} className="py-16 text-center text-sm text-slate-400">
+                  <tr><td colSpan={6} className="py-16 text-center text-sm text-slate-400">
                     {accounts.length === 0 ? 'Aucun client. Commencez par en ajouter un.' : 'Aucun résultat pour ces filtres.'}
                   </td></tr>
                 ) : filtered.map(a => {
                   const deals = dealCounts[a.id] || 0
                   return (
                     <tr key={a.id} className="group hover:bg-slate-50/60 transition-colors">
+                      <td className="w-[78px] min-w-[78px] pl-3 pr-1 py-2.5">
+                        {a.created_at ? (
+                          <div className="flex flex-col gap-0.5 leading-none">
+                            <span className="text-[10px] font-semibold text-slate-500 tabular-nums whitespace-nowrap">
+                              `${new Date(a.created_at).toLocaleDateString('fr-MA', { day: '2-digit', month: 'short' })} ${String(new Date(a.created_at).getFullYear()).slice(-2)}`
+                            </span>
+                            <span className="text-[9px] text-slate-300 tabular-nums">
+                              {new Date(a.created_at).toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                            </span>
+                          </div>
+                        ) : <span className="text-slate-200 text-[10px]">—</span>}
+                      </td>
                       <td className="px-5 py-3">
                         <div className="font-bold text-slate-900">{a.name}</div>
                       </td>
@@ -514,11 +548,6 @@ export default function AccountsPage() {
                             {deals} deal{deals > 1 ? 's' : ''} <ExternalLink className="h-3 w-3" />
                           </Link>
                         ) : <span className="text-xs text-slate-300">—</span>}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-400 tabular-nums whitespace-nowrap">
-                        {a.created_at
-                          ? new Date(a.created_at).toLocaleDateString('fr-MA', { day:'2-digit', month:'short', year:'numeric' })
-                          : <span className="text-slate-200">—</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
