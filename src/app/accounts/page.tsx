@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type AccountRow = { id: string; name: string; sector: string|null; segment: string|null; region: string|null }
+type AccountRow = { id: string; name: string; sector: string|null; segment: string|null; region: string|null; created_at: string|null }
 type ContactRow = { id: string; account_id: string; full_name: string|null; email: string|null; phone: string|null; role: string|null; is_primary: boolean }
 
 const SEGMENT_OPTIONS = ['Public', 'Semi-public', 'Privé'] as const
@@ -141,7 +141,7 @@ export default function AccountsPage() {
     setLoading(true); setErr(null)
     try {
       const [{ data: acc, error: e1 }, { data: opps }] = await Promise.all([
-        supabase.from('accounts').select('id,name,sector,segment,region').order('name'),
+        supabase.from('accounts').select('id,name,sector,segment,region,created_at').order('name'),
         supabase.from('opportunities').select('account_id,status').eq('status', 'Open'),
       ])
       if (e1) throw e1
@@ -482,12 +482,13 @@ export default function AccountsPage() {
                   <th className="px-4 py-3 text-left">Secteur d'activité</th>
                   <th className="px-4 py-3 text-left">Région</th>
                   <th className="px-4 py-3 text-left">Deals actifs</th>
+                  <th className="px-4 py-3 text-left">Créé le</th>
                   <th className="px-4 py-3 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={6} className="py-16 text-center text-sm text-slate-400">
+                  <tr><td colSpan={7} className="py-16 text-center text-sm text-slate-400">
                     {accounts.length === 0 ? 'Aucun client. Commencez par en ajouter un.' : 'Aucun résultat pour ces filtres.'}
                   </td></tr>
                 ) : filtered.map(a => {
@@ -513,6 +514,11 @@ export default function AccountsPage() {
                             {deals} deal{deals > 1 ? 's' : ''} <ExternalLink className="h-3 w-3" />
                           </Link>
                         ) : <span className="text-xs text-slate-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-400 tabular-nums whitespace-nowrap">
+                        {a.created_at
+                          ? new Date(a.created_at).toLocaleDateString('fr-MA', { day:'2-digit', month:'short', year:'numeric' })
+                          : <span className="text-slate-200">—</span>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
