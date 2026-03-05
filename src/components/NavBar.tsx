@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { label: "Comptes",     href: "/accounts" },
   { label: "Deals",       href: "/opportunities" },
   { label: "KPI",         href: "/kpi" },
+  { label: "Inside",      href: "/inside" },
 ];
 
 type Activity = {
@@ -43,9 +44,15 @@ function userName(email: string) {
 
 const ACTION_COLOR: Record<string, string> = {
   create: "#10b981", update: "#3b82f6", delete: "#ef4444", stage: "#f59e0b",
+  won: "#16a34a", lost: "#dc2626", convert: "#8b5cf6",
 };
 const ACTION_LABEL: Record<string, string> = {
   create: "Ajouté", update: "Modifié", delete: "Supprimé", stage: "Stage →",
+  won: "Won ✓", lost: "Lost ✗", convert: "Converti",
+};
+
+const ENTITY_ICON: Record<string, string> = {
+  deal: "💼", account: "🏢", prospect: "🎯", contact: "👤", card: "🃏",
 };
 
 // ── Password modal ────────────────────────────────────────────────────────────
@@ -235,14 +242,8 @@ function PasswordModal({ onClose, userEmail }: { onClose: () => void; userEmail:
 }
 
 // ── NavBar ────────────────────────────────────────────────────────────────────
-const AUTH_PAGES = ['/login', '/reset-password']
-
 export default function NavBar() {
   const path = usePathname();
-
-  // Cacher la navbar sur les pages d'authentification
-  if (AUTH_PAGES.some(p => path === p || path.startsWith(p))) return null
-
   const [email, setEmail]           = useState<string | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [showNotifs, setShowNotifs] = useState(false);
@@ -284,7 +285,7 @@ export default function NavBar() {
     const { data } = await supabase
       .from("activity_log")
       .select("id,user_email,action_type,entity_type,entity_name,detail,created_at")
-      .order("created_at", { ascending: false }).limit(50);
+      .order("created_at", { ascending: false }).limit(100);
     if (data) {
       setActivities(data as Activity[]);
       const ref = lastRead ?? lastReadRef.current;
@@ -449,25 +450,36 @@ export default function NavBar() {
                       const color = ACTION_COLOR[a.action_type] || "#64748b";
                       const label = ACTION_LABEL[a.action_type] || a.action_type;
                       const isNew = lastReadRef.current ? a.created_at > lastReadRef.current : idx < 5;
+                      const icon = ENTITY_ICON[a.entity_type] || "📋"
                       return (
-                        <div key={a.id} style={{ display: "flex", gap: 12, padding: "11px 16px", borderBottom: "1px solid #f8fafc", background: isNew ? "#fefce8" : "#fff" }}>
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, marginTop: 5, flexShrink: 0 }} />
+                        <div key={a.id} style={{ display: "flex", gap: 12, padding: "11px 16px", borderBottom: "1px solid #f8fafc", background: isNew ? "#fefce8" : "#fff", transition: "background 0.15s" }}>
+                          <div style={{ width: 32, height: 32, borderRadius: 8, background: "#f8fafc", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>
+                            {icon}
+                          </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 12, color: "#0f172a", lineHeight: 1.5 }}>
                               <b style={{ color: a.user_email === email ? "#2563eb" : "#0f172a" }}>{userName(a.user_email)}</b>
                               {" "}<span style={{ color, fontWeight: 600 }}>{label}</span>
-                              {" "}<span style={{ fontWeight: 500 }}>{a.entity_name}</span>
+                              {" "}
+                              {a.entity_id && a.entity_type === "deal"
+                                ? <a href={`/opportunities/${a.entity_id}`} onClick={() => setShowNotifs(false)} style={{ fontWeight: 600, color: "#0f172a", textDecoration: "underline", textDecorationColor: "#e2e8f0" }}>{a.entity_name}</a>
+                                : <span style={{ fontWeight: 600 }}>{a.entity_name}</span>
+                              }
                             </div>
-                            {a.detail && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.detail}</div>}
-                            <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 2 }}>{timeAgo(a.created_at)}</div>
+                            {a.detail && <div style={{ fontSize: 11, color: "#64748b", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.detail}</div>}
+                            <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 3 }}>{timeAgo(a.created_at)}</div>
                           </div>
-                          {isNew && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", marginTop: 6, flexShrink: 0 }} />}
+                          {isNew && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", marginTop: 8, flexShrink: 0 }} />}
                         </div>
                       );
                     })}
                   </div>
-                  <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", textAlign: "center" }}>
-                    <span style={{ fontSize: 11, color: "#94a3b8" }}>Toute l'activité de l'équipe (Nabil + Salim)</span>
+                  <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: 11, color: "#94a3b8" }}>Activité de l'équipe</span>
+                    <a href="/activity" onClick={() => setShowNotifs(false)}
+                      style={{ fontSize: 12, fontWeight: 600, color: "#3b82f6", textDecoration: "none" }}>
+                      Voir tout l'historique →
+                    </a>
                   </div>
                 </div>
               )}
