@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import NavBar from "@/components/NavBar";
+import ClientLayout from "@/components/ClientLayout";
 
 export const metadata: Metadata = {
   title: "CRM-PIPE",
@@ -15,8 +15,7 @@ export default function RootLayout({
   return (
     <html lang="fr">
       <body>
-        <NavBar />
-        {children}
+        <ClientLayout>{children}</ClientLayout>
       </body>
     </html>
   );
