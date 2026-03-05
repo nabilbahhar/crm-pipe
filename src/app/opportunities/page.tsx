@@ -16,7 +16,7 @@ type Deal = {
   status: 'Open'|'Won'|'Lost'; bu: string|null; vendor: string|null
   amount: number; prob: number|null; booking_month: string|null
   next_step: string|null; notes: string|null; multi_bu: boolean|null
-  bu_lines: any; accounts?: { name?: string }|null
+  bu_lines: any; created_at: string|null; accounts?: { name?: string }|null
 }
 
 const STAGES = ['Lead','Discovery','Qualified','Solutioning','Proposal Sent','Negotiation','Commit','Won','Lost / No decision'] as const
@@ -102,7 +102,7 @@ function ProbBar({ prob }: { prob: number }) {
   )
 }
 
-type SortKey = 'account'|'title'|'stage'|'bu'|'vendor'|'amount'|'prob'|'closing'|'status'
+type SortKey = 'account'|'title'|'stage'|'bu'|'vendor'|'amount'|'prob'|'closing'|'status'|'created_at'
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function DealsPageInner() {
@@ -196,6 +196,7 @@ function DealsPageInner() {
         case 'prob':    va = a.prob||0; vb = b.prob||0; break
         case 'closing': va = a.booking_month||''; vb = b.booking_month||''; break
         case 'status':  va = normStatus(a); vb = normStatus(b); break
+        case 'created_at': va = a.created_at||''; vb = b.created_at||''; break
         default:        va = a.amount||0; vb = b.amount||0
       }
       if (typeof va === 'number' && typeof vb === 'number') return dir * (va - vb)
@@ -364,6 +365,7 @@ function DealsPageInner() {
                     <TH col="amount" label="Montant" right />
                     <TH col="prob" label="Prob" />
                     <TH col="closing" label="Closing" />
+                    <TH col="created_at" label="Créé le" />
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Actions</th>
                   </tr>
                 </thead>
@@ -394,6 +396,11 @@ function DealsPageInner() {
                             <span className={isLate ? 'font-bold text-red-500' : 'text-slate-600'}>{d.booking_month}</span>
                           ) : <span className="text-slate-300">—</span>}
                         </td>
+                        <td className="px-4 py-2.5 text-xs text-slate-400 tabular-nums whitespace-nowrap">
+                          {d.created_at
+                            ? new Date(d.created_at).toLocaleDateString('fr-MA', { day:'2-digit', month:'short', year:'numeric' })
+                            : <span className="text-slate-200">—</span>}
+                        </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Link href={`/opportunities/${d.id}`}
@@ -411,7 +418,7 @@ function DealsPageInner() {
                   })}
                   {sorted.length === 0 && (
                     <tr>
-                      <td colSpan={10} className="py-16 text-center text-sm text-slate-400">
+                      <td colSpan={11} className="py-16 text-center text-sm text-slate-400">
                         {rows.length === 0 ? 'Aucun deal.' : 'Aucun résultat pour ces filtres.'}
                       </td>
                     </tr>
