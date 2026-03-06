@@ -35,10 +35,10 @@ const emptyLine = (): PurchaseLine => ({
   ref: '', designation: '', qty: 1, pu_vente: 0, pt_vente: 0, pu_achat: 0, fournisseur_id: null,
 })
 
-// ─── Format professionnel : 523 760 MAD (regex fiable en build Vercel) ───
+// ─── Format Excel : 57.500,00 MAD ────────────────────────────
 const numFmt = (n: number | null | undefined) => {
   if (n == null) return '—'
-  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f')
+  return Number(n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 const mad    = (n: number | null | undefined) => n == null ? '—' : `${numFmt(n)} MAD`
 const pct    = (n: number) => `${n.toFixed(1)} %`
@@ -366,7 +366,44 @@ export default function PurchasePage() {
     if (files) setDbFiles(files)
   }
 
-  const inp = 'w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-50 transition placeholder:text-slate-300'
+  const [uploadingFile, setUploadingFile] = useState<string | null>(null)
+
+  // Upload immédiat dès sélection → persistance après refresh
+  async function uploadFileNow(file: File, type: 'bc_client' | 'devis_compucom' | 'autre') {
+    setUploadingFile(type)
+    try {
+      const path = `${id}/${type}/${Date.now()}_${file.name}`
+      // Supprimer l'ancien fichier du même type (sauf 'autre')
+      if (type !== 'autre') {
+        const old = dbFiles.find(f => f.file_type === type)
+        if (old?.file_url) {
+          await supabase.storage.from('deal-files').remove([old.file_url])
+          await supabase.from('deal_files').delete().eq('opportunity_id', id).eq('file_type', type)
+        }
+      }
+      const { data: stored, error } = await supabase.storage
+        .from('deal-files').upload(path, file, { upsert: true })
+      if (!error && stored) {
+        await supabase.from('deal_files').insert({
+          opportunity_id: id, file_type: type,
+          file_name: file.name, file_url: stored.path, uploaded_by: userEmail,
+        })
+        // Recharger dbFiles
+        const { data: files } = await supabase.from('deal_files')
+          .select('id, file_type, file_name, file_url').eq('opportunity_id', id)
+        if (files) setDbFiles(files)
+      }
+    } catch {}
+    setUploadingFile(null)
+  }
+
+  async function deleteDbFile(fileId: string, fileUrl: string) {
+    await supabase.storage.from('deal-files').remove([fileUrl])
+    await supabase.from('deal_files').delete().eq('id', fileId)
+    setDbFiles(p => p.filter(f => f.id !== fileId))
+  }
+
+  const inp = 'w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-50 transition placeholder:text-slate-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
 
   if (loading) return (
     <div className="flex min-h-screen items-center justify-center bg-[#f8fafc]">
@@ -424,38 +461,106 @@ export default function PurchasePage() {
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
           <SecTitle>📄 Documents</SecTitle>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-            <FileSlot label="BC Client" required accept=".pdf,.png,.jpg"
-              file={bcFile} dbFile={dbFiles.find(f=>f.file_type==='bc_client')}
-              onFile={setBcFile} inputRef={bcRef} color="blue" />
+
+            {/* BC Client */}
             <div>
-              <FileSlot label="Devis Compucom" required accept=".pdf"
-                file={devisFile} dbFile={dbFiles.find(f=>f.file_type==='devis_compucom')}
-                onFile={f => { setDevisFile(f); setExtracted(false); setExtractErr(null) }}
-                inputRef={devisRef} color="violet" />
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-slate-600">BC Client</span>
+                <span className="text-xs font-bold text-red-500">*</span>
+                {dbFiles.some(f=>f.file_type==='bc_client') && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+              </div>
+              {dbFiles.filter(f=>f.file_type==='bc_client').map(f => (
+                <div key={f.id} className="mb-2 flex items-center gap-2 rounded-xl border-2 border-blue-200 bg-blue-50/60 px-3 py-2">
+                  <FileText className="h-4 w-4 text-blue-600 shrink-0" />
+                  <span className="flex-1 text-xs font-semibold text-blue-700 truncate">{f.file_name}</span>
+                  <span className="text-[10px] text-blue-400">uploadé ✓</span>
+                  <button onClick={() => deleteDbFile(f.id!, f.file_url!)} title="Supprimer"
+                    className="ml-1 flex h-5 w-5 items-center justify-center rounded text-blue-300 hover:text-red-500 transition">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={() => bcRef.current?.click()} disabled={uploadingFile==='bc_client'}
+                className={`relative flex h-[60px] w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed transition
+                  ${dbFiles.some(f=>f.file_type==='bc_client') ? 'border-blue-100 bg-white text-blue-400 hover:bg-blue-50' : 'border-dashed border-red-300 bg-red-50 hover:bg-red-100'}`}>
+                {uploadingFile==='bc_client'
+                  ? <><Loader2 className="h-4 w-4 animate-spin text-blue-500" /><span className="text-xs text-blue-500">Upload…</span></>
+                  : <><Upload className={`h-4 w-4 ${dbFiles.some(f=>f.file_type==='bc_client')?'text-blue-300':'text-red-400'}`} />
+                     <span className={`text-xs font-semibold ${dbFiles.some(f=>f.file_type==='bc_client')?'text-blue-300':'text-red-500'}`}>
+                       {dbFiles.some(f=>f.file_type==='bc_client') ? 'Remplacer' : 'Obligatoire'}
+                     </span></>}
+              </button>
+              <input ref={bcRef} type="file" accept=".pdf,.png,.jpg" className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) uploadFileNow(f, 'bc_client') }} />
+            </div>
+
+            {/* Devis Compucom */}
+            <div>
+              <div className="mb-1.5 flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-slate-600">Devis Compucom</span>
+                <span className="text-xs font-bold text-red-500">*</span>
+                {dbFiles.some(f=>f.file_type==='devis_compucom') && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
+              </div>
+              {dbFiles.filter(f=>f.file_type==='devis_compucom').map(f => (
+                <div key={f.id} className="mb-2 flex items-center gap-2 rounded-xl border-2 border-violet-200 bg-violet-50/60 px-3 py-2">
+                  <FileText className="h-4 w-4 text-violet-600 shrink-0" />
+                  <span className="flex-1 text-xs font-semibold text-violet-700 truncate">{f.file_name}</span>
+                  <span className="text-[10px] text-violet-400">uploadé ✓</span>
+                  <button onClick={() => deleteDbFile(f.id!, f.file_url!)} title="Supprimer"
+                    className="ml-1 flex h-5 w-5 items-center justify-center rounded text-violet-300 hover:text-red-500 transition">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={() => devisRef.current?.click()} disabled={uploadingFile==='devis_compucom'}
+                className={`relative flex h-[60px] w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed transition
+                  ${dbFiles.some(f=>f.file_type==='devis_compucom') ? 'border-violet-100 bg-white text-violet-400 hover:bg-violet-50' : 'border-dashed border-red-300 bg-red-50 hover:bg-red-100'}`}>
+                {uploadingFile==='devis_compucom'
+                  ? <><Loader2 className="h-4 w-4 animate-spin text-violet-500" /><span className="text-xs text-violet-500">Upload…</span></>
+                  : <><Upload className={`h-4 w-4 ${dbFiles.some(f=>f.file_type==='devis_compucom')?'text-violet-300':'text-red-400'}`} />
+                     <span className={`text-xs font-semibold ${dbFiles.some(f=>f.file_type==='devis_compucom')?'text-violet-300':'text-red-500'}`}>
+                       {dbFiles.some(f=>f.file_type==='devis_compucom') ? 'Remplacer' : 'Obligatoire'}
+                     </span></>}
+              </button>
+              <input ref={devisRef} type="file" accept=".pdf" className="hidden"
+                onChange={e => {
+                  const f = e.target.files?.[0]
+                  if (f) { setDevisFile(f); setExtracted(false); setExtractErr(null); uploadFileNow(f, 'devis_compucom') }
+                }} />
               {devisFile && !extracted && (
                 <button onClick={extractDevis} disabled={extracting}
-                  className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60 transition">
-                  {extracting ? <><Loader2 className="h-4 w-4 animate-spin" /> Extraction en cours…</> : '✨ Extraire les lignes automatiquement'}
+                  className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60 transition">
+                  {extracting ? <><Loader2 className="h-4 w-4 animate-spin" /> Extraction…</> : '✨ Extraire les lignes'}
                 </button>
               )}
               {extracted && <p className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-violet-700"><CheckCircle2 className="h-4 w-4" />{lines.length} ligne{lines.length>1?'s':''} extraite{lines.length>1?'s':''}</p>}
               {extractErr && <p className="mt-2 text-sm text-red-600">{extractErr}</p>}
             </div>
+
+            {/* Autres docs */}
             <div>
               <p className="mb-1.5 text-sm font-semibold text-slate-600">Autres docs</p>
-              <button onClick={() => autreRef.current?.click()}
-                className="flex h-[72px] w-full flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100 transition">
-                <Upload className="h-4 w-4 text-slate-400" />
-                <span className="text-sm font-medium text-slate-400">{autreFiles.length > 0 ? `${autreFiles.length} nouveau(x)` : 'Ajouter…'}</span>
-              </button>
-              <input ref={autreRef} type="file" multiple className="hidden" onChange={e => setAutreFiles(Array.from(e.target.files||[]))} />
-              {[...dbFiles.filter(f=>f.file_type==='autre'), ...autreFiles.map(f => ({ file_name: f.name, isNew: true }))].map((f: any, i) => (
-                <div key={i} className="mt-1.5 flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              {dbFiles.filter(f=>f.file_type==='autre').map(f => (
+                <div key={f.id} className="mb-1.5 flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
                   <FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                  <span className="truncate flex-1">{f.file_name}</span>
-                  {f.isNew && <button onClick={() => setAutreFiles(a => a.filter(x => x.name!==f.file_name))}><X className="h-3 w-3 text-slate-300 hover:text-red-500" /></button>}
+                  <span className="flex-1 truncate text-xs text-slate-600">{f.file_name}</span>
+                  <button onClick={() => deleteDbFile(f.id!, f.file_url!)}
+                    className="flex h-5 w-5 items-center justify-center rounded text-slate-300 hover:text-red-500 transition">
+                    <X className="h-3 w-3" />
+                  </button>
                 </div>
               ))}
+              <button onClick={() => autreRef.current?.click()} disabled={!!uploadingFile}
+                className="flex h-[60px] w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100 transition">
+                {uploadingFile==='autre'
+                  ? <><Loader2 className="h-4 w-4 animate-spin text-slate-400" /><span className="text-xs text-slate-400">Upload…</span></>
+                  : <><Upload className="h-4 w-4 text-slate-400" /><span className="text-xs font-medium text-slate-400">Ajouter…</span></>}
+              </button>
+              <input ref={autreRef} type="file" multiple className="hidden"
+                onChange={async e => {
+                  const files = Array.from(e.target.files||[])
+                  for (const f of files) await uploadFileNow(f, 'autre')
+                }} />
             </div>
           </div>
         </div>
