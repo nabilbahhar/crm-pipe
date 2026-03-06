@@ -311,7 +311,7 @@ export default function Dashboard() {
         supabase.from('opportunities').select('*, accounts(name,sector,segment,region)').order('created_at',{ascending:false}).limit(5000),
         supabase.from('accounts').select('id,name,sector,segment,region'),
         supabase.from('purchase_lines').select('*, purchase_info(opportunity_id)'),
-        supabase.from('supply_orders').select('id, opportunity_id, status'),
+        supabase.from('supply_orders').select('id, opportunity_id, status, placed_at, updated_at'),
       ])
       if (e1) throw e1; if (e2) throw e2
       setRows(opps||[]); setAccounts(accs||[])
@@ -650,6 +650,17 @@ export default function Dashboard() {
     return counts
   },[supplyOrders])
 
+  // Commandes en retard : status 'a_commander' depuis plus de 24h
+  const overdueOrders = useMemo(()=>{
+    const limit = Date.now() - 24*60*60*1000
+    return supplyOrders.filter(o => {
+      if (o.status !== 'a_commander') return false
+      const ts = o.placed_at || o.updated_at
+      if (!ts) return false
+      return new Date(ts).getTime() < limit
+    })
+  },[supplyOrders])
+
   // ── Top Open / Won ────────────────────────────────────────────────────────
   const topOpen = useMemo(()=>[...openDeals].sort((a,b)=>b.amount-a.amount).slice(0,12),[openDeals])
   const topWon  = useMemo(()=>[...wonDeals].sort((a,b)=>b.amount-a.amount).slice(0,12),[wonDeals])
@@ -960,6 +971,27 @@ export default function Dashboard() {
               value={String(Math.max(0, wonDeals.length - supplyOrders.length))}
               sub={`${supplyOrders.length} fiches remplies`}/>
           </div>
+        )}
+
+        {/* ══ ALERTE COMMANDES EN RETARD ══ */}
+        {overdueOrders.length > 0 && (
+          <a href="/supply"
+            className="flex items-center gap-4 rounded-2xl border-2 border-red-300 bg-red-50 px-5 py-4 shadow-sm hover:shadow-md transition-all group">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-500 text-white text-2xl shadow-md group-hover:scale-105 transition-transform">
+              🚨
+            </div>
+            <div className="flex-1">
+              <div className="text-base font-black text-red-800">
+                {overdueOrders.length} commande{overdueOrders.length > 1 ? 's' : ''} en retard &gt; 24h
+              </div>
+              <div className="text-sm text-red-600 mt-0.5">
+                Ces deals Won ont une fiche remplie mais la commande n'a pas encore été placée — action requise.
+              </div>
+            </div>
+            <div className="shrink-0 flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white group-hover:bg-red-600 transition-colors">
+              Voir Supply <ChevronDown className="h-4 w-4 rotate-[-90deg]" />
+            </div>
+          </a>
         )}
 
         {/* ══ SUPPLY STATUTS + MARGE PAR BU ══ */}
