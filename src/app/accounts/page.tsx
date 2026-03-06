@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown } from 'lucide-react'
+import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AccountRow = { id: string; name: string; sector: string|null; segment: string|null; region: string|null; created_at: string|null }
@@ -138,6 +138,11 @@ export default function AccountsPage() {
   // Date filters
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo]     = useState('')
+  const [showDatePicker, setShowDatePicker] = useState(false)
+
+  // Sort
+  const [sortKey, setSortKey] = useState<'created_at'|'name'|'sector'|'segment'|'region'|'deals'>('name')
+  const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
   const existsName = (n: string, excludeId?: string) => accounts.some(a => a.id !== excludeId && (a.name || '').trim().toLowerCase() === n.trim().toLowerCase())
 
   // ── Load ─────────────────────────────────────────────────────────────────
@@ -288,7 +293,7 @@ export default function AccountsPage() {
     return { total: accounts.length, bySeg, byReg, topSectors: Object.entries(bySector).sort((a,b)=>b[1]-a[1]).slice(0,6), topRegs: Object.entries(byReg).sort((a,b)=>b[1]-a[1]) }
   }, [accounts])
 
-  // ── Filtered ──────────────────────────────────────────────────────────────
+  // ── Filtered + Sorted ────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return accounts.filter(a =>
@@ -298,7 +303,25 @@ export default function AccountsPage() {
       (!dateFrom || (a.created_at || '') >= dateFrom) &&
       (!dateTo   || (a.created_at || '') <= dateTo + 'T23:59:59')
     )
-  }, [accounts, search, segFilter, regFilter])
+  }, [accounts, search, segFilter, regFilter, dateFrom, dateTo])
+
+  const sorted = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...filtered].sort((a, b) => {
+      let va: any, vb: any
+      switch (sortKey) {
+        case 'name':       va = a.name||'';       vb = b.name||'';       break
+        case 'sector':     va = a.sector||'';     vb = b.sector||'';     break
+        case 'segment':    va = a.segment||'';    vb = b.segment||'';    break
+        case 'region':     va = a.region||'';     vb = b.region||'';     break
+        case 'deals':      va = dealCounts[a.id]||0; vb = dealCounts[b.id]||0; break
+        case 'created_at': va = a.created_at||''; vb = b.created_at||''; break
+        default:           va = a.name||'';       vb = b.name||''
+      }
+      if (typeof va === 'number') return dir * (va - vb)
+      return dir * String(va).localeCompare(String(vb), 'fr')
+    })
+  }, [filtered, sortKey, sortDir, dealCounts])
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -478,42 +501,83 @@ export default function AccountsPage() {
             </div>
           </div>
 
-          {/* Date filter row */}
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/50 px-5 py-2">
-            <span className="text-xs font-semibold text-slate-400">Créé du :</span>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="h-7 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400" />
-            <span className="text-xs text-slate-400">au</span>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="h-7 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400" />
-            {(dateFrom || dateTo) && (
-              <button onClick={() => { setDateFrom(''); setDateTo('') }}
-                className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200">
-                <X className="h-3 w-3" />
+          {/* Date filter — bouton compact intégré à la toolbar */}
+          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/50 px-5 py-2">
+            <div className="relative">
+              <button onClick={() => setShowDatePicker(v => !v)}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold shadow-sm transition-colors
+                  ${(dateFrom || dateTo) ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
+                📅 {dateFrom || dateTo
+                  ? [dateFrom && dateFrom.slice(8)+'/'+dateFrom.slice(5,7), dateTo && dateTo.slice(8)+'/'+dateTo.slice(5,7)].filter(Boolean).join(' → ')
+                  : 'Créé : toutes dates'}
+                {(dateFrom || dateTo) && (
+                  <span onClick={e => { e.stopPropagation(); setDateFrom(''); setDateTo('') }}
+                    className="ml-0.5 cursor-pointer rounded-full p-0.5 hover:bg-white/20">
+                    <X className="h-3 w-3" />
+                  </span>
+                )}
               </button>
-            )}
+              {showDatePicker && (
+                <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+                  <div className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Date de création</div>
+                  <div className="space-y-2">
+                    <div>
+                      <div className="mb-1 text-xs font-medium text-slate-500">Du</div>
+                      <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                        className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:outline-none focus:border-slate-400" />
+                    </div>
+                    <div>
+                      <div className="mb-1 text-xs font-medium text-slate-500">Au</div>
+                      <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                        className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:outline-none focus:border-slate-400" />
+                    </div>
+                  </div>
+                  <button onClick={() => setShowDatePicker(false)}
+                    className="mt-3 w-full rounded-xl bg-slate-900 py-2 text-xs font-bold text-white hover:bg-slate-800 transition-colors">
+                    Appliquer ✓
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Table */}
           <div className="overflow-auto">
+            {(() => {
+              type SortCol = 'created_at'|'name'|'sector'|'segment'|'region'|'deals'
+              function TH({ col, label, right }: { col: SortCol; label: string; right?: boolean }) {
+                const active = sortKey === col
+                const Icon = active ? (sortDir === 'desc' ? ArrowDown : ArrowUp) : ChevronsUpDown
+                return (
+                  <th onClick={() => { if (!active) { setSortKey(col); setSortDir('asc') } else setSortDir(d => d === 'asc' ? 'desc' : 'asc') }}
+                    className={`cursor-pointer select-none py-3 text-xs font-semibold transition-colors whitespace-nowrap
+                      ${right ? 'px-4 text-right' : 'px-4 text-left'}
+                      ${active ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
+                    <span className="inline-flex items-center gap-1">
+                      {!right && label}<Icon className="h-3.5 w-3.5 shrink-0" />{right && label}
+                    </span>
+                  </th>
+                )
+              }
+              return (
             <table className="w-full min-w-[760px] text-sm">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/70 text-xs font-semibold text-slate-400">
-                  <th className="px-3 py-3 text-left w-[78px]">Créé</th>
-                  <th className="px-5 py-3 text-left">Client</th>
-                  <th className="px-4 py-3 text-left">Segment</th>
-                  <th className="px-4 py-3 text-left">Secteur d'activité</th>
-                  <th className="px-4 py-3 text-left">Région</th>
-                  <th className="px-4 py-3 text-left">Deals actifs</th>
-                  <th className="px-4 py-3 text-left">Actions</th>
+                <tr className="border-b border-slate-100 bg-slate-50/70">
+                  <TH col="created_at" label="Créé" />
+                  <TH col="name" label="Client" />
+                  <TH col="sector" label="Segment" />
+                  <TH col="segment" label="Secteur d'activité" />
+                  <TH col="region" label="Région" />
+                  <TH col="deals" label="Deals actifs" right />
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filtered.length === 0 ? (
-                  <tr><td colSpan={6} className="py-16 text-center text-sm text-slate-400">
+                {sorted.length === 0 ? (
+                  <tr><td colSpan={7} className="py-16 text-center text-sm text-slate-400">
                     {accounts.length === 0 ? 'Aucun client. Commencez par en ajouter un.' : 'Aucun résultat pour ces filtres.'}
                   </td></tr>
-                ) : filtered.map(a => {
+                ) : sorted.map(a => {
                   const deals = dealCounts[a.id] || 0
                   return (
                     <tr key={a.id} className="group hover:bg-slate-50/60 transition-colors">
@@ -568,11 +632,13 @@ export default function AccountsPage() {
                 })}
               </tbody>
             </table>
+              )
+            })()}
           </div>
 
-          {filtered.length > 0 && (
+          {sorted.length > 0 && (
             <div className="border-t border-slate-50 bg-slate-50/50 px-5 py-2.5 text-xs text-slate-400">
-              {filtered.length} compte{filtered.length > 1 ? 's' : ''} affichés · {stats.total} total
+              {sorted.length} compte{sorted.length > 1 ? 's' : ''} affichés · {stats.total} total
             </div>
           )}
         </div>
