@@ -6,7 +6,7 @@ import { logActivity } from '@/lib/logActivity'
 import {
   ArrowLeft, Upload, Loader2, Plus, Trash2, Save,
   FileText, AlertCircle, CheckCircle2, AlertTriangle,
-  ShieldCheck, X, RefreshCw,
+  ShieldCheck, X, RefreshCw, Package,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
