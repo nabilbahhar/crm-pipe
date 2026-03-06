@@ -194,11 +194,12 @@ export default function DealsPage() {
 
   async function loadDeals() {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('opportunities')
-      .select('id, title, status, stage, amount, prob, created_at, updated_at, owner_email, closing_date, booking_month, closing_month, closing, bu, vendor, po_number, next_step, accounts(name, sector)')
+      .select('id, title, status, stage, amount, prob, created_at, updated_at, owner_email, closing_date, booking_month, closing_month, closing, bu, vendor, po_number, next_step, accounts(name)')
       .order('created_at', { ascending: false })
       .limit(2000)
+    if (error) console.error('Deals query error:', error.message)
     if (data) setDeals(data.map(d => ({ ...d, accounts: d.accounts as any })))
     setLoading(false)
   }
