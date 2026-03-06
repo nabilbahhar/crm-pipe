@@ -522,15 +522,6 @@ export default function ProspectionPage() {
             ))}
           </div>
 
-          {/* Type */}
-          <div className="flex gap-1 rounded-xl border bg-white p-1 shadow-sm overflow-x-auto max-w-xs">
-            {['Tous',...TYPES].map(t => (
-              <button key={t} onClick={() => setTypeFilter(t)}
-                className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors
-                  ${typeFilter===t ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{t}</button>
-            ))}
-          </div>
-
           {/* View toggle */}
           <div className="ml-auto flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
             <button onClick={() => setView('list')}
