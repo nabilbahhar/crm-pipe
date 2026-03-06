@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import PurchaseModal from '@/components/PurchaseModal'
 import {
   CheckCircle2, RefreshCw, ChevronRight, Package,
   Search, ArrowUp, ArrowDown, ChevronsUpDown, X,
@@ -58,10 +58,10 @@ const STATUS_CFG: Record<FicheStatus, { label: string; icon: React.ReactNode; ba
 }
 
 export default function TasksPage() {
+  const router = useRouter()
   const [tasks, setTasks]             = useState<Task[]>([])
   const [loading, setLoading]         = useState(true)
   const [err, setErr]                 = useState<string | null>(null)
-  const [purchaseDeal, setPurchaseDeal] = useState<any | null>(null)
 
   const [search, setSearch]             = useState('')
   const [typeFilter, setTypeFilter]     = useState<'Tous' | TaskType>('Tous')
@@ -392,7 +392,7 @@ export default function TasksPage() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-center">
-                              <button onClick={() => setPurchaseDeal(t.entity)}
+                              <button onClick={() => router.push(`/opportunities/${t.entity_id}/purchase`)}
                                 className={`inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-white transition-colors
                                   ${t.ficheStatus === 'en_cours'
                                     ? 'bg-blue-600 hover:bg-blue-700'
@@ -457,18 +457,6 @@ export default function TasksPage() {
           </div>
         )}
       </div>
-
-      {/* PurchaseModal — onSaved reloads the list instead of hiding */}
-      {purchaseDeal && (
-        <PurchaseModal
-          deal={purchaseDeal}
-          onClose={() => setPurchaseDeal(null)}
-          onSaved={() => {
-            setPurchaseDeal(null)
-            load() // ← recharge depuis la DB — la tâche reste visible si incomplète
-          }}
-        />
-      )}
     </div>
   )
 }
