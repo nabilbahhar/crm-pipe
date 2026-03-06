@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import {
   Plus, RefreshCw, X, Phone, Mail, ChevronRight,
-  LayoutGrid, List, Flame, Thermometer, Snowflake, ArrowRightCircle
+  LayoutGrid, List, Flame, Thermometer, Snowflake, ArrowRightCircle,
+  ArrowUp, ArrowDown, ChevronsUpDown,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -241,8 +242,6 @@ export default function ProspectionPage() {
   const [heatFilter, setHeatFilter]   = useState('Tous')
   const [typeFilter, setTypeFilter]   = useState('Tous')
   const [showOverdue, setShowOverdue] = useState(false)
-  const [dateFrom, setDateFrom]       = useState('')
-  const [dateTo, setDateTo]           = useState('')
 
   // Modal
   const [modalOpen, setModalOpen] = useState(false)
@@ -283,10 +282,30 @@ export default function ProspectionPage() {
     if (heatFilter !== 'Tous') r = r.filter(x => x.heat === heatFilter)
     if (typeFilter !== 'Tous') r = r.filter(x => x.type === typeFilter)
     if (showOverdue) r = r.filter(x => isOverdue(x.next_date) && x.status !== 'Qualifié ✓')
-    if (dateFrom) r = r.filter(x => (x.created_at || '') >= dateFrom)
-    if (dateTo)   r = r.filter(x => (x.created_at || '') <= dateTo + 'T23:59:59')
     return r
   }, [rows, search, heatFilter, typeFilter, showOverdue])
+
+  type SortKey = 'created_at'|'company_name'|'status'|'heat'|'attempts'|'next_date'|'type'
+  const [sortKey, setSortKey] = useState<SortKey>('created_at')
+  const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
+
+  const sorted = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1
+    return [...filtered].sort((a, b) => {
+      let va: any, vb: any
+      switch (sortKey) {
+        case 'company_name': va = a.company_name; vb = b.company_name; break
+        case 'status':   va = a.status; vb = b.status; break
+        case 'heat':     va = ['cold','warm','hot'].indexOf(a.heat); vb = ['cold','warm','hot'].indexOf(b.heat); break
+        case 'attempts': va = a.attempts; vb = b.attempts; break
+        case 'next_date':va = a.next_date||''; vb = b.next_date||''; break
+        case 'type':     va = a.type; vb = b.type; break
+        default:         va = a.created_at||''; vb = b.created_at||''
+      }
+      if (typeof va === 'number') return dir * (va - vb)
+      return dir * String(va).localeCompare(String(vb))
+    })
+  }, [filtered, sortKey, sortDir])
 
   const overdueCount = useMemo(
     () => rows.filter(x => !x.converted_at && isOverdue(x.next_date) && x.status !== 'Qualifié ✓').length,
@@ -507,22 +526,6 @@ export default function ProspectionPage() {
             ))}
           </div>
 
-          {/* Date range */}
-          <div className="flex items-center gap-1.5 rounded-xl border bg-white px-3 py-1 shadow-sm">
-            <span className="text-[10px] font-semibold text-slate-400">Du</span>
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold text-slate-700 focus:outline-none focus:border-slate-400" />
-            <span className="text-[10px] text-slate-400">au</span>
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="h-7 rounded-lg border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-semibold text-slate-700 focus:outline-none focus:border-slate-400" />
-            {(dateFrom || dateTo) && (
-              <button onClick={() => { setDateFrom(''); setDateTo('') }}
-                className="inline-flex h-5 w-5 items-center justify-center rounded text-slate-300 hover:text-red-500">
-                <X className="h-3 w-3" />
-              </button>
-            )}
-          </div>
-
           {/* View toggle */}
           <div className="ml-auto flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
             <button onClick={() => setView('list')}
@@ -547,15 +550,36 @@ export default function ProspectionPage() {
               <table className="w-full min-w-[1100px] text-sm">
                 <thead>
                   <tr className="border-b bg-slate-50 text-xs text-slate-500">
-                    <th className="px-3 py-3 text-left w-[78px]">Créé</th>
-                    <th className="px-4 py-3 text-left font-semibold">Société</th>
-                    <th className="px-4 py-3 text-left font-semibold">Contact</th>
-                    <th className="px-4 py-3 text-left font-semibold">Type</th>
-                    <th className="px-4 py-3 text-left font-semibold">Statut</th>
-                    <th className="px-4 py-3 text-left font-semibold">Tentatives</th>
-                    <th className="px-4 py-3 text-left font-semibold">Next Step</th>
-                    <th className="px-4 py-3 text-left font-semibold">Relance</th>
-                    <th className="px-4 py-3 text-left font-semibold">Source</th>
+                    {([
+                      { col: 'created_at',   label: 'Créé',       w: 'w-[78px]' },
+                      { col: 'company_name', label: 'Société',    w: '' },
+                      { col: 'type',         label: 'Contact',    w: '', noSort: true },
+                      { col: 'type',         label: 'Type',       w: '' },
+                      { col: 'status',       label: 'Statut',     w: '' },
+                      { col: 'attempts',     label: 'Tentatives', w: '' },
+                      { col: 'next_date',    label: 'Next Step',  w: '', noSort: true },
+                      { col: 'next_date',    label: 'Relance',    w: '' },
+                      { col: 'type',         label: 'Source',     w: '', noSort: true },
+                    ] as { col: SortKey; label: string; w: string; noSort?: boolean }[]).map(({ col, label, w, noSort }) => {
+                      const active = sortKey === col && !noSort
+                      const Icon = active ? (sortDir === 'desc' ? ArrowDown : ArrowUp) : ChevronsUpDown
+                      return (
+                        <th key={label}
+                          onClick={() => {
+                            if (noSort) return
+                            if (sortKey !== col) { setSortKey(col); setSortDir('desc') }
+                            else setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+                          }}
+                          className={`px-4 py-3 text-left font-semibold select-none ${w}
+                            ${noSort ? '' : 'cursor-pointer hover:text-slate-700'}
+                            ${active ? 'text-slate-900' : ''}`}>
+                          <span className="inline-flex items-center gap-1">
+                            {label}
+                            {!noSort && <Icon className="h-3 w-3 opacity-50" />}
+                          </span>
+                        </th>
+                      )
+                    })}
                     <th className="px-4 py-3 text-left font-semibold">Actions</th>
                   </tr>
                 </thead>
@@ -568,7 +592,7 @@ export default function ProspectionPage() {
                     </td></tr>
                   ) : filtered.length === 0 ? (
                     <tr><td colSpan={9} className="py-12 text-center text-sm text-slate-400">Aucun prospect.</td></tr>
-                  ) : filtered.map(p => {
+                  ) : sorted.map(p => {
                     const overdue = isOverdue(p.next_date) && p.status !== 'Qualifié ✓'
                     const todayFlag = isToday(p.next_date)
                     const nextS = STATUS_NEXT[p.status]
@@ -577,7 +601,7 @@ export default function ProspectionPage() {
                         <td className="w-[78px] min-w-[78px] pl-3 pr-1 py-2.5">
                           <div className="flex flex-col gap-0.5 leading-none">
                             <span className="text-[10px] font-semibold text-slate-500 tabular-nums whitespace-nowrap">
-                              `${new Date(p.created_at).toLocaleDateString('fr-MA', { day: '2-digit', month: 'short' })} ${String(new Date(p.created_at).getFullYear()).slice(-2)}`
+                              {`${new Date(p.created_at).toLocaleDateString('fr-MA', { day: '2-digit', month: 'short' })} ${String(new Date(p.created_at).getFullYear()).slice(-2)}`}
                             </span>
                             <span className="text-[9px] text-slate-300 tabular-nums">
                               {new Date(p.created_at).toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
@@ -744,110 +768,164 @@ export default function ProspectionPage() {
 
       {/* ── MODAL CREATE/EDIT ────────────────────────────────────────────── */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b px-5 py-4">
-              <div className="text-sm font-semibold text-slate-900">
-                {editId ? 'Modifier le prospect' : 'Nouveau prospect'}
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+          onClick={e => { if (e.target === e.currentTarget) { setModalOpen(false); setEditId(null) } }}>
+          <div className="flex w-full max-w-2xl flex-col rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl"
+            style={{ maxHeight: 'calc(100dvh - 72px)' }}>
+
+            {/* ── Header ── */}
+            <div className="flex shrink-0 items-center justify-between rounded-t-3xl bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-5 sm:rounded-t-2xl">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{editId ? '✏️' : '🎯'}</span>
+                  <h2 className="text-base font-bold text-white">
+                    {editId ? 'Modifier le prospect' : 'Nouveau prospect'}
+                  </h2>
+                </div>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  {editId ? 'Mets à jour les informations' : 'Ajoute un nouveau prospect à ton pipeline'}
+                </p>
               </div>
               <button onClick={() => { setModalOpen(false); setEditId(null) }}
-                className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-slate-50">
-                <X className="h-4 w-4" /> Fermer
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors">
+                <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="max-h-[80vh] overflow-auto p-5">
-              {formErr && (
-                <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  ⚠️ {formErr}
-                  {dupWarning && (
-                    <button type="button"
-                      onClick={() => { setModalOpen(false); setDupWarning(null); openEdit(dupWarning) }}
-                      className="ml-3 underline font-semibold hover:text-red-900">
-                      Ouvrir le prospect existant →
-                    </button>
-                  )}
-                </div>
-              )}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <CompanyInput
-                    value={form.company_name}
-                    onChange={v => { setForm((p: any) => ({ ...p, company_name: v })); setDupWarning(null); setFormErr(null) }}
-                    existingProspects={rows}
-                    editId={editId}
-                    onDupSelect={p => {
-                      setForm((f: any) => ({ ...f, company_name: p.company_name }))
-                      setDupWarning(p)
-                      setFormErr(`⚠️ Ce prospect existe déjà : "${p.company_name}" (${p.status}).`)
-                    }}
-                  />
-                  {dupWarning && (
-                    <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
-                      <div className="text-xs font-semibold text-amber-800">
-                        🔁 <strong>{dupWarning.company_name}</strong> existe déjà — statut : <span className="italic">{dupWarning.status}</span>
-                        {dupWarning.contact_name && ` · contact : ${dupWarning.contact_name}`}
-                      </div>
-                      <div className="flex shrink-0 gap-2">
-                        <button type="button"
-                          onClick={() => { setModalOpen(false); setTimeout(() => openEdit(dupWarning), 50) }}
-                          className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors">
-                          Modifier ce prospect
-                        </button>
-                        <button type="button"
-                          onClick={() => { setDupWarning(null); setFormErr(null) }}
-                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-colors">
-                          Créer quand même
-                        </button>
-                      </div>
+
+            {/* ── Body ── */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+              {/* Duplicate warning */}
+              {dupWarning && (
+                <div className="flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-start gap-2">
+                    <span className="text-base">⚠️</span>
+                    <div className="text-sm font-semibold text-amber-900">
+                      <strong>{dupWarning.company_name}</strong> existe déjà
+                      <span className="ml-1.5 font-normal text-amber-700">— statut : {dupWarning.status}</span>
+                      {dupWarning.contact_name && <span className="ml-1.5 font-normal text-amber-700">· {dupWarning.contact_name}</span>}
                     </div>
-                  )}
-                </div>
-                <Inp label="Secteur" value={form.sector} onChange={fld('sector')} placeholder="IT, BTP, Santé…" />
-                <Inp label="Contact *" value={form.contact_name} onChange={fld('contact_name')} placeholder="Prénom Nom" />
-                <Inp label="Fonction / Rôle" value={form.contact_role} onChange={fld('contact_role')} placeholder="DSI, DG, Dir. Achats…" />
-                <Inp label="Téléphone" value={form.contact_phone} onChange={fld('contact_phone')} placeholder="+212 6 00 00 00 00" />
-                <Inp label="Email" value={form.contact_email} onChange={fld('contact_email')} placeholder="contact@societe.ma" type="email" />
-                <Inp label="Région" value={form.region} onChange={fld('region')} placeholder="Casablanca, Rabat…" />
-                <Sel label="Source" value={form.source} onChange={fld('source')} options={['', ...SOURCES]} />
-                <Sel label="Type de cible" value={form.type} onChange={fld('type')} options={TYPES} />
-                <div>
-                  <div className="mb-1 text-xs font-medium text-slate-600">Chaleur</div>
-                  <div className="flex gap-2">
-                    {(['cold','warm','hot'] as const).map(h => (
-                      <button key={h} type="button" onClick={() => setForm((p: any) => ({ ...p, heat: h }))}
-                        className={`flex-1 rounded-xl border py-2 text-xs font-semibold transition-colors
-                          ${form.heat===h ? 'bg-slate-900 text-white border-slate-900' : 'hover:bg-slate-50'}`}>
-                        {h==='hot' ? '🔥 Chaud' : h==='warm' ? '🌡 Tiède' : '❄️ Froid'}
-                      </button>
-                    ))}
+                  </div>
+                  <div className="flex gap-2 pl-7">
+                    <button type="button"
+                      onClick={() => { setModalOpen(false); setTimeout(() => openEdit(dupWarning), 50) }}
+                      className="rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors">
+                      ✏️ Modifier ce prospect
+                    </button>
+                    <button type="button"
+                      onClick={() => { setDupWarning(null); setFormErr(null) }}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-colors">
+                      Créer quand même
+                    </button>
                   </div>
                 </div>
-                {editId && <Sel label="Statut" value={form.status} onChange={fld('status')} options={STATUSES} />}
-                <div className="md:col-span-2">
-                  <Inp label="Prochaine action" value={form.next_action} onChange={fld('next_action')}
-                    placeholder="Ex: Rappeler lundi, Envoyer plaquette, Confirmer RDV…" />
+              )}
+
+              {formErr && !dupWarning && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  ⚠️ {formErr}
                 </div>
-                <div>
-                  <div className="mb-1 text-xs font-medium text-slate-600">Date de relance</div>
-                  <input type="date" value={form.next_date} onChange={fld('next_date')}
-                    className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400" />
-                </div>
-                <div className="md:col-span-2">
-                  <div className="mb-1 text-xs font-medium text-slate-600">Notes</div>
-                  <textarea value={form.notes} onChange={fld('notes')} rows={3}
-                    placeholder="Contexte, besoins potentiels, historique relation…"
-                    className="w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 resize-none" />
+              )}
+
+              {/* Section 1 — Société */}
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">🏢 Société</div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <CompanyInput
+                      value={form.company_name}
+                      onChange={v => { setForm((p: any) => ({ ...p, company_name: v })); setDupWarning(null); setFormErr(null) }}
+                      existingProspects={rows}
+                      editId={editId}
+                      onDupSelect={p => {
+                        setForm((f: any) => ({ ...f, company_name: p.company_name }))
+                        setDupWarning(p)
+                      }}
+                    />
+                  </div>
+                  <Inp label="Secteur" value={form.sector} onChange={fld('sector')} placeholder="IT, Banque, BTP…" />
+                  <Inp label="Région" value={form.region} onChange={fld('region')} placeholder="Casablanca, Rabat…" />
                 </div>
               </div>
+
+              {/* Section 2 — Contact */}
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">👤 Contact</div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Inp label="Nom complet *" value={form.contact_name} onChange={fld('contact_name')} placeholder="Prénom Nom" />
+                  <Inp label="Fonction / Rôle" value={form.contact_role} onChange={fld('contact_role')} placeholder="DSI, DG, Dir. Achats…" />
+                  <Inp label="Téléphone" value={form.contact_phone} onChange={fld('contact_phone')} placeholder="+212 6 00 00 00 00" />
+                  <Inp label="Email" value={form.contact_email} onChange={fld('contact_email')} placeholder="contact@societe.ma" type="email" />
+                </div>
+              </div>
+
+              {/* Section 3 — Qualification */}
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">📊 Qualification</div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold text-slate-600">Chaleur</div>
+                    <div className="flex gap-2">
+                      {([
+                        { k: 'cold', label: '❄️ Froid', active: 'bg-blue-600 text-white border-blue-600' },
+                        { k: 'warm', label: '🌡️ Tiède', active: 'bg-amber-500 text-white border-amber-500' },
+                        { k: 'hot',  label: '🔥 Chaud', active: 'bg-red-500 text-white border-red-500' },
+                      ] as const).map(h => (
+                        <button key={h.k} type="button"
+                          onClick={() => setForm((p: any) => ({ ...p, heat: h.k }))}
+                          className={`flex-1 rounded-xl border py-2 text-xs font-bold transition-all
+                            ${form.heat === h.k ? h.active + ' shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
+                          {h.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <Sel label="Type de cible" value={form.type} onChange={fld('type')} options={TYPES} />
+                  <Sel label="Source" value={form.source} onChange={fld('source')} options={['', ...SOURCES]} />
+                  {editId && <Sel label="Statut" value={form.status} onChange={fld('status')} options={STATUSES} />}
+                </div>
+              </div>
+
+              {/* Section 4 — Next step */}
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">📅 Prochaine action</div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <Inp label="Action prévue" value={form.next_action} onChange={fld('next_action')}
+                      placeholder="Ex: Rappeler lundi, Envoyer plaquette, Confirmer RDV…" />
+                  </div>
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold text-slate-600">Date de relance</div>
+                    <input type="date" value={form.next_date} onChange={fld('next_date')}
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100" />
+                  </div>
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold text-slate-600">Notes</div>
+                    <textarea value={form.notes} onChange={fld('notes')} rows={2}
+                      placeholder="Contexte, besoins, historique…"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 resize-none" />
+                  </div>
+                </div>
+              </div>
+
             </div>
-            <div className="flex items-center justify-end gap-3 border-t px-5 py-4">
+
+            {/* ── Footer ── */}
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 bg-white px-6 py-4">
               <button onClick={() => { setModalOpen(false); setEditId(null) }}
-                className="h-10 rounded-xl border px-5 text-sm font-medium text-slate-700 hover:bg-slate-50">Annuler</button>
+                className="h-10 rounded-xl border border-slate-200 px-5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                Annuler
+              </button>
               <button onClick={save} disabled={saving}
-                className="h-10 rounded-xl bg-slate-900 px-5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
-                {saving ? 'Enregistrement…' : editId ? 'Mettre à jour' : 'Créer le prospect'}
+                className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50 transition-colors sm:flex-none">
+                {saving
+                  ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />Enregistrement…</>
+                  : editId ? '✅ Mettre à jour' : '🎯 Créer le prospect'
+                }
               </button>
             </div>
+
           </div>
         </div>
       )}
