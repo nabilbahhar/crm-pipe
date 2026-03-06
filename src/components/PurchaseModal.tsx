@@ -71,9 +71,9 @@ export default function PurchaseModal({
   const [existingInfo, setExistingInfo] = useState<any>(null)
   const [loading, setLoading]           = useState(true)
 
-  const bcRef    = useRef<HTMLInputElement>(null)
-  const devisRef = useRef<HTMLInputElement>(null)
-  const autreRef = useRef<HTMLInputElement>(null)
+  const bcRef    = useRef<HTMLInputElement>(null) as React.MutableRefObject<HTMLInputElement>
+  const devisRef = useRef<HTMLInputElement>(null) as React.MutableRefObject<HTMLInputElement>
+  const autreRef = useRef<HTMLInputElement>(null) as React.MutableRefObject<HTMLInputElement>
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null))
@@ -539,7 +539,7 @@ function FileUploadZone({
   label, accept, file, onFile, inputRef, color,
 }: {
   label: string; accept: string; file: File | null
-  onFile: (f: File) => void; inputRef: React.RefObject<HTMLInputElement>
+  onFile: (f: File) => void; inputRef: React.MutableRefObject<HTMLInputElement>
   color: 'blue' | 'violet' | 'slate'
 }) {
   const colors = {
