@@ -7,6 +7,7 @@ import {
   ChevronDown, BarChart2, Activity, ArrowUp, ArrowDown,
   CheckCircle2, XCircle, Clock, Flame, Info, Trophy,
   Building2, MapPin, Calendar, Filter, SlidersHorizontal, X,
+  Package, TrendingDown, Percent,
 } from 'lucide-react'
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend,
@@ -260,6 +261,10 @@ export default function Dashboard() {
   const [sortKey, setSortKey]   = useState<'account'|'stage'|'sbu'|'card'|'amount'|'prob'|'closing'>('amount')
   const [sortDir, setSortDir]   = useState<'asc'|'desc'>('desc')
 
+  // ── Supply & Marge data ──────────────────────────────────────────────────
+  const [purchaseLines, setPurchaseLines] = useState<any[]>([])
+  const [supplyOrders,  setSupplyOrders]  = useState<any[]>([])
+
   // ── Filtres avancés ──────────────────────────────────────────────────────
   const [showFilters, setShowFilters]   = useState(false)
   const [stageFilters, setStageFilters] = useState<Set<string>>(new Set())
@@ -302,12 +307,15 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true); setErr(null)
     try {
-      const [{ data: opps, error: e1 }, { data: accs, error: e2 }] = await Promise.all([
+      const [{ data: opps, error: e1 }, { data: accs, error: e2 }, { data: pLines }, { data: sOrders }] = await Promise.all([
         supabase.from('opportunities').select('*, accounts(name,sector,segment,region)').order('created_at',{ascending:false}).limit(5000),
         supabase.from('accounts').select('id,name,sector,segment,region'),
+        supabase.from('purchase_lines').select('*, purchase_info(opportunity_id)'),
+        supabase.from('supply_orders').select('id, opportunity_id, status'),
       ])
       if (e1) throw e1; if (e2) throw e2
       setRows(opps||[]); setAccounts(accs||[])
+      setPurchaseLines(pLines||[]); setSupplyOrders(sOrders||[])
     } catch(e:any) { setErr(e?.message||'Erreur') }
     finally { setLoading(false) }
   }
@@ -586,6 +594,61 @@ export default function Dashboard() {
   const staleDeals = useMemo(()=>
     openDeals.filter(d=>d.daysOld>=60).sort((a,b)=>b.daysOld-a.daysOld).slice(0,10)
   ,[openDeals])
+
+  // ── Marge stats (from purchase_lines) ───────────────────────────────────
+  const margeStats = useMemo(()=>{
+    let totalVente=0, totalAchat=0, totalFrais=0
+    const byBU: Record<string,{vente:number;achat:number;count:number}> = {}
+    const byMonth: Record<string,{vente:number;achat:number;marge:number}> = {}
+
+    for (const ln of purchaseLines) {
+      const oppId = ln.purchase_info?.opportunity_id
+      const opp   = rows.find(r => r.id === oppId)
+      if (!opp) continue
+      const ptVente = Number(ln.pt_vente) || (Number(ln.qty||1) * Number(ln.pu_vente||0))
+      const ptAchat = Number(ln.qty||1) * Number(ln.pu_achat||0)
+      totalVente += ptVente; totalAchat += ptAchat
+
+      // by BU
+      const bu = opp.bu || 'Autre'
+      if (!byBU[bu]) byBU[bu] = {vente:0,achat:0,count:0}
+      byBU[bu].vente += ptVente; byBU[bu].achat += ptAchat; byBU[bu].count++
+
+      // by month (booking_month)
+      const ym = ymFrom(opp.booking_month) || ymFrom(opp.created_at)
+      if (ym && ym.startsWith(String(year))) {
+        if (!byMonth[ym]) byMonth[ym] = {vente:0,achat:0,marge:0}
+        byMonth[ym].vente += ptVente; byMonth[ym].achat += ptAchat
+        byMonth[ym].marge = byMonth[ym].vente - byMonth[ym].achat
+      }
+    }
+
+    const margeBrute = totalVente - totalAchat
+    const margePct   = totalVente > 0 ? (margeBrute/totalVente)*100 : 0
+
+    const buArr = Object.entries(byBU).map(([bu,v])=>({
+      bu, vente:v.vente, achat:v.achat, marge:v.vente-v.achat,
+      margePct: v.vente>0 ? Math.round((v.vente-v.achat)/v.vente*100) : 0,
+    })).sort((a,b)=>b.vente-a.vente)
+
+    const trendMarge = monthsOfYear(year).map((m,i)=>({
+      month: MONTHS_FR[i],
+      vente: byMonth[m]?.vente||0,
+      marge: byMonth[m]?.marge||0,
+      pct:   byMonth[m]?.vente>0 ? Math.round((byMonth[m].marge/byMonth[m].vente)*100) : 0,
+    }))
+
+    return { totalVente, totalAchat, margeBrute, margePct, buArr, trendMarge }
+  },[purchaseLines, rows, year])
+
+  // ── Supply status counts ─────────────────────────────────────────────────
+  const supplyCounts = useMemo(()=>{
+    const counts: Record<string,number> = {
+      a_commander:0, place:0, commande:0, en_stock:0, livre:0, facture:0
+    }
+    for (const o of supplyOrders) counts[o.status] = (counts[o.status]||0)+1
+    return counts
+  },[supplyOrders])
 
   // ── Top Open / Won ────────────────────────────────────────────────────────
   const topOpen = useMemo(()=>[...openDeals].sort((a,b)=>b.amount-a.amount).slice(0,12),[openDeals])
@@ -880,6 +943,89 @@ export default function Dashboard() {
             value={fmt(kpis.avgDeal)+' MAD'}
             sub="Open deals"/>
         </div>
+
+        {/* ══ MARGE KPI ROW ══ */}
+        {margeStats.totalVente > 0 && (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <KpiCard label="CA Total (fiches)" color="blue" icon={<TrendingUp className="h-5 w-5"/>}
+              value={fmt(margeStats.totalVente)+' MAD'} sub="Vente HT toutes fiches"/>
+            <KpiCard label="Coût total achat" color="slate" icon={<BarChart2 className="h-5 w-5"/>}
+              value={fmt(margeStats.totalAchat)+' MAD'} sub="Achat HT toutes fiches"/>
+            <KpiCard label="Marge brute" color="green" icon={<Award className="h-5 w-5"/>}
+              value={fmt(margeStats.margeBrute)+' MAD'}
+              sub={`${margeStats.margePct.toFixed(1)}% du CA`}
+              delta={margeStats.margeBrute>0?'up':'down'}
+              deltaLabel={`${margeStats.margePct.toFixed(1)}%`}/>
+            <KpiCard label="Deals Won sans fiche" color="amber" icon={<Package className="h-5 w-5"/>}
+              value={String(Math.max(0, wonDeals.length - supplyOrders.length))}
+              sub={`${supplyOrders.length} fiches remplies`}/>
+          </div>
+        )}
+
+        {/* ══ SUPPLY STATUTS + MARGE PAR BU ══ */}
+        {(supplyOrders.length > 0 || margeStats.buArr.length > 0) && (
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            {supplyOrders.length > 0 && (
+              <Panel title="📦 Supply Chain — Statuts" sub="Commandes en cours par étape">
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    {key:'a_commander',label:'À commander',icon:'🟡',color:'text-amber-700', bg:'bg-amber-50',  border:'border-amber-200'},
+                    {key:'place',      label:'Placé',      icon:'🔵',color:'text-blue-700',  bg:'bg-blue-50',   border:'border-blue-200'},
+                    {key:'commande',   label:'Commandé',   icon:'🟣',color:'text-violet-700',bg:'bg-violet-50', border:'border-violet-200'},
+                    {key:'en_stock',   label:'En stock',   icon:'🟠',color:'text-orange-700',bg:'bg-orange-50', border:'border-orange-200'},
+                    {key:'livre',      label:'Livré',      icon:'🟢',color:'text-emerald-700',bg:'bg-emerald-50',border:'border-emerald-200'},
+                    {key:'facture',    label:'Facturé',    icon:'✅',color:'text-slate-600', bg:'bg-slate-100', border:'border-slate-200'},
+                  ].map(s=>(
+                    <a key={s.key} href="/supply"
+                      className={`flex flex-col items-center justify-center rounded-2xl border p-3 transition-all hover:shadow-md ${s.bg} ${s.border}`}>
+                      <div className="text-xl mb-1">{s.icon}</div>
+                      <div className={`text-2xl font-black ${s.color}`}>{supplyCounts[s.key]||0}</div>
+                      <div className={`text-[10px] font-semibold text-center mt-0.5 ${s.color}`}>{s.label}</div>
+                    </a>
+                  ))}
+                </div>
+              </Panel>
+            )}
+            {margeStats.buArr.length > 0 && (
+              <Panel title="💰 Marge par BU" sub="Vente vs Achat vs Marge HT">
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={margeStats.buArr} margin={{top:4,right:10,bottom:4,left:0}} barGap={2} barCategoryGap="28%">
+                      <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4" vertical={false}/>
+                      <XAxis dataKey="bu" tick={{fontSize:11,fill:'#475569',fontWeight:600}} axisLine={false} tickLine={false}/>
+                      <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
+                      <Tooltip content={<ChartTip isAmt={true}/>}/>
+                      <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
+                      <Bar name="Vente HT" dataKey="vente" fill="#1e293b" radius={[4,4,0,0]}/>
+                      <Bar name="Achat HT" dataKey="achat" fill="#94a3b8" radius={[4,4,0,0]}/>
+                      <Bar name="Marge"    dataKey="marge" fill="#10b981" radius={[4,4,0,0]}/>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Panel>
+            )}
+          </div>
+        )}
+
+        {/* ══ TENDANCE MARGE MENSUELLE ══ */}
+        {margeStats.trendMarge.some(m=>m.marge>0) && (
+          <Panel title={`📈 Évolution marge ${year}`} sub="Marge brute MAD et % par mois">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={margeStats.trendMarge} margin={{top:10,right:10,bottom:5,left:0}}>
+                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4"/>
+                  <XAxis dataKey="month" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                  <YAxis yAxisId="amt" tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
+                  <YAxis yAxisId="pct" orientation="right" tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={36} tickFormatter={(v:any)=>`${v}%`}/>
+                  <Tooltip content={<ChartTip isAmt={true}/>}/>
+                  <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
+                  <Bar yAxisId="amt" name="Marge MAD" dataKey="marge" fill="#10b981" radius={[4,4,0,0]} opacity={0.85}/>
+                  <Line yAxisId="pct" type="monotone" dataKey="pct" name="Marge %" stroke="#f59e0b" strokeWidth={2.5} dot={{r:3,fill:'#f59e0b'}} activeDot={{r:5}}/>
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+        )}
 
         {/* ══ ALERTES QUALITÉ ══ */}
         {(quality.missingAmt+quality.missingClose+quality.missingStep+quality.stale90) > 0 && (
