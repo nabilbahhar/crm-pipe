@@ -16,7 +16,6 @@ type Deal = {
   created_at: string; updated_at?: string; owner_email?: string
   closing_date?: string; booking_month?: string; closing_month?: string; closing?: string
   bu?: string; vendor?: string; po_number?: string; next_step?: string
-  account_name?: string | null
   accounts?: { name?: string; sector?: string } | null
 }
 
@@ -197,11 +196,11 @@ export default function DealsPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('opportunities')
-      .select('id, title, status, stage, amount, prob, created_at, updated_at, owner_email, closing_date, booking_month, closing_month, closing, bu, vendor, po_number, next_step, account_name, accounts(name)')
+      .select('*, accounts(name)')
       .order('created_at', { ascending: false })
       .limit(2000)
-    if (error) console.error("Deals RLS/query error:", error.message, error.details)
-    if (data) setDeals(data.map(d => ({ ...d, accounts: d.accounts ? (d.accounts as any) : d.account_name ? { name: d.account_name } : null })))
+    if (error) console.error('Deals error:', error)
+    if (data) setDeals(data.map(d => ({ ...d, accounts: d.accounts as any })))
     setLoading(false)
   }
 
