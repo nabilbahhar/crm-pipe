@@ -108,7 +108,7 @@ export default function PurchasePage() {
   const bcRef    = useRef<HTMLInputElement>(null!)
   const devisRef = useRef<HTMLInputElement>(null!)
   const autreRef = useRef<HTMLInputElement>(null!)
-  const draftRef = useRef<ReturnType<typeof setTimeout>>()
+  const draftRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Load ──────────────────────────────────────────────────────
   useEffect(() => {
