@@ -135,9 +135,9 @@ export default function PurchasePage() {
       supabase.from('opportunities')
         .select('id, title, amount, bu, po_number, accounts(name)')
         .eq('id', id).single(),
-      supabase.from('fournisseurs')
+      supabase.from('suppliers')
         .select('id, name, contact_name, email, tel')
-        .eq('is_active', true).order('name'),
+        .order('name'),
     ])
     if (dealRes.data) setDeal({ ...dealRes.data, accounts: dealRes.data.accounts as any })
     if (fournsRes.data) setFourns(fournsRes.data)
