@@ -216,7 +216,7 @@ export default function PurchasePage() {
     if (!newFourn.name.trim()) return
     setAddingFourn(true)
     const tel = newFourn.tel ? normalizePhone(newFourn.tel) : ''
-    const { data, error } = await supabase.from('fournisseurs')
+    const { data, error } = await supabase.from('suppliers')
       .insert({ ...newFourn, tel, is_active: true })
       .select('id, name, contact_name, email, tel').single()
     if (!error && data) {
@@ -260,7 +260,8 @@ export default function PurchasePage() {
     setErr(null)
     // Pour save partiel : on filtre les lignes sans désignation (on ne bloque pas)
     const validLines = lines.filter(l => l.designation.trim())
-    if (validLines.length === 0) {
+    // Save partiel : ok même sans lignes (peut juste uploader les fichiers)
+    if (!partial && validLines.length === 0) {
       setErr('Ajoute au moins une ligne avec une désignation.'); return
     }
     // Pour save complet : validations strictes
@@ -367,40 +368,70 @@ export default function PurchasePage() {
   }
 
   const [uploadingFile, setUploadingFile] = useState<string | null>(null)
+  const [uploadError, setUploadError]     = useState<string | null>(null)
 
   // Upload immédiat dès sélection → persistance après refresh
   async function uploadFileNow(file: File, type: 'bc_client' | 'devis_compucom' | 'autre') {
     setUploadingFile(type)
+    setUploadError(null)
     try {
-      const path = `${id}/${type}/${Date.now()}_${file.name}`
+      // Récupérer l'email directement (state userEmail peut être null au 1er mount)
+      const { data: authData } = await supabase.auth.getUser()
+      const email = authData?.user?.email || userEmail || 'unknown'
+
+      // Nettoyer le nom de fichier (espaces/accents posent problème en Storage)
+      const safeName = file.name.replace(/[^a-zA-Z0-9._\-]/g, '_')
+      const path = `${id}/${type}/${Date.now()}_${safeName}`
+
       // Supprimer l'ancien fichier du même type (sauf 'autre')
       if (type !== 'autre') {
         const old = dbFiles.find(f => f.file_type === type)
         if (old?.file_url) {
           await supabase.storage.from('deal-files').remove([old.file_url])
           await supabase.from('deal_files').delete().eq('opportunity_id', id).eq('file_type', type)
+          setDbFiles(p => p.filter(f => f.file_type !== type))
         }
       }
-      const { data: stored, error } = await supabase.storage
+
+      const { data: stored, error: storageErr } = await supabase.storage
         .from('deal-files').upload(path, file, { upsert: true })
-      if (!error && stored) {
-        await supabase.from('deal_files').insert({
-          opportunity_id: id, file_type: type,
-          file_name: file.name, file_url: stored.path, uploaded_by: userEmail,
-        })
-        // Recharger dbFiles
-        const { data: files } = await supabase.from('deal_files')
-          .select('id, file_type, file_name, file_url').eq('opportunity_id', id)
-        if (files) setDbFiles(files)
+
+      if (storageErr) {
+        setUploadError(`Erreur stockage : ${storageErr.message}`)
+        setUploadingFile(null)
+        return
       }
-    } catch {}
+
+      if (stored) {
+        const { error: dbErr } = await supabase.from('deal_files').insert({
+          opportunity_id: id, file_type: type,
+          file_name: file.name, file_url: stored.path,
+          uploaded_by: email,
+        })
+        if (dbErr) {
+          setUploadError(`Erreur DB : ${dbErr.message}`)
+          setUploadingFile(null)
+          return
+        }
+        // Recharger depuis DB pour avoir l'id exact
+        const { data: fresh } = await supabase.from('deal_files')
+          .select('id, file_type, file_name, file_url').eq('opportunity_id', id)
+        if (fresh) setDbFiles(fresh)
+      }
+    } catch (e: any) {
+      setUploadError(`Erreur inattendue : ${e?.message || 'inconnue'}`)
+    }
     setUploadingFile(null)
   }
 
   async function deleteDbFile(fileId: string, fileUrl: string) {
-    await supabase.storage.from('deal-files').remove([fileUrl])
-    await supabase.from('deal_files').delete().eq('id', fileId)
-    setDbFiles(p => p.filter(f => f.id !== fileId))
+    try {
+      await supabase.storage.from('deal-files').remove([fileUrl])
+      await supabase.from('deal_files').delete().eq('id', fileId)
+      setDbFiles(p => p.filter(f => f.id !== fileId))
+    } catch (e: any) {
+      setErr(`Erreur suppression : ${e?.message}`)
+    }
   }
 
   const inp = 'w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-50 transition placeholder:text-slate-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
@@ -454,6 +485,14 @@ export default function PurchasePage() {
         {err && (
           <div className="flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             <AlertCircle className="h-4 w-4 shrink-0" /> {err}
+          </div>
+        )}
+        {uploadError && (
+          <div className="flex items-center gap-3 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-orange-500" />
+            <div><strong>Erreur upload :</strong> {uploadError}
+              <div className="mt-1 text-xs text-orange-600">Vérifie que le bucket <code>deal-files</code> existe dans Supabase Storage et que les politiques RLS autorisent INSERT.</div>
+            </div>
           </div>
         )}
 
@@ -527,11 +566,15 @@ export default function PurchasePage() {
                   const f = e.target.files?.[0]
                   if (f) { setDevisFile(f); setExtracted(false); setExtractErr(null); uploadFileNow(f, 'devis_compucom') }
                 }} />
-              {devisFile && !extracted && (
-                <button onClick={extractDevis} disabled={extracting}
+              {(devisFile || dbFiles.some(f => f.file_type === 'devis_compucom')) && !extracted && (
+                <button onClick={extractDevis} disabled={extracting || !devisFile}
+                  title={!devisFile ? 'Re-sélectionne le PDF pour extraire (le fichier est en DB mais pas en mémoire)' : ''}
                   className="mt-2 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-violet-600 text-sm font-bold text-white hover:bg-violet-700 disabled:opacity-60 transition">
                   {extracting ? <><Loader2 className="h-4 w-4 animate-spin" /> Extraction…</> : '✨ Extraire les lignes'}
                 </button>
+              )}
+              {!devisFile && dbFiles.some(f => f.file_type === 'devis_compucom') && !extracted && (
+                <p className="mt-1.5 text-xs text-slate-400 text-center">Re-sélectionne le PDF Devis pour activer l'extraction IA</p>
               )}
               {extracted && <p className="mt-2 flex items-center gap-1.5 text-sm font-semibold text-violet-700"><CheckCircle2 className="h-4 w-4" />{lines.length} ligne{lines.length>1?'s':''} extraite{lines.length>1?'s':''}</p>}
               {extractErr && <p className="mt-2 text-sm text-red-600">{extractErr}</p>}
