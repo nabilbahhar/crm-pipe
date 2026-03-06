@@ -521,7 +521,7 @@ export default function AccountsPage() {
                         {a.created_at ? (
                           <div className="flex flex-col gap-0.5 leading-none">
                             <span className="text-[10px] font-semibold text-slate-500 tabular-nums whitespace-nowrap">
-                              `${new Date(a.created_at).toLocaleDateString('fr-MA', { day: '2-digit', month: 'short' })} ${String(new Date(a.created_at).getFullYear()).slice(-2)}`
+                              {`${new Date(a.created_at).toLocaleDateString('fr-MA', { day: '2-digit', month: 'short' })} ${String(new Date(a.created_at).getFullYear()).slice(-2)}`}
                             </span>
                             <span className="text-[9px] text-slate-300 tabular-nums">
                               {new Date(a.created_at).toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
