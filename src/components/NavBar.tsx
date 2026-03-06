@@ -12,6 +12,8 @@ const NAV_ITEMS = [
   { label: "Pipeline",    href: "/pipeline" },
   { label: "Comptes",     href: "/accounts" },
   { label: "Deals",       href: "/opportunities" },
+  { label: "Tasks",       href: "/tasks",   badge: true },
+  { label: "Supply",      href: "/supply" },
   { label: "KPI",         href: "/kpi" },
 ];
 
@@ -250,9 +252,27 @@ export default function NavBar() {
   const [unread, setUnread]         = useState(0);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showPwdModal, setShowPwdModal] = useState(false);
+  const [taskCount, setTaskCount]   = useState(0);
   const panelRef    = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const lastReadRef = useRef<string>("");
+
+  // Load pending tasks count for badge
+  async function loadTaskCount() {
+    const today = new Date().toISOString().split("T")[0];
+    const [{ count: relances }, { data: wonDeals }] = await Promise.all([
+      supabase.from("prospects").select("id", { count: "exact", head: true })
+        .is("converted_at", null).neq("status", "Qualifié ✓").lt("next_date", today),
+      supabase.from("opportunities").select("id").eq("status", "Won"),
+    ]);
+    let achatCount = 0;
+    if (wonDeals?.length) {
+      const { data: filled } = await supabase.from("purchase_info")
+        .select("opportunity_id").in("opportunity_id", wonDeals.map((d: any) => d.id));
+      achatCount = wonDeals.length - (filled?.length || 0);
+    }
+    setTaskCount((relances || 0) + achatCount);
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -261,7 +281,7 @@ export default function NavBar() {
       if (!mounted) return;
       const userEmail = data?.user?.email ?? null;
       setEmail(userEmail);
-      if (userEmail) await loadLastRead(userEmail);
+      if (userEmail) { await loadLastRead(userEmail); loadTaskCount(); }
     };
     load();
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -348,8 +368,20 @@ export default function NavBar() {
                   color: active ? "#0f172a" : "#64748b",
                   textDecoration: "none",
                   background: active ? "#f1f5f9" : "transparent",
+                  position: "relative", display: "inline-flex", alignItems: "center", gap: 5,
                 }}>
                   {it.label}
+                  {it.badge && taskCount > 0 && (
+                    <span style={{
+                      minWidth: 16, height: 16, borderRadius: 8,
+                      background: "#ef4444", color: "#fff",
+                      fontSize: 10, fontWeight: 700,
+                      display: "inline-flex", alignItems: "center", justifyContent: "center",
+                      padding: "0 4px",
+                    }}>
+                      {taskCount > 9 ? "9+" : taskCount}
+                    </span>
+                  )}
                 </Link>
               );
             })}
@@ -494,4 +526,3 @@ export default function NavBar() {
     </>
   );
 }
-//a
