@@ -35,10 +35,13 @@ const emptyLine = (): PurchaseLine => ({
   ref: '', designation: '', qty: 1, pu_vente: 0, pt_vente: 0, pu_achat: 0, fournisseur_id: null,
 })
 
-// ─── Format professionnel : 523,760 MAD ──────────────────────
-const numFmt = (n: number) => Math.round(n || 0).toLocaleString('en-US')
-const mad    = (n: number) => `${numFmt(n)} MAD`
-const pct    = (n: number) => `${n.toFixed(1)}%`
+// ─── Format professionnel : 523 760 MAD (regex fiable en build Vercel) ───
+const numFmt = (n: number | null | undefined) => {
+  if (n == null) return '—'
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '\u202f')
+}
+const mad    = (n: number | null | undefined) => n == null ? '—' : `${numFmt(n)} MAD`
+const pct    = (n: number) => `${n.toFixed(1)} %`
 
 // ─── Draft localStorage ───────────────────────────────────────
 const DRAFT_KEY = (id: string) => `crm_purchase_draft_${id}`
@@ -252,14 +255,21 @@ export default function PurchasePage() {
       return u
     }))
 
-  // ── Save ──────────────────────────────────────────────────────
-  async function handleSave() {
+  // ── Save (partiel OU complet) ─────────────────────────────────
+  async function handleSave(partial = false) {
     setErr(null)
-    if (!lines.length || lines.some(l => !l.designation.trim())) { setErr('Toutes les lignes doivent avoir une désignation.'); return }
-    if (!hasBcClient) { setErr('BC Client est obligatoire.'); return }
-    if (!hasDevis)    { setErr('Devis Compucom est obligatoire.'); return }
-    if (!totalMatch)  { setErr(`Total (${mad(totalVente)}) ≠ montant deal (${mad(dealAmount)}). Écart : ${mad(Math.abs(totalDiff))}`); return }
-    if (margeFaible && justifText.trim().length < 10) { setErr('Justification obligatoire (min. 10 car.) pour marge < 10%.'); return }
+    // Pour save partiel : on filtre les lignes sans désignation (on ne bloque pas)
+    const validLines = lines.filter(l => l.designation.trim())
+    if (validLines.length === 0) {
+      setErr('Ajoute au moins une ligne avec une désignation.'); return
+    }
+    // Pour save complet : validations strictes
+    if (!partial) {
+      if (!hasBcClient) { setErr('BC Client est obligatoire pour finaliser.'); return }
+      if (!hasDevis)    { setErr('Devis Compucom est obligatoire pour finaliser.'); return }
+      if (!totalMatch)  { setErr(`Total (${mad(totalVente)}) ≠ montant deal (${mad(dealAmount)}). Écart : ${mad(Math.abs(totalDiff))}`); return }
+      if (margeFaible && justifText.trim().length < 10) { setErr('Justification obligatoire (min. 10 car.) pour marge < 10%.'); return }
+    }
 
     setSaving(true)
     try {
@@ -280,7 +290,7 @@ export default function PurchasePage() {
       }
       await supabase.from('purchase_lines').delete().eq('purchase_info_id', infoId)
       const { error: e2 } = await supabase.from('purchase_lines').insert(
-        lines.map((l, i) => {
+        validLines.map((l, i) => {
           const fourn = fourns.find(f => f.id === l.fournisseur_id)
           return {
             purchase_info_id: infoId, sort_order: i,
@@ -297,15 +307,30 @@ export default function PurchasePage() {
       )
       if (e2) throw e2
       await uploadNewFiles()
+      // Save complet = "Placer la commande" → status 'place'
+      // Save partiel = créer supply_order en 'a_commander' si n'existe pas encore
       await supabase.from('supply_orders').upsert(
-        { opportunity_id: id, status: 'a_commander', updated_at: new Date().toISOString() },
-        { onConflict: 'opportunity_id', ignoreDuplicates: true }
+        {
+          opportunity_id: id,
+          status: partial ? 'a_commander' : 'place',
+          ...(partial ? {} : { placed_at: new Date().toISOString() }),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'opportunity_id', ignoreDuplicates: partial }
       )
+      if (!partial) {
+        // Full save : mettre à jour le statut même si la commande existait déjà
+        await supabase.from('supply_orders')
+          .update({ status: 'place', placed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq('opportunity_id', id)
+      }
       await logActivity({
         action_type: existingInfo?.id ? 'update' : 'create',
         entity_type: 'deal', entity_id: id,
         entity_name: deal?.accounts?.name || deal?.title || '',
-        detail: `Fiche achat · ${lines.length} ligne(s) · Marge ${margePctNette.toFixed(1)}%`,
+        detail: partial
+          ? `Fiche achat (partielle) · ${validLines.length} ligne(s)`
+          : `Fiche achat · ${validLines.length} ligne(s) · Marge ${margePctNette.toFixed(1)}% · Commande placée`,
       })
       clearDraft(id)
       setSuccess(true)
@@ -439,10 +464,6 @@ export default function PurchasePage() {
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <SecTitle>📋 Lignes produits · {lines.length} article{lines.length>1?'s':''}</SecTitle>
-            <button onClick={() => setLines(l => [...l, emptyLine()])}
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100 transition">
-              <Plus className="h-4 w-4" /> Ajouter ligne
-            </button>
           </div>
 
           {/* Progress */}
@@ -471,11 +492,11 @@ export default function PurchasePage() {
                   {[
                     { l:'Réf',        w:100, r:false },
                     { l:'Désignation *', w:0, r:false },
-                    { l:'Qté',        w:72,  r:true  },
-                    { l:'PU Vente',   w:138, r:true  },
-                    { l:'PT Vente',   w:148, r:true  },
-                    { l:'PU Achat ★', w:148, r:true, amber:true },
-                    { l:'PT Achat',   w:148, r:true  },
+                    { l:'Qté',        w:90,  r:true  },
+                    { l:'PU Vente',   w:145, r:true  },
+                    { l:'PT Vente',   w:155, r:true  },
+                    { l:'PU Achat ★', w:155, r:true, amber:true },
+                    { l:'PT Achat',   w:155, r:true  },
                     { l:'Marge',      w:100, r:true  },
                     { l:'Fournisseur',w:220, r:false },
                     { l:'',           w:44,  r:false },
@@ -504,8 +525,8 @@ export default function PurchasePage() {
                           className={`${inp} ${!l.designation.trim()?'border-red-300 bg-red-50 focus:border-red-400':''}`} />
                       </td>
                       <td className="px-4 py-3">
-                        <input type="number" min={1} value={l.qty||''} onChange={e => updateLine(i,'qty',Number(e.target.value))}
-                          className={`${inp} text-right font-semibold`} />
+                        <input type="number" min={1} value={Number(l.qty) || 1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
+                          className={`${inp} text-right font-semibold`} style={{ minWidth: 72 }} />
                       </td>
                       <td className="px-4 py-3">
                         <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
@@ -576,6 +597,16 @@ export default function PurchasePage() {
               )}
             </table>
           </div>
+
+              {/* Row "Ajouter ligne" — dans le tableau, proche des lignes */}
+              <tr>
+                <td colSpan={10} className="px-4 py-2 border-t border-dashed border-slate-200">
+                  <button onClick={() => setLines(l => [...l, emptyLine()])}
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors">
+                    <Plus className="h-4 w-4" /> Ajouter une ligne
+                  </button>
+                </td>
+              </tr>
 
           {fourns.length === 0 && (
             <div className="mt-3 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
@@ -665,19 +696,27 @@ export default function PurchasePage() {
               <CheckCircle2 className="h-4 w-4 shrink-0" /> Fiche complète — prête à sauvegarder ✓
             </div>
           )}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <button onClick={() => router.push(`/opportunities/${id}`)}
               className="h-11 rounded-xl border border-slate-200 px-6 text-sm font-medium text-slate-600 hover:bg-slate-50 transition">
               Annuler
             </button>
-            <button onClick={handleSave} disabled={saving || success || !canSave}
-              className={`flex flex-1 sm:flex-none sm:min-w-[300px] h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition disabled:opacity-60
+
+            {/* Partial save — always available as long as lines have designations */}
+            <button onClick={() => handleSave(true)} disabled={saving || success || lines.every(l => !l.designation.trim())}
+              className="flex h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-40">
+              <Save className="h-4 w-4" /> Sauvegarder (partiel)
+            </button>
+
+            {/* Full save = "Placer la commande" */}
+            <button onClick={() => handleSave(false)} disabled={saving || success || !canSave}
+              className={`flex flex-1 sm:flex-none sm:min-w-[260px] h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition disabled:opacity-50
                 ${!canSave?'bg-slate-300 cursor-not-allowed':margeFaible?'bg-amber-600 hover:bg-amber-700 shadow-amber-200 shadow-lg':'bg-slate-900 hover:bg-slate-800 shadow-slate-200 shadow-lg'}`}>
               {saving
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Sauvegarde…</>
                 : margeFaible
                   ? <><ShieldCheck className="h-4 w-4" /> Enregistrer (validation Achraf)</>
-                  : <><Save className="h-4 w-4" /> Enregistrer la fiche achat</>}
+                  : <><Package className="h-4 w-4" /> Placer la commande</>}
             </button>
           </div>
         </div>
