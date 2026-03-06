@@ -501,46 +501,6 @@ export default function AccountsPage() {
             </div>
           </div>
 
-          {/* Date filter — bouton compact intégré à la toolbar */}
-          <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/50 px-5 py-2">
-            <div className="relative">
-              <button onClick={() => setShowDatePicker(v => !v)}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold shadow-sm transition-colors
-                  ${(dateFrom || dateTo) ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
-                📅 {dateFrom || dateTo
-                  ? [dateFrom && dateFrom.slice(8)+'/'+dateFrom.slice(5,7), dateTo && dateTo.slice(8)+'/'+dateTo.slice(5,7)].filter(Boolean).join(' → ')
-                  : 'Créé : toutes dates'}
-                {(dateFrom || dateTo) && (
-                  <span onClick={e => { e.stopPropagation(); setDateFrom(''); setDateTo('') }}
-                    className="ml-0.5 cursor-pointer rounded-full p-0.5 hover:bg-white/20">
-                    <X className="h-3 w-3" />
-                  </span>
-                )}
-              </button>
-              {showDatePicker && (
-                <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
-                  <div className="mb-3 text-[10px] font-bold uppercase tracking-widest text-slate-400">Date de création</div>
-                  <div className="space-y-2">
-                    <div>
-                      <div className="mb-1 text-xs font-medium text-slate-500">Du</div>
-                      <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                        className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:outline-none focus:border-slate-400" />
-                    </div>
-                    <div>
-                      <div className="mb-1 text-xs font-medium text-slate-500">Au</div>
-                      <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                        className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 focus:outline-none focus:border-slate-400" />
-                    </div>
-                  </div>
-                  <button onClick={() => setShowDatePicker(false)}
-                    className="mt-3 w-full rounded-xl bg-slate-900 py-2 text-xs font-bold text-white hover:bg-slate-800 transition-colors">
-                    Appliquer ✓
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-
           {/* Table */}
           <div className="overflow-auto">
             {(() => {
