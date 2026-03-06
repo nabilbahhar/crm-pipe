@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import {
   Plus, RefreshCw, X, Phone, Mail, ChevronRight,
@@ -142,6 +142,91 @@ const EMPTY: any = {
   status: 'À contacter', next_action: '', next_date: '', notes: '', source: '',
 }
 
+// ─── CompanyInput — autocomplete + détection doublon ─────────────────────────
+function CompanyInput({
+  value, onChange, existingProspects, editId,
+  onDupSelect,
+}: {
+  value: string
+  onChange: (v: string) => void
+  existingProspects: Prospect[]
+  editId: string | null
+  onDupSelect: (p: Prospect) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [cursor, setCursor] = useState(-1)
+
+  const matches = useMemo(() => {
+    const q = value.trim().toLowerCase()
+    if (!q) return []
+    return existingProspects
+      .filter(p => p.id !== editId && p.company_name.toLowerCase().includes(q))
+      .slice(0, 8)
+  }, [value, existingProspects, editId])
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => { setCursor(-1) }, [value])
+
+  function onKeyDown(e: React.KeyboardEvent) {
+    if (!open || matches.length === 0) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(c + 1, matches.length - 1)) }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setCursor(c => Math.max(c - 1, 0)) }
+    if (e.key === 'Enter' && cursor >= 0) { e.preventDefault(); onDupSelect(matches[cursor]); setOpen(false) }
+    if (e.key === 'Escape') setOpen(false)
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div className="mb-1 text-xs font-medium text-slate-600">Société *</div>
+      <input
+        ref={inputRef}
+        value={value}
+        onChange={e => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => { if (value.trim()) setOpen(true) }}
+        onKeyDown={onKeyDown}
+        placeholder="Ex: BCP, OCP, Lydec…"
+        autoComplete="off"
+        className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+      />
+      {open && matches.length > 0 && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+          <div className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Prospects existants
+          </div>
+          {matches.map((p, i) => (
+            <button key={p.id} type="button"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onDupSelect(p); setOpen(false) }}
+              className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm transition-colors
+                ${cursor === i ? 'bg-amber-50' : 'hover:bg-slate-50'}`}>
+              <div>
+                <span className="font-semibold text-slate-800">{p.company_name}</span>
+                {p.contact_name && <span className="ml-2 text-xs text-slate-400">· {p.contact_name}</span>}
+              </div>
+              <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold
+                ${ p.status === 'Qualifié ✓' ? 'bg-emerald-50 text-emerald-700'
+                  : p.heat === 'hot' ? 'bg-red-50 text-red-600'
+                  : 'bg-slate-100 text-slate-500' }`}>
+                {p.status}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ProspectionPage() {
   const [rows, setRows]     = useState<Prospect[]>([])
@@ -165,6 +250,7 @@ export default function ProspectionPage() {
   const [form, setForm]           = useState({ ...EMPTY })
   const [saving, setSaving]       = useState(false)
   const [formErr, setFormErr]     = useState<string | null>(null)
+  const [dupWarning, setDupWarning] = useState<Prospect | null>(null)
 
   // Convert modal
   const [convertP, setConvertP]   = useState<Prospect | null>(null)
@@ -240,6 +326,17 @@ export default function ProspectionPage() {
     setFormErr(null)
     if (!form.company_name.trim()) { setFormErr('Société obligatoire.'); return }
     if (!form.contact_name.trim()) { setFormErr('Contact obligatoire.'); return }
+
+    // Vérification doublon stricte (case-insensitive)
+    const dup = rows.find(p =>
+      p.id !== editId &&
+      p.company_name.trim().toLowerCase() === form.company_name.trim().toLowerCase()
+    )
+    if (dup) {
+      setFormErr(`Ce prospect existe déjà : "${dup.company_name}" (statut : ${dup.status}).`)
+      setDupWarning(dup)
+      return
+    }
     setSaving(true)
     const payload = {
       company_name: form.company_name.trim(), sector: form.sector || null,
@@ -290,7 +387,7 @@ export default function ProspectionPage() {
     setEditId(null)
     const d = new Date(); d.setDate(d.getDate() + 3)
     setForm({ ...EMPTY, next_date: d.toISOString().split('T')[0] })
-    setFormErr(null); setModalOpen(true)
+    setFormErr(null); setDupWarning(null); setModalOpen(true)
   }
 
   function openEdit(p: Prospect) {
@@ -303,7 +400,7 @@ export default function ProspectionPage() {
       next_action: p.next_action || '', next_date: p.next_date || '',
       notes: p.notes || '', source: p.source || '',
     })
-    setFormErr(null); setModalOpen(true)
+    setFormErr(null); setDupWarning(null); setModalOpen(true)
   }
 
   const fld = (k: string) => (e: React.ChangeEvent<any>) => setForm((p: any) => ({ ...p, [k]: e.target.value }))
@@ -659,9 +756,52 @@ export default function ProspectionPage() {
               </button>
             </div>
             <div className="max-h-[80vh] overflow-auto p-5">
-              {formErr && <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{formErr}</div>}
+              {formErr && (
+                <div className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  ⚠️ {formErr}
+                  {dupWarning && (
+                    <button type="button"
+                      onClick={() => { setModalOpen(false); setDupWarning(null); openEdit(dupWarning) }}
+                      className="ml-3 underline font-semibold hover:text-red-900">
+                      Ouvrir le prospect existant →
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <Inp label="Société *" value={form.company_name} onChange={fld('company_name')} placeholder="Ex: BCP, OCP, Lydec…" />
+                <div className="md:col-span-2">
+                  <CompanyInput
+                    value={form.company_name}
+                    onChange={v => { setForm((p: any) => ({ ...p, company_name: v })); setDupWarning(null); setFormErr(null) }}
+                    existingProspects={rows}
+                    editId={editId}
+                    onDupSelect={p => {
+                      setForm((f: any) => ({ ...f, company_name: p.company_name }))
+                      setDupWarning(p)
+                      setFormErr(`⚠️ Ce prospect existe déjà : "${p.company_name}" (${p.status}).`)
+                    }}
+                  />
+                  {dupWarning && (
+                    <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+                      <div className="text-xs font-semibold text-amber-800">
+                        🔁 <strong>{dupWarning.company_name}</strong> existe déjà — statut : <span className="italic">{dupWarning.status}</span>
+                        {dupWarning.contact_name && ` · contact : ${dupWarning.contact_name}`}
+                      </div>
+                      <div className="flex shrink-0 gap-2">
+                        <button type="button"
+                          onClick={() => { setModalOpen(false); setTimeout(() => openEdit(dupWarning), 50) }}
+                          className="rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors">
+                          Modifier ce prospect
+                        </button>
+                        <button type="button"
+                          onClick={() => { setDupWarning(null); setFormErr(null) }}
+                          className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-colors">
+                          Créer quand même
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <Inp label="Secteur" value={form.sector} onChange={fld('sector')} placeholder="IT, BTP, Santé…" />
                 <Inp label="Contact *" value={form.contact_name} onChange={fld('contact_name')} placeholder="Prénom Nom" />
                 <Inp label="Fonction / Rôle" value={form.contact_role} onChange={fld('contact_role')} placeholder="DSI, DG, Dir. Achats…" />
