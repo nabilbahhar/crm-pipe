@@ -13,7 +13,8 @@ const NAV_ITEMS = [
   { label: "Comptes",     href: "/accounts" },
   { label: "Deals",       href: "/opportunities" },
   { label: "Tasks",       href: "/tasks",   badge: true },
-  { label: "Supply",      href: "/supply" },
+  { label: "Supply",       href: "/supply" },
+  { label: "Fournisseurs", href: "/supply/fournisseurs" },
   { label: "KPI",         href: "/kpi" },
 ];
 
