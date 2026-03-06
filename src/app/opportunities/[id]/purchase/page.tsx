@@ -119,11 +119,11 @@ export default function PurchasePage() {
   // Auto-save draft
   useEffect(() => {
     if (!id || loading) return
-    clearTimeout(draftRef.current)
+    if (draftRef.current) clearTimeout(draftRef.current)
     draftRef.current = setTimeout(() => {
       saveDraft(id, { lines, frais, notes, justifReason, justifText })
     }, 2000)
-    return () => clearTimeout(draftRef.current)
+    return () => { if (draftRef.current) clearTimeout(draftRef.current) }
   }, [lines, frais, notes, justifReason, justifText, id, loading])
 
   async function loadAll() {
