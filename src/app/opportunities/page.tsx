@@ -153,28 +153,32 @@ function fmtCreated(iso: string | null): { d: string; t: string } | null {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function DealsPageInner() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+
   const [rows, setRows]       = useState<Deal[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr]         = useState<string|null>(null)
 
-  // Filters
+  // Filters — initialisés depuis les query params URL
+  const initStatus = (searchParams.get('status') || 'Tous') as typeof STATUS_ALL[number]
+  const initStage  = searchParams.get('stage') || 'Tous'
+  const initBU     = searchParams.get('bu') || 'Tous'
+  const initOwner  = searchParams.get('owner') || 'Tous'
+
   const [search, setSearch]               = useState('')
-  const [statusFilter, setStatusFilter]   = useState<typeof STATUS_ALL[number]>('Tous')
-  const [stageFilter, setStageFilter]     = useState('Tous')
-  const [buFilter, setBuFilter]           = useState('Tous')
-  const [showFilters, setShowFilters]     = useState(false)
+  const [statusFilter, setStatusFilter]   = useState<typeof STATUS_ALL[number]>(STATUS_ALL.includes(initStatus) ? initStatus : 'Tous')
+  const [stageFilter, setStageFilter]     = useState(initStage)
+  const [buFilter, setBuFilter]           = useState(initBU)
+  const [showFilters, setShowFilters]     = useState(initStage !== 'Tous' || initBU !== 'Tous' || initOwner !== 'Tous')
   const [supplyFilter, setSupplyFilter]   = useState<'Tous' | 'avec_supply' | 'sans_supply'>('Tous')
   const [dateFrom, setDateFrom]           = useState('')
   const [dateTo, setDateTo]               = useState('')
-  const [ownerFilter, setOwnerFilter]     = useState('Tous')
+  const [ownerFilter, setOwnerFilter]     = useState(initOwner)
 
   // Sort
   const [sortKey, setSortKey]   = useState<SortKey>('amount')
   const [sortDir, setSortDir]   = useState<'asc'|'desc'>('desc')
-
-  // ── Edit modal ──
-  const searchParams = useSearchParams()
-  const router = useRouter()
   const [showNewDeal, setShowNewDeal] = useState(false)
   const [editRow, setEditRow]         = useState<any>(null)
 
