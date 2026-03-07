@@ -188,12 +188,43 @@ function DealsPageInner() {
   const load = async () => {
     setLoading(true); setErr(null)
     try {
+      // ── 1. Deals (sans join supply pour éviter les problèmes FK Supabase) ──
       const { data, error } = await supabase.from('opportunities')
-        .select('*, accounts(name), supply_orders(status), purchase_info(id, purchase_lines(pu_achat, fournisseur))')
+        .select('*, accounts(name)')
         .order('created_at', { ascending: false })
         .limit(3000)
       if (error) throw error
-      setRows((data || []) as Deal[])
+      const deals = (data || []) as Deal[]
+
+      // ── 2. Supply orders (séparé, plus fiable) ──────────────────────────────
+      const wonIds = deals.filter(d => d.status === 'Won').map(d => d.id)
+      if (wonIds.length > 0) {
+        const [{ data: supplyData }, { data: infoData }] = await Promise.all([
+          supabase.from('supply_orders')
+            .select('opportunity_id, status')
+            .in('opportunity_id', wonIds),
+          supabase.from('purchase_info')
+            .select('opportunity_id, purchase_lines(pu_achat, fournisseur)')
+            .in('opportunity_id', wonIds),
+        ])
+        // Build maps
+        const supplyMap = new Map<string, SupplyStatus>()
+        ;(supplyData || []).forEach((o: any) => {
+          if (o.opportunity_id) supplyMap.set(o.opportunity_id, o.status)
+        })
+        const ficheMap = new Map<string, { pu_achat: number|null; fournisseur: string|null }[]>()
+        ;(infoData || []).forEach((inf: any) => {
+          if (inf.opportunity_id)
+            ficheMap.set(inf.opportunity_id, inf.purchase_lines || [])
+        })
+        // Merge into deals
+        deals.forEach(d => {
+          if (supplyMap.has(d.id)) d.supply_orders = [{ status: supplyMap.get(d.id)! }]
+          if (ficheMap.has(d.id)) d.purchase_info = [{ id: d.id, purchase_lines: ficheMap.get(d.id) }]
+        })
+      }
+
+      setRows(deals)
     } catch (e: any) { setErr(e?.message || 'Erreur') }
     finally { setLoading(false) }
   }
