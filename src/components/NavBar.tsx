@@ -357,8 +357,8 @@ function QuickSearch({ onClose }: { onClose: () => void }) {
 }
 
 // ── Keyboard Shortcuts Panel ─────────────────────────────────────────────────
-const SHORTCUTS = [
-  { keys: ["⌘", "K"], label: "Recherche rapide" },
+const SHORTCUTS_TEMPLATE = [
+  { keys: ["MOD", "K"], label: "Recherche rapide" },
   { keys: ["?"], label: "Afficher les raccourcis" },
   { keys: ["G", "D"], label: "Aller au Dashboard" },
   { keys: ["G", "P"], label: "Aller au Pipeline" },
@@ -371,7 +371,7 @@ const SHORTCUTS = [
   { keys: ["G", "H"], label: "Aller à l'Historique" },
 ];
 
-function ShortcutsPanel({ onClose }: { onClose: () => void }) {
+function ShortcutsPanel({ onClose, modKey }: { onClose: () => void; modKey: string }) {
   useEffect(() => {
     function handleKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
     document.addEventListener("keydown", handleKey);
@@ -389,13 +389,13 @@ function ShortcutsPanel({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div style={{ padding: "8px 0" }}>
-          {SHORTCUTS.map((s, i) => (
+          {SHORTCUTS_TEMPLATE.map((s, i) => (
             <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 20px" }}>
               <span style={{ fontSize: 13, color: "#475569" }}>{s.label}</span>
               <div style={{ display: "flex", gap: 4 }}>
                 {s.keys.map((k, j) => (
                   <kbd key={j} style={{ minWidth: 24, height: 24, borderRadius: 6, background: "#f1f5f9", border: "1px solid #e2e8f0", fontSize: 11, fontWeight: 600, color: "#475569", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 6px", fontFamily: "monospace" }}>
-                    {k}
+                    {k === 'MOD' ? modKey : k}
                   </kbd>
                 ))}
               </div>
@@ -425,6 +425,9 @@ export default function NavBar() {
   const panelRef    = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const lastReadRef = useRef<string>("");
+  const [isMac, setIsMac] = useState(true);
+  useEffect(() => { setIsMac(typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent)) }, []);
+  const modKey = isMac ? '⌘' : 'Ctrl';
 
   // Global keyboard shortcuts
   const router = useRouter();
@@ -633,7 +636,7 @@ export default function NavBar() {
             >
               <Search style={{ width: 14, height: 14 }} />
               <span>Recherche</span>
-              <kbd style={{ fontSize: 10, background: '#e2e8f0', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace', fontWeight: 600, color: '#64748b' }}>⌘K</kbd>
+              <kbd style={{ fontSize: 10, background: '#e2e8f0', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace', fontWeight: 600, color: '#64748b' }}>{modKey}+K</kbd>
             </button>
 
             {/* ── User menu ── */}
@@ -775,7 +778,7 @@ export default function NavBar() {
       {showSearch && <QuickSearch onClose={() => setShowSearch(false)} />}
 
       {/* ── Keyboard Shortcuts panel ── */}
-      {showShortcuts && <ShortcutsPanel onClose={() => setShowShortcuts(false)} />}
+      {showShortcuts && <ShortcutsPanel onClose={() => setShowShortcuts(false)} modKey={modKey} />}
     </>
   );
 }

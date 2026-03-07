@@ -48,6 +48,15 @@ const PIPE_STAGES = ['Lead','Discovery','Qualified','Solutioning','Proposal Sent
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const fmtAmt = fmt
+function timeAgo(iso: string | null | undefined) {
+  if (!iso) return null
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (s < 60) return 'à l\'instant'
+  if (s < 3600) return `${Math.floor(s/60)}min`
+  if (s < 86400) return `${Math.floor(s/3600)}h`
+  const d = Math.floor(s/86400)
+  return d === 1 ? 'hier' : `${d}j`
+}
 
 function StageBadge({ stage }: { stage: string }) {
   const c = STAGE_STYLE[stage] || STAGE_STYLE.Lead
@@ -662,6 +671,9 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                             className="block truncate font-medium text-slate-800 hover:text-slate-900 hover:underline" title={r.title}>
                             {r.title}
                           </Link>
+                          {timeAgo((r as any).updated_at) && (
+                            <div className="text-[10px] text-slate-300 mt-0.5"><Clock className="inline h-2.5 w-2.5 mr-0.5 -mt-px"/>{timeAgo((r as any).updated_at)}</div>
+                          )}
                         </td>
                         <td className="px-4 py-3"><StageBadge stage={r.stage} /></td>
                         <td className="px-4 py-3"><BuBadge bu={r.multi_bu?'MULTI':r.bu} buLines={r.bu_lines} /></td>
@@ -802,6 +814,11 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                           )}
 
                           <div className="mt-2 flex items-center gap-1.5 border-t pt-2">
+                            {timeAgo((r as any).updated_at) && (
+                              <span className="text-[10px] text-slate-300 mr-auto" title={`Modifié ${new Date((r as any).updated_at).toLocaleString('fr-MA')}`}>
+                                <Clock className="inline h-2.5 w-2.5 mr-0.5 -mt-px" />{timeAgo((r as any).updated_at)}
+                              </span>
+                            )}
                             <Link href={`/opportunities/${r.id}`}
                               className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100">
                               <Eye className="h-3 w-3" />

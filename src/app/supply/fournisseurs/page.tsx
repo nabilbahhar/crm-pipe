@@ -363,8 +363,22 @@ export default function SuppliersPage() {
                           </td>
                           <td className="px-4 py-3">
                             <div className="text-xs text-slate-700 font-medium">{s.contact || <span className="text-slate-300">—</span>}</div>
-                            {s.email && <a href={`mailto:${s.email}`} onClick={e => e.stopPropagation()} className="text-[11px] text-blue-500 hover:underline">{s.email}</a>}
-                            {s.tel && <div className="text-[11px] text-slate-400">{s.tel}</div>}
+                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                              {s.email && (
+                                <a href={`mailto:${s.email}`} onClick={e => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 rounded-md bg-blue-50 border border-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 transition-colors"
+                                  title={`Envoyer un email à ${s.email}`}>
+                                  <Mail className="h-2.5 w-2.5" />{s.email}
+                                </a>
+                              )}
+                              {s.tel && (
+                                <a href={`tel:${s.tel}`} onClick={e => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-100 transition-colors"
+                                  title={`Appeler ${s.tel}`}>
+                                  <Phone className="h-2.5 w-2.5" />{s.tel}
+                                </a>
+                              )}
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-right">
                             {hasOrders ? (
