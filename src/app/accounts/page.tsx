@@ -525,7 +525,7 @@ export default function AccountsPage() {
           {/* Table */}
           <div className="overflow-auto">
             {(() => {
-              type SortCol = 'created_at'|'name'|'sector'|'segment'|'region'|'deals'
+              type SortCol = 'created_at'|'name'|'sector'|'segment'|'region'|'deals'|'won_amt'|'last_deal'
               function TH({ col, label, right }: { col: SortCol; label: string; right?: boolean }) {
                 const active = sortKey === col
                 const Icon = active ? (sortDir === 'desc' ? ArrowDown : ArrowUp) : ChevronsUpDown
