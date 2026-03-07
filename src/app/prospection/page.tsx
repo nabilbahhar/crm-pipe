@@ -324,6 +324,9 @@ export default function ProspectionPage() {
   const stats = useMemo(() => {
     const active = rows.filter(x => !x.converted_at)
     const converted = rows.filter(x => x.converted_at).length
+    const bySource: Record<string, number> = {}
+    for (const r of active) { const s = r.source || 'Autre'; bySource[s] = (bySource[s] || 0) + 1 }
+    const topSources = Object.entries(bySource).sort((a, b) => b[1] - a[1]).slice(0, 6)
     return {
       total: active.length,
       hot: active.filter(x => x.heat === 'hot').length,
@@ -331,6 +334,7 @@ export default function ProspectionPage() {
       converted,
       convRate: rows.length > 0 ? Math.round(converted / rows.length * 100) : 0,
       bySt: Object.fromEntries(STATUSES.map(s => [s, active.filter(x => x.status === s).length])),
+      topSources,
     }
   }, [rows])
 
@@ -514,6 +518,32 @@ export default function ProspectionPage() {
             <div className="text-xs text-slate-400">{showOverdue ? 'Clic → tout voir' : 'Clic → filtrer'}</div>
           </div>
         </div>
+
+        {/* Source distribution */}
+        {stats.topSources.length > 1 && (
+          <div className="mt-3 rounded-2xl border bg-white p-4 shadow-sm">
+            <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Sources de prospection</div>
+            <div className="flex gap-1 items-end h-8">
+              {stats.topSources.map(([src, cnt]) => {
+                const maxCnt = stats.topSources[0][1] as number
+                const pct = maxCnt > 0 ? (cnt as number) / (maxCnt as number) * 100 : 0
+                return (
+                  <div key={src} className="flex-1 flex flex-col items-center gap-1" title={`${src}: ${cnt}`}>
+                    <div className="w-full rounded-t bg-slate-900 transition-all" style={{ height: `${Math.max(pct, 8)}%` }} />
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex gap-1 mt-1">
+              {stats.topSources.map(([src, cnt]) => (
+                <div key={src} className="flex-1 text-center">
+                  <div className="text-[9px] font-semibold text-slate-500 truncate">{src}</div>
+                  <div className="text-[10px] font-bold text-slate-700">{cnt as number}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Funnel */}
         <div className="mt-4 rounded-2xl border bg-white p-4 shadow-sm">
