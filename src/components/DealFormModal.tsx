@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabaseClient'
 import { logActivity } from '@/lib/logActivity'
 import { X, Plus, Trash2, Save, ChevronDown, ExternalLink } from 'lucide-react'
+import { mad } from '@/lib/utils'
 import Link from 'next/link'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -65,9 +66,6 @@ function isoToDMY(iso: string | null | undefined): string {
   if (!m) return ''
   return `${m[3]}/${m[2]}/${m[1]}`
 }
-
-const mad = (n: number) =>
-  new Intl.NumberFormat('fr-MA', { style: 'currency', currency: 'MAD', maximumFractionDigits: 0 }).format(n || 0)
 
 // ─── ComboBox (portal dropdown, searchable) ───────────────────────────────────
 function ComboBox(props: {

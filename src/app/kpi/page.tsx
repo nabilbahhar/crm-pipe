@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { normSBU, ymFrom } from '@/lib/utils'
 import {
   ResponsiveContainer, Tooltip, ComposedChart, CartesianGrid,
   Bar, Line, XAxis, YAxis,
@@ -31,26 +32,6 @@ function fmtMAD(n: number, compact = false) {
   return new Intl.NumberFormat('fr-MA', { maximumFractionDigits: 0 }).format(n) + ' MAD'
 }
 
-function normSBU(raw: any): string {
-  const u = String(raw||'').trim().toUpperCase()
-  if (!u) return 'Other'
-  if (u.includes('CSG')) return 'CSG'
-  if (u.includes('NETWORK')) return 'Network'
-  if (u.includes('STORAGE')) return 'Storage'
-  if (u.includes('CYBER')) return 'Cyber'
-  if (u.includes('SERVICE')) return 'Service'
-  if (u.includes('HCI')||u.includes('INFRA')) return 'HCI'
-  return 'Other'
-}
-
-function ymFrom(raw: any): string|null {
-  if (!raw) return null
-  const s = String(raw)
-  const m = s.match(/(\d{4})[^\d](\d{1,2})/)
-  if (m) return `${m[1]}-${m[2].padStart(2,'0')}`
-  if (/^\d{4}-\d{2}$/.test(s)) return s
-  return null
-}
 
 function buildStats(deals: any[]) {
   const buMap: Record<string,number> = {}

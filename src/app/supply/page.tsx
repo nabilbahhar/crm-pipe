@@ -1,12 +1,11 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { mad, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus } from '@/lib/utils'
 import PurchaseModal from '@/components/PurchaseModal'
 import { RefreshCw, Package, ChevronRight, Search, AlertCircle } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
-type SupplyStatus = 'a_commander' | 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'
-
 type Order = {
   id: string
   opportunity_id: string
@@ -27,23 +26,9 @@ type Order = {
   }
 }
 
-// ─── Config statuts ───────────────────────────────────────────
-const STATUS_CONFIG: Record<SupplyStatus, {
-  label: string; icon: string; color: string
-  bg: string; border: string; next?: SupplyStatus
-}> = {
-  a_commander: { label: 'À commander', icon: '🟡', color: 'text-amber-700',  bg: 'bg-amber-50',   border: 'border-amber-200', next: 'place'    },
-  place:       { label: 'Placé',        icon: '🔵', color: 'text-blue-700',   bg: 'bg-blue-50',    border: 'border-blue-200',  next: 'commande' },
-  commande:    { label: 'Commandé',     icon: '🟣', color: 'text-violet-700', bg: 'bg-violet-50',  border: 'border-violet-200',next: 'en_stock' },
-  en_stock:    { label: 'En stock',     icon: '🟠', color: 'text-orange-700', bg: 'bg-orange-50',  border: 'border-orange-200',next: 'livre'    },
-  livre:       { label: 'Livré',        icon: '🟢', color: 'text-emerald-700',bg: 'bg-emerald-50', border: 'border-emerald-200',next: 'facture' },
-  facture:     { label: 'Facturé',      icon: '✅', color: 'text-slate-600',  bg: 'bg-slate-100',  border: 'border-slate-200'                   },
-}
-
-const ALL_STATUSES: SupplyStatus[] = ['a_commander','place','commande','en_stock','livre','facture']
-
-const mad = (n: number) =>
-  new Intl.NumberFormat('fr-MA', { style: 'currency', currency: 'MAD', maximumFractionDigits: 0 }).format(n || 0)
+// Aliases for backward compat with existing references in this file
+const STATUS_CONFIG = SUPPLY_STATUS_CFG
+const ALL_STATUSES = SUPPLY_STATUS_ORDER
 
 // ─── Main ─────────────────────────────────────────────────────
 export default function SupplyPage() {

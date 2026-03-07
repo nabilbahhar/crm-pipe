@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { logActivity } from '@/lib/logActivity'
+import { mad, fmt, STAGE_CFG as STAGE_STYLE, BU_BADGE_CLS as BU_COLOR } from '@/lib/utils'
 import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2, X } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -42,35 +43,11 @@ const STAGE_PROB: Record<string, number> = {
   Lead:10, Discovery:20, Qualified:40, Solutioning:55,
   'Proposal Sent':70, Negotiation:80, Commit:90, Won:100, 'Lost / No decision':0,
 }
-const STAGE_STYLE: Record<string, { bg: string; text: string; dot: string; border: string }> = {
-  Lead:              { bg:'bg-slate-100',  text:'text-slate-600',   dot:'bg-slate-400',   border:'border-slate-200' },
-  Discovery:         { bg:'bg-blue-50',    text:'text-blue-700',    dot:'bg-blue-400',    border:'border-blue-200'  },
-  Qualified:         { bg:'bg-cyan-50',    text:'text-cyan-700',    dot:'bg-cyan-400',    border:'border-cyan-200'  },
-  Solutioning:       { bg:'bg-violet-50',  text:'text-violet-700',  dot:'bg-violet-400',  border:'border-violet-200'},
-  'Proposal Sent':   { bg:'bg-amber-50',   text:'text-amber-700',   dot:'bg-amber-400',   border:'border-amber-200' },
-  Negotiation:       { bg:'bg-orange-50',  text:'text-orange-700',  dot:'bg-orange-400',  border:'border-orange-200'},
-  Commit:            { bg:'bg-emerald-50', text:'text-emerald-700', dot:'bg-emerald-500', border:'border-emerald-200'},
-  Won:               { bg:'bg-green-100',  text:'text-green-800',   dot:'bg-green-500',   border:'border-green-300' },
-  'Lost / No decision':{ bg:'bg-red-50',  text:'text-red-600',     dot:'bg-red-400',     border:'border-red-200'   },
-}
 const BUS = ['HCI','Network','Storage','Cyber','Service','CSG'] as const
-const BU_COLOR: Record<string,string> = {
-  HCI:'bg-indigo-50 text-indigo-700', Network:'bg-sky-50 text-sky-700',
-  Storage:'bg-teal-50 text-teal-700', Cyber:'bg-red-50 text-red-700',
-  Service:'bg-violet-50 text-violet-700', CSG:'bg-amber-50 text-amber-700',
-  MULTI:'bg-slate-100 text-slate-600',
-}
 const PIPE_STAGES = ['Lead','Discovery','Qualified','Solutioning','Proposal Sent','Negotiation','Commit'] as const
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-const mad = (n: number) =>
-  new Intl.NumberFormat('fr-MA', { style:'currency', currency:'MAD', maximumFractionDigits:0 }).format(n||0)
-
-function fmtAmt(n: number) {
-  if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`
-  if (n >= 1000) return `${Math.round(n/1000)}K`
-  return String(Math.round(n))
-}
+const fmtAmt = fmt
 
 function StageBadge({ stage }: { stage: string }) {
   const c = STAGE_STYLE[stage] || STAGE_STYLE.Lead

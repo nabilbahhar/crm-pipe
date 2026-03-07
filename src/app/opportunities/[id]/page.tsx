@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import { madFull, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus } from '@/lib/utils'
 import {
   ArrowLeft, Package, Mail, Edit2, Loader2, X,
   Copy, Check, ExternalLink, FileText, Building2,
@@ -46,40 +47,15 @@ type Activity = {
 }
 
 // ─── Formatters ───────────────────────────────────────────────
-const mad = (n: number | null | undefined) =>
-  n == null ? '—' : Number(n).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' MAD'
-const pct = (n: number) => `${n.toFixed(1)} %`
-const fmtDate = (s?: string | null) =>
-  s ? new Date(s).toLocaleDateString('fr-MA', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'
-const fmtDateTime = (s?: string | null) =>
-  s ? new Date(s).toLocaleDateString('fr-MA', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'
+// mad (as madFull), pct, fmtDate, fmtDateTime imported from @/lib/utils
+const mad = madFull
 
 const closingDate = (o: Opp) =>
   o.booking_month || o.closing_month || o.closing_date || o.closing
 
-// ─── Supply status config ─────────────────────────────────────
-type SupplyStatus = 'a_commander' | 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'
-const STATUS_CFG: Record<string, { label: string; icon: string; color: string; bg: string; dot: string }> = {
-  a_commander: { label: 'À commander', icon: '📋', color: 'text-amber-700',  bg: 'bg-amber-50',   dot: 'bg-amber-400'   },
-  place:       { label: 'Placé',        icon: '📤', color: 'text-blue-700',   bg: 'bg-blue-50',    dot: 'bg-blue-500'    },
-  commande:    { label: 'Commandé',     icon: '🔄', color: 'text-violet-700', bg: 'bg-violet-50',  dot: 'bg-violet-500'  },
-  en_stock:    { label: 'En stock',     icon: '📦', color: 'text-orange-700', bg: 'bg-orange-50',  dot: 'bg-orange-400'  },
-  livre:       { label: 'Livré',        icon: '🚚', color: 'text-emerald-700',bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
-  facture:     { label: 'Facturé',      icon: '✅', color: 'text-slate-600',  bg: 'bg-slate-100',  dot: 'bg-slate-400'   },
-}
-const STATUS_ORDER: SupplyStatus[] = ['a_commander','place','commande','en_stock','livre','facture']
-
-const STAGE_CFG: Record<string, { bg: string; text: string }> = {
-  'Lead':             { bg: 'bg-slate-100',   text: 'text-slate-600'   },
-  'Discovery':        { bg: 'bg-blue-50',     text: 'text-blue-700'    },
-  'Qualified':        { bg: 'bg-cyan-50',     text: 'text-cyan-700'    },
-  'Solutioning':      { bg: 'bg-violet-50',   text: 'text-violet-700'  },
-  'Proposal Sent':    { bg: 'bg-amber-50',    text: 'text-amber-700'   },
-  'Negotiation':      { bg: 'bg-orange-50',   text: 'text-orange-700'  },
-  'Commit':           { bg: 'bg-emerald-50',  text: 'text-emerald-700' },
-  'Won':              { bg: 'bg-green-100',   text: 'text-green-800'   },
-  'Lost / No decision':{ bg: 'bg-red-50',    text: 'text-red-600'     },
-}
+// ─── Supply & Stage config imported from @/lib/utils ──────────
+const STATUS_CFG = SUPPLY_STATUS_CFG
+const STATUS_ORDER = SUPPLY_STATUS_ORDER
 
 const ACTION_ICON: Record<string, string> = {
   create: '✨', update: '✏️', delete: '🗑️', view: '👁️',
@@ -312,7 +288,7 @@ export default function OpportunityDetailPage() {
   const ficheComplete = !!(info && info.purchase_lines.length > 0 && linesOk === info.purchase_lines.length)
   const canEmail      = ficheComplete && isWon
   const supIdx        = supply ? STATUS_ORDER.indexOf(supply.status as SupplyStatus) : -1
-  const supCfg        = supply ? STATUS_CFG[supply.status] : null
+  const supCfg        = supply ? STATUS_CFG[supply.status as SupplyStatus] : null
   const cDate         = closingDate(opp)
   const stageCfg      = STAGE_CFG[opp.stage] || { bg: 'bg-slate-100', text: 'text-slate-600' }
 

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabaseClient'
 import { logActivity } from '@/lib/logActivity'
+import { mad, pct } from '@/lib/utils'
 import {
   X, Upload, Loader2, Plus, Trash2, Save,
   FileText, AlertCircle, CheckCircle2, AlertTriangle, ShieldCheck,
@@ -44,11 +45,6 @@ const emptyLine = (): PurchaseLine => ({
   fournisseur: '', contact_fournisseur: '',
   email_fournisseur: '', tel_fournisseur: '',
 })
-
-const mad = (n: number) =>
-  new Intl.NumberFormat('fr-MA', { style: 'currency', currency: 'MAD', maximumFractionDigits: 0 }).format(n || 0)
-
-const pct = (n: number) => `${n.toFixed(1)}%`
 
 // ─── Main Component ───────────────────────────────────────────
 export default function PurchaseModal({

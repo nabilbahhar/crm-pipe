@@ -15,6 +15,7 @@ import {
   LabelList, FunnelChart, Funnel, ComposedChart, Area,
 } from 'recharts'
 import CRMChatbot from './CRMChatbot'
+import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONSTANTS
@@ -28,26 +29,10 @@ const STAGE_ORDER = ['Lead','Discovery','Qualified','Solutioning','Proposal Sent
 
 const ANNUAL_TARGET = 30_000_000   // 30M MAD objectif Won annuel
 
-const SBU_COLORS: Record<string, string> = {
-  HCI: '#6366f1', Network: '#0ea5e9', Storage: '#14b8a6',
-  Cyber: '#ef4444', Service: '#8b5cf6', CSG: '#f59e0b',
-  MULTI: '#94a3b8', Other: '#cbd5e1',
-}
 const C = {
   pipeline: '#2563eb', forecast: '#7c3aed', commit: '#d97706',
   won: '#16a34a', lost: '#dc2626', csg: '#0f172a', cirs: '#64748b',
   grid: '#f1f5f9',
-}
-const STAGE_CFG: Record<string, { bg: string; text: string; dot: string }> = {
-  Lead:              { bg: 'bg-slate-100',  text: 'text-slate-600',  dot: 'bg-slate-400'   },
-  Discovery:         { bg: 'bg-blue-50',    text: 'text-blue-700',   dot: 'bg-blue-400'    },
-  Qualified:         { bg: 'bg-cyan-50',    text: 'text-cyan-700',   dot: 'bg-cyan-400'    },
-  Solutioning:       { bg: 'bg-violet-50',  text: 'text-violet-700', dot: 'bg-violet-400'  },
-  'Proposal Sent':   { bg: 'bg-amber-50',   text: 'text-amber-700',  dot: 'bg-amber-400'   },
-  Negotiation:       { bg: 'bg-orange-50',  text: 'text-orange-700', dot: 'bg-orange-400'  },
-  Commit:            { bg: 'bg-emerald-50', text: 'text-emerald-700',dot: 'bg-emerald-500' },
-  Won:               { bg: 'bg-green-100',  text: 'text-green-800',  dot: 'bg-green-500'   },
-  'Lost / No decision': { bg:'bg-red-50',   text:'text-red-600',     dot:'bg-red-400'      },
 }
 
 const MONTHS_FR = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc']
@@ -55,22 +40,7 @@ const MONTHS_FR = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct'
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
-const mad = (n: number) =>
-  new Intl.NumberFormat('fr-MA', { style:'currency', currency:'MAD', maximumFractionDigits:0 }).format(n||0)
-
-const fmt = (n: number) => {
-  if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${Math.round(n/1000)}K`
-  return String(Math.round(n))
-}
 const pct = (v: number, t: number) => (!t ? 0 : Math.round((v/t)*100))
-
-const ymFrom = (raw: any): string|null => {
-  if (!raw) return null
-  if (typeof raw === 'string') { const s = raw.trim(); if (s.length>=7 && /^\d{4}-\d{2}/.test(s)) return s.slice(0,7); return null }
-  try { const d = new Date(raw); if (!isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` } catch {}
-  return null
-}
 const monthsOfYear  = (y: number) => Array.from({length:12},(_,i) => `${y}-${String(i+1).padStart(2,'0')}`)
 const quarterMonths = (y: number, q: 'Q1'|'Q2'|'Q3'|'Q4') => {
   const s = q==='Q1'?1:q==='Q2'?4:q==='Q3'?7:10
@@ -91,19 +61,6 @@ const rangeMonths = (from: string, to: string): string[] => {
   return res
 }
 const normStage  = (s: any) => String(s||'').trim() || 'Lead'
-const normStatus = (r: any): 'Open'|'Won'|'Lost' => {
-  const st = String(r?.status||'').trim()
-  if (st==='Won'||st==='Lost'||st==='Open') return st
-  const sg = normStage(r?.stage).toLowerCase()
-  if (sg==='won') return 'Won'; if (sg.includes('lost')) return 'Lost'; return 'Open'
-}
-const normSBU = (raw: any): SBU => {
-  const v = String(raw||'').trim(); if (!v) return 'Other'; const u = v.toUpperCase()
-  if (u==='MULTI') return 'MULTI'; if (u.includes('CSG')) return 'CSG'
-  if (u.includes('NETWORK')) return 'Network'; if (u.includes('STORAGE')) return 'Storage'
-  if (u.includes('CYBER')) return 'Cyber'; if (u.includes('SERVICE')) return 'Service'
-  if (u.includes('HCI')||u.includes('INFRA')) return 'HCI'; return 'Other'
-}
 const buGroup = (s: SBU): 'CSG'|'CIRS' => (s==='CSG'?'CSG':'CIRS')
 
 const daysBetween = (a: string, b: string) => {
