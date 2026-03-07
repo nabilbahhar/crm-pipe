@@ -258,13 +258,17 @@ export default function NavBar() {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const lastReadRef = useRef<string>("");
 
-  // Load pending tasks count for badge
+  // Load pending tasks count for badge (relances + achats + closing retard)
   async function loadTaskCount() {
     const today = new Date().toISOString().split("T")[0];
-    const [{ count: relances }, { data: wonDeals }] = await Promise.all([
+    const now = new Date();
+    const thisM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const [{ count: relances }, { data: wonDeals }, { count: closingRetards }] = await Promise.all([
       supabase.from("prospects").select("id", { count: "exact", head: true })
         .is("converted_at", null).neq("status", "Qualifié ✓").lt("next_date", today),
       supabase.from("opportunities").select("id").eq("status", "Won"),
+      supabase.from("opportunities").select("id", { count: "exact", head: true })
+        .eq("status", "Open").lt("booking_month", thisM).not("booking_month", "is", null),
     ]);
     let achatCount = 0;
     if (wonDeals?.length) {
@@ -272,7 +276,7 @@ export default function NavBar() {
         .select("opportunity_id").in("opportunity_id", wonDeals.map((d: any) => d.id));
       achatCount = wonDeals.length - (filled?.length || 0);
     }
-    setTaskCount((relances || 0) + achatCount);
+    setTaskCount((relances || 0) + achatCount + (closingRetards || 0));
   }
 
   useEffect(() => {
