@@ -110,6 +110,8 @@ function PipelineContent() {
   const [accountFilter, setAccountFilter] = useState<string>(() => searchParams.get('account') || 'Tous')
   const [vendorFilter, setVendorFilter]   = useState<string>('Tous')
   const [ownerFilter, setOwnerFilter]     = useState<string>('Tous')
+  const [dragId, setDragId]           = useState<string | null>(null)
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null)
   const [sortCol, setSortCol]         = useState<'amount'|'prob'|'booking_month'|'stage'|'account'|'vendor'>('booking_month')
   // Period filter
   const thisYear = new Date().getFullYear()
@@ -194,6 +196,38 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       detail: `${deal.stage} · ${deal.bu || ''} · ${deal.amount ? deal.amount + ' MAD' : ''}`.trim(),
     })
     toast(`${deal.title} supprimé.`); load()
+  }
+
+  async function handleDrop(targetStage: string) {
+    setDragOverStage(null)
+    if (!dragId) return
+    const deal = rows.find(r => r.id === dragId)
+    if (!deal || deal.stage === targetStage) { setDragId(null); return }
+    // Confirmation for Won
+    if (targetStage === 'Won') {
+      if (!confirm(`⚠️ Marquer "${deal.title}" comme WON ?`)) { setDragId(null); return }
+    }
+    if (targetStage === 'Lost / No decision') {
+      if (!confirm(`Marquer "${deal.title}" comme Lost ?`)) { setDragId(null); return }
+    }
+    const newStatus = targetStage === 'Won' ? 'Won' : targetStage === 'Lost / No decision' ? 'Lost' : 'Open'
+    const { error } = await supabase.from('opportunities').update({
+      stage: targetStage, status: newStatus, prob: STAGE_PROB[targetStage] ?? deal.prob
+    }).eq('id', deal.id)
+    if (error) { setErr(error.message); setDragId(null); return }
+    // Auto supply_order when Won
+    if (targetStage === 'Won') {
+      const { data: existing } = await supabase.from('supply_orders').select('id').eq('opportunity_id', deal.id).maybeSingle()
+      if (!existing) await supabase.from('supply_orders').insert({ opportunity_id: deal.id, status: 'a_commander' })
+    }
+    await logActivity({
+      action_type: targetStage === 'Won' ? 'won' : 'stage',
+      entity_type: 'deal', entity_id: deal.id, entity_name: deal.title,
+      detail: `${deal.stage} → ${targetStage} (drag)`,
+    })
+    setDragId(null)
+    toast(`${deal.title} → ${targetStage}`)
+    load()
   }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
@@ -682,7 +716,10 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
               const st = STAGE_STYLE[stage]
               const colAmt = cards.reduce((s,r)=>s+Number(r.amount||0),0)
               return (
-                <div key={stage} className="min-w-[240px] w-[240px] flex-shrink-0">
+                <div key={stage} className={`min-w-[240px] w-[240px] flex-shrink-0 rounded-2xl transition-colors ${dragOverStage===stage?'bg-blue-50 ring-2 ring-blue-300':''}`}
+                  onDragOver={e => { e.preventDefault(); setDragOverStage(stage) }}
+                  onDragLeave={() => setDragOverStage(null)}
+                  onDrop={e => { e.preventDefault(); handleDrop(stage) }}>
                   <div className={`mb-2 rounded-xl border px-3 py-2 ${st.bg} ${st.border}`}>
                     <div className="flex items-center justify-between">
                       <div className={`flex items-center gap-1.5 text-xs font-bold ${st.text}`}>
@@ -702,7 +739,12 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                       const isPast = r.booking_month&&r.booking_month<thisM&&r.status==='Open'
                       const nextS = STAGE_NEXT[r.stage]
                       return (
-                        <div key={r.id} className={`rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-shadow
+                        <div key={r.id}
+                          draggable
+                          onDragStart={() => setDragId(r.id)}
+                          onDragEnd={() => { setDragId(null); setDragOverStage(null) }}
+                          className={`rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing
+                          ${dragId===r.id?'opacity-50 ring-2 ring-blue-400':''}
                           ${r.status==='Won'&&!r.po_number?'border-orange-300':isPast?'border-red-200':'border-slate-100'}`}>
                           <div className="font-semibold text-slate-900 text-xs leading-tight">{r.accounts?.name||'—'}</div>
                           <Link href={`/opportunities/${r.id}`}
