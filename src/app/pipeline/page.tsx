@@ -159,6 +159,15 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
 
   async function deleteDeal(deal: DealRow) {
     if (!confirm(`Supprimer "${deal.title}" ? Cette action est irréversible.`)) return
+    // Cascade: supprimer les données liées avant l'opportunité
+    const { data: piRows } = await supabase.from('purchase_info').select('id').eq('opportunity_id', deal.id)
+    const piIds = (piRows || []).map((r: any) => r.id)
+    await Promise.all([
+      supabase.from('deal_files').delete().eq('opportunity_id', deal.id),
+      supabase.from('supply_orders').delete().eq('opportunity_id', deal.id),
+      ...(piIds.length ? [supabase.from('purchase_lines').delete().in('purchase_info_id', piIds)] : []),
+    ])
+    if (piIds.length) await supabase.from('purchase_info').delete().eq('opportunity_id', deal.id)
     const { error } = await supabase.from('opportunities').delete().eq('id', deal.id)
     if (error) { setErr(error.message); return }
     await logActivity({
