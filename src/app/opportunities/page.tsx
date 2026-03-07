@@ -10,6 +10,9 @@ import {
   ArrowUp, ArrowDown, ChevronsUpDown, Filter,
 } from 'lucide-react'
 
+// ─── Import depuis utils ──────────────────────────────────────────────────────
+import { mad, fmt, normStatus, STAGE_CFG, BU_BADGE_CLS } from '@/lib/utils'
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Deal = {
   id: string; account_id: string|null; title: string; stage: string
@@ -23,37 +26,7 @@ const STAGES = ['Lead','Discovery','Qualified','Solutioning','Proposal Sent','Ne
 const BUS    = ['HCI','Network','Storage','Cyber','Service','CSG'] as const
 const STATUS_ALL = ['Tous', 'Open', 'Won', 'Lost'] as const
 
-const STAGE_CFG: Record<string, { bg: string; text: string; dot: string }> = {
-  Lead:              { bg: 'bg-slate-100',   text: 'text-slate-600',   dot: 'bg-slate-400'   },
-  Discovery:         { bg: 'bg-blue-50',     text: 'text-blue-700',    dot: 'bg-blue-400'    },
-  Qualified:         { bg: 'bg-cyan-50',     text: 'text-cyan-700',    dot: 'bg-cyan-400'    },
-  Solutioning:       { bg: 'bg-violet-50',   text: 'text-violet-700',  dot: 'bg-violet-400'  },
-  'Proposal Sent':   { bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-400'   },
-  Negotiation:       { bg: 'bg-orange-50',   text: 'text-orange-700',  dot: 'bg-orange-400'  },
-  Commit:            { bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  Won:               { bg: 'bg-green-100',   text: 'text-green-800',   dot: 'bg-green-500'   },
-  'Lost / No decision': { bg: 'bg-red-50',  text: 'text-red-600',     dot: 'bg-red-400'     },
-}
-const BU_CFG: Record<string, string> = {
-  HCI: 'bg-indigo-50 text-indigo-700', Network: 'bg-sky-50 text-sky-700',
-  Storage: 'bg-teal-50 text-teal-700', Cyber: 'bg-red-50 text-red-700',
-  Service: 'bg-violet-50 text-violet-700', CSG: 'bg-amber-50 text-amber-700',
-  MULTI: 'bg-slate-100 text-slate-600',
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const mad = (n: number) => new Intl.NumberFormat('fr-MA', { style: 'currency', currency: 'MAD', maximumFractionDigits: 0 }).format(n || 0)
-const fmt = (n: number) => {
-  if (n >= 1_000_000) return `${(n/1_000_000).toFixed(1)}M`
-  if (n >= 1000) return `${Math.round(n/1000)}K`
-  return String(Math.round(n))
-}
-const normStatus = (d: Deal): 'Open'|'Won'|'Lost' => {
-  const s = String(d.status || '').trim()
-  if (s === 'Won' || s === 'Lost' || s === 'Open') return s
-  const sg = String(d.stage || '').toLowerCase()
-  if (sg === 'won') return 'Won'; if (sg.includes('lost')) return 'Lost'; return 'Open'
-}
+// ─── Helpers locaux ───────────────────────────────────────────────────────────
 const mainBU = (d: Deal): string => {
   if (d.multi_bu || (Array.isArray(d.bu_lines) && d.bu_lines.length > 0)) return 'MULTI'
   return d.bu || '—'
@@ -70,7 +43,7 @@ function StagePill({ stage }: { stage: string }) {
 }
 function BUPill({ bu }: { bu: string }) {
   if (!bu || bu === '—') return <span className="text-slate-300 text-xs">—</span>
-  const cls = BU_CFG[bu] || 'bg-slate-100 text-slate-600'
+  const cls = BU_BADGE_CLS[bu] || 'bg-slate-100 text-slate-600'
   return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-bold ${cls}`}>{bu}</span>
 }
 function StatusBadge({ status }: { status: string }) {
@@ -108,7 +81,6 @@ type SortKey = 'account'|'title'|'stage'|'bu'|'vendor'|'amount'|'prob'|'closing'
 function fmtCreated(iso: string | null): { d: string; t: string } | null {
   if (!iso) return null
   const dt = new Date(iso)
-  const now = new Date()
   return {
     d: dt.toLocaleDateString('fr-MA', { day: '2-digit', month: 'short' }) + ' ' + String(dt.getFullYear()).slice(-2),
     t: dt.toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -122,13 +94,13 @@ function DealsPageInner() {
   const [err, setErr]         = useState<string|null>(null)
 
   // Filters
-  const [search, setSearch]       = useState('')
-  const [statusFilter, setStatusFilter] = useState<typeof STATUS_ALL[number]>('Tous')
-  const [stageFilter, setStageFilter]   = useState('Tous')
-  const [buFilter, setBuFilter]         = useState('Tous')
-  const [showFilters, setShowFilters]   = useState(false)
-  const [dateFrom, setDateFrom]         = useState('')
-  const [dateTo, setDateTo]             = useState('')
+  const [search, setSearch]               = useState('')
+  const [statusFilter, setStatusFilter]   = useState<typeof STATUS_ALL[number]>('Tous')
+  const [stageFilter, setStageFilter]     = useState('Tous')
+  const [buFilter, setBuFilter]           = useState('Tous')
+  const [showFilters, setShowFilters]     = useState(false)
+  const [dateFrom, setDateFrom]           = useState('')
+  const [dateTo, setDateTo]               = useState('')
 
   // Sort
   const [sortKey, setSortKey]   = useState<SortKey>('amount')
@@ -148,7 +120,6 @@ function DealsPageInner() {
       if (found) { setEditRow(found); router.replace('/opportunities') }
     }
   }, [searchParams, rows])
-
 
   const load = async () => {
     setLoading(true); setErr(null)
@@ -180,14 +151,18 @@ function DealsPageInner() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return rows.filter(d => {
-      const status = normStatus(d)
+      const status  = normStatus(d)
       const account = String(d.accounts?.name || '')
-      const bu = mainBU(d)
+      const bu      = mainBU(d)
+
       if (statusFilter !== 'Tous' && status !== statusFilter) return false
-      if (stageFilter !== 'Tous' && d.stage !== stageFilter) return false
-      if (buFilter !== 'Tous' && bu !== buFilter) return false
-      if (dateFrom && (d.created_at || '') < dateFrom) return false
-      if (dateTo   && (d.created_at || '') > dateTo + 'T23:59:59') return false
+      if (stageFilter  !== 'Tous' && d.stage !== stageFilter) return false
+      if (buFilter     !== 'Tous' && bu !== buFilter) return false
+
+      // ✅ FIX: comparaison date-only (évite les bugs de timezone)
+      if (dateFrom && (d.created_at || '').slice(0, 10) < dateFrom) return false
+      if (dateTo   && (d.created_at || '').slice(0, 10) > dateTo)   return false
+
       if (q && !(
         d.title?.toLowerCase().includes(q) ||
         account.toLowerCase().includes(q) ||
@@ -196,30 +171,30 @@ function DealsPageInner() {
       )) return false
       return true
     })
-  }, [rows, search, statusFilter, stageFilter, buFilter])
+  }, [rows, search, statusFilter, stageFilter, buFilter, dateFrom, dateTo])
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1
     return [...filtered].sort((a, b) => {
       let va: any, vb: any
       switch (sortKey) {
-        case 'account': va = a.accounts?.name||''; vb = b.accounts?.name||''; break
-        case 'title':   va = a.title||''; vb = b.title||''; break
-        case 'stage':   va = STAGES.indexOf(a.stage as any); vb = STAGES.indexOf(b.stage as any); break
-        case 'bu':      va = mainBU(a); vb = mainBU(b); break
-        case 'vendor':  va = a.vendor||''; vb = b.vendor||''; break
-        case 'prob':    va = a.prob||0; vb = b.prob||0; break
-        case 'closing': va = a.booking_month||''; vb = b.booking_month||''; break
-        case 'status':  va = normStatus(a); vb = normStatus(b); break
+        case 'account':    va = a.accounts?.name||''; vb = b.accounts?.name||''; break
+        case 'title':      va = a.title||''; vb = b.title||''; break
+        case 'stage':      va = STAGES.indexOf(a.stage as any); vb = STAGES.indexOf(b.stage as any); break
+        case 'bu':         va = mainBU(a); vb = mainBU(b); break
+        case 'vendor':     va = a.vendor||''; vb = b.vendor||''; break
+        case 'prob':       va = a.prob||0; vb = b.prob||0; break
+        case 'closing':    va = a.booking_month||''; vb = b.booking_month||''; break
+        case 'status':     va = normStatus(a); vb = normStatus(b); break
         case 'created_at': va = a.created_at||''; vb = b.created_at||''; break
-        default:        va = a.amount||0; vb = b.amount||0
+        default:           va = a.amount||0; vb = b.amount||0
       }
       if (typeof va === 'number' && typeof vb === 'number') return dir * (va - vb)
       return dir * String(va).localeCompare(String(vb))
     })
   }, [filtered, sortKey, sortDir])
 
-  // ── Sort header component ─────────────────────────────────────────────
+  // ── Sort header ───────────────────────────────────────────────────────
   function TH({ col, label, right }: { col: SortKey; label: string; right?: boolean }) {
     const active = sortKey === col
     const Icon = active ? (sortDir === 'desc' ? ArrowDown : ArrowUp) : ChevronsUpDown
@@ -238,6 +213,10 @@ function DealsPageInner() {
   }
 
   const hasFilters = search || statusFilter !== 'Tous' || stageFilter !== 'Tous' || buFilter !== 'Tous' || dateFrom || dateTo
+  const resetFilters = () => {
+    setSearch(''); setStatusFilter('Tous'); setStageFilter('Tous')
+    setBuFilter('Tous'); setDateFrom(''); setDateTo('')
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -330,8 +309,9 @@ function DealsPageInner() {
             <div className="ml-auto flex items-center gap-2 text-xs text-slate-400">
               {sorted.length} deals
               {hasFilters && (
-                <button onClick={() => { setSearch(''); setStatusFilter('Tous'); setStageFilter('Tous'); setBuFilter('Tous'); setDateFrom(''); setDateTo('') }}
-                  className="text-blue-600 hover:underline font-semibold">Réinitialiser</button>
+                <button onClick={resetFilters} className="text-blue-600 hover:underline font-semibold">
+                  Réinitialiser
+                </button>
               )}
             </div>
           </div>
@@ -400,10 +380,10 @@ function DealsPageInner() {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {sorted.map(d => {
-                    const status = normStatus(d)
+                    const status  = normStatus(d)
                     const account = d.accounts?.name || '—'
-                    const bu = mainBU(d)
-                    const isLate = d.booking_month && d.booking_month < new Date().toISOString().slice(0, 7) && status === 'Open'
+                    const bu      = mainBU(d)
+                    const isLate  = d.booking_month && d.booking_month < new Date().toISOString().slice(0, 7) && status === 'Open'
                     return (
                       <tr key={d.id} className={`group transition-colors ${isLate ? 'hover:bg-red-50/30' : 'hover:bg-slate-50/70'}`}>
                         <td className="w-[78px] min-w-[78px] pl-3 pr-1 py-2.5">
@@ -464,20 +444,20 @@ function DealsPageInner() {
             <div className="flex items-center justify-between border-t border-slate-50 bg-slate-50/50 px-5 py-2.5 text-xs text-slate-400">
               <span>{sorted.length} deal{sorted.length > 1 ? 's' : ''} · {rows.length} total</span>
               <span className="font-semibold text-slate-700">
-                Total : {mad(sorted.reduce((s,d)=>s+(d.amount||0),0))}
+                Total : {mad(sorted.reduce((s,d) => s + (d.amount||0), 0))}
               </span>
             </div>
           )}
         </div>
 
-      {/* ── Deal Form Modal ── */}
-      {(showNewDeal || editRow) && (
-        <DealFormModal
-          editRow={editRow}
-          onClose={() => { setShowNewDeal(false); setEditRow(null) }}
-          onSaved={() => { load(); setShowNewDeal(false); setEditRow(null) }}
-        />
-      )}
+        {/* ── Deal Form Modal ── */}
+        {(showNewDeal || editRow) && (
+          <DealFormModal
+            editRow={editRow}
+            onClose={() => { setShowNewDeal(false); setEditRow(null) }}
+            onSaved={() => { load(); setShowNewDeal(false); setEditRow(null) }}
+          />
+        )}
 
       </div>
     </div>
