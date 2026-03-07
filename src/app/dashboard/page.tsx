@@ -123,10 +123,11 @@ type Deal = {
 // ─────────────────────────────────────────────────────────────────────────────
 // UI COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, color, icon, delta, deltaLabel }: {
+function KpiCard({ label, value, sub, color, icon, delta, deltaLabel, href }: {
   label: string; value: string; sub?: string; icon: React.ReactNode
   color: 'blue'|'violet'|'amber'|'green'|'red'|'slate'
   delta?: 'up'|'down'|'neutral'; deltaLabel?: string
+  href?: string  // ← rend la carte cliquable
 }) {
   const cfg = {
     blue:   { grad:'from-blue-600 to-blue-400',     accent:'bg-blue-500',   num:'text-slate-900', bar:'from-blue-500 to-blue-300'  },
@@ -136,8 +137,8 @@ function KpiCard({ label, value, sub, color, icon, delta, deltaLabel }: {
     red:    { grad:'from-red-600 to-rose-400',       accent:'bg-red-500',    num:'text-slate-900', bar:'from-red-500 to-rose-300'  },
     slate:  { grad:'from-slate-800 to-slate-600',   accent:'bg-slate-600',  num:'text-slate-900', bar:'from-slate-500 to-slate-300'},
   }[color]
-  return (
-    <div className="relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+  const inner = (
+    <>
       {/* top accent bar */}
       <div className={`h-1 w-full bg-gradient-to-r ${cfg.bar}`}/>
       <div className="p-5">
@@ -156,7 +157,18 @@ function KpiCard({ label, value, sub, color, icon, delta, deltaLabel }: {
         <div className={`mt-4 text-[1.6rem] font-black tracking-tight leading-none ${cfg.num}`}>{value}</div>
         <div className="mt-1.5 text-sm font-semibold text-slate-600">{label}</div>
         {sub && <div className="mt-1 text-xs text-slate-400">{sub}</div>}
+        {href && <div className="mt-2 text-[10px] font-semibold text-slate-400 group-hover:text-slate-600 transition-colors">Voir les deals →</div>}
       </div>
+    </>
+  )
+  if (href) return (
+    <Link href={href} className="group relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80 shadow-sm hover:shadow-md hover:ring-slate-300 transition-all block">
+      {inner}
+    </Link>
+  )
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+      {inner}
     </div>
   )
 }
@@ -932,6 +944,7 @@ export default function Dashboard() {
         {/* ══ KPI ROW (6 métriques) ══ */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
           <KpiCard label="Pipeline actif" color="blue" icon={<TrendingUp className="h-5 w-5"/>}
+            href="/opportunities?status=Open"
             value={fmt(kpis.pipeAmt)+' MAD'}
             sub={`${kpis.pipeCount} deals`}
             delta={kpis.pipeVsPrev!==null?(kpis.pipeVsPrev>=0?'up':'down'):undefined}
@@ -940,9 +953,11 @@ export default function Dashboard() {
             value={fmt(kpis.foreAmt)+' MAD'}
             sub={`Confiance ${kpis.conf}%`}/>
           <KpiCard label="En Commit" color="amber" icon={<Zap className="h-5 w-5"/>}
+            href="/pipeline?stage=Commit"
             value={fmt(kpis.commitAmt)+' MAD'}
             sub={`${kpis.commitCount} deals`}/>
           <KpiCard label="Won (période)" color="green" icon={<Award className="h-5 w-5"/>}
+            href="/opportunities?status=Won"
             value={fmt(kpis.wonAmt)+' MAD'}
             sub={`${kpis.wonCount} deals clôturés`}
             delta={kpis.wonVsPrev!==null?(kpis.wonVsPrev>=0?'up':'down'):undefined}
@@ -968,6 +983,7 @@ export default function Dashboard() {
               delta={margeStats.margeBrute>0?'up':'down'}
               deltaLabel={`${margeStats.margePct.toFixed(1)}%`}/>
             <KpiCard label="Deals Won sans fiche" color="amber" icon={<Package className="h-5 w-5"/>}
+              href="/tasks"
               value={String(Math.max(0, wonDeals.length - supplyOrders.length))}
               sub={`${supplyOrders.length} fiches remplies`}/>
           </div>
