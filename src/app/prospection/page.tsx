@@ -323,11 +323,13 @@ export default function ProspectionPage() {
 
   const stats = useMemo(() => {
     const active = rows.filter(x => !x.converted_at)
+    const converted = rows.filter(x => x.converted_at).length
     return {
       total: active.length,
       hot: active.filter(x => x.heat === 'hot').length,
       qualifie: active.filter(x => x.status === 'Qualifié ✓').length,
-      converted: rows.filter(x => x.converted_at).length,
+      converted,
+      convRate: rows.length > 0 ? Math.round(converted / rows.length * 100) : 0,
       bySt: Object.fromEntries(STATUSES.map(s => [s, active.filter(x => x.status === s).length])),
     }
   }, [rows])
@@ -488,7 +490,7 @@ export default function ProspectionPage() {
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total actifs</div>
             <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
-            <div className="text-xs text-slate-400 mt-0.5">{stats.converted} convertis en compte</div>
+            <div className="text-xs text-slate-400 mt-0.5">{stats.converted} convertis · {stats.convRate}% taux</div>
           </div>
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="flex items-center gap-1 text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">
@@ -569,9 +571,28 @@ export default function ProspectionPage() {
             ))}
           </select>
 
+          {/* Date range */}
+          {(dateFrom || dateTo) ? (
+            <div className="flex h-9 items-center gap-1 rounded-xl border bg-white px-2 shadow-sm text-xs">
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                className="bg-transparent outline-none text-xs text-slate-600 w-[105px]" />
+              <span className="text-slate-300">→</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                className="bg-transparent outline-none text-xs text-slate-600 w-[105px]" />
+              <button onClick={() => { setDateFrom(''); setDateTo('') }} className="text-slate-400 hover:text-red-500">
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ) : (
+            <button onClick={() => { setDateFrom(new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)); setDateTo(new Date().toISOString().slice(0, 10)) }}
+              className="inline-flex h-9 items-center gap-1 rounded-xl border bg-white px-3 text-xs text-slate-500 hover:bg-slate-50 shadow-sm">
+              📅 Dates
+            </button>
+          )}
+
           {/* Active filter indicator */}
-          {(statusFilter !== 'Tous' || typeFilter !== 'Tous' || heatFilter !== 'Tous' || regionFilter !== 'Tous' || showOverdue) && (
-            <button onClick={() => { setStatusFilter('Tous'); setTypeFilter('Tous'); setHeatFilter('Tous'); setRegionFilter('Tous'); setShowOverdue(false) }}
+          {(statusFilter !== 'Tous' || typeFilter !== 'Tous' || heatFilter !== 'Tous' || regionFilter !== 'Tous' || dateFrom || dateTo || showOverdue) && (
+            <button onClick={() => { setStatusFilter('Tous'); setTypeFilter('Tous'); setHeatFilter('Tous'); setRegionFilter('Tous'); setDateFrom(''); setDateTo(''); setShowOverdue(false) }}
               className="inline-flex h-9 items-center gap-1 rounded-xl border bg-white px-3 text-xs text-slate-500 hover:text-red-500 shadow-sm">
               <X className="h-3.5 w-3.5" /> Reset
             </button>

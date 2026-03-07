@@ -77,7 +77,10 @@ export default function SupplyPage() {
     const q = search.trim().toLowerCase()
     return orders.filter(o => {
       const name = o.opportunities?.accounts?.name || o.opportunities?.title || ''
-      if (q && !name.toLowerCase().includes(q) && !(o.opportunities?.vendor || '').toLowerCase().includes(q)) return false
+      if (q && !name.toLowerCase().includes(q)
+        && !(o.opportunities?.vendor || '').toLowerCase().includes(q)
+        && !(o.opportunities?.po_number || '').toLowerCase().includes(q)
+        && !(o.supply_notes || '').toLowerCase().includes(q)) return false
       if (statusFilter !== 'Tous' && o.status !== statusFilter) return false
       if (buFilter !== 'Tous' && (o.opportunities?.bu || '') !== buFilter) return false
       return true
@@ -210,7 +213,7 @@ export default function SupplyPage() {
           <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3 shadow-sm">
             <Search className="h-3.5 w-3.5 text-slate-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Compte, vendor…"
+              placeholder="Compte, vendor, PO…"
               className="w-44 bg-transparent text-sm outline-none placeholder:text-slate-400" />
           </div>
           {buOptions.length > 1 && (
