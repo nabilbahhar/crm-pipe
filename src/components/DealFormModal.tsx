@@ -485,16 +485,35 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
           entity_name: title.trim(),
           detail: `${stage} · ${payload.bu || ''} · ${payload.amount ? payload.amount + ' MAD' : ''}`.trim(),
         })
+        // Auto-create supply_order when deal is moved to Won
+        if (status === 'Won') {
+          const { data: existing } = await supabase
+            .from('supply_orders').select('id').eq('opportunity_id', editRow.id).maybeSingle()
+          if (!existing) {
+            await supabase.from('supply_orders').insert({
+              opportunity_id: editRow.id,
+              status: 'a_commander',
+            })
+          }
+        }
       } else {
         const { data: inserted, error } = await supabase.from('opportunities').insert(payload).select('id').single()
         if (error) throw error
+        const newId = inserted?.id
         await logActivity({
           action_type: 'create',
           entity_type: 'deal',
-          entity_id: inserted?.id ?? undefined,
+          entity_id: newId ?? undefined,
           entity_name: title.trim(),
           detail: `${stage} · ${payload.bu || ''} · ${payload.amount ? payload.amount + ' MAD' : ''}`.trim(),
         })
+        // Auto-create supply_order when deal is created as Won
+        if (status === 'Won' && newId) {
+          await supabase.from('supply_orders').insert({
+            opportunity_id: newId,
+            status: 'a_commander',
+          })
+        }
       }
 
       onSaved()
