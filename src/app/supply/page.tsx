@@ -67,15 +67,26 @@ export default function SupplyPage() {
     setLoading(false)
   }
 
+  const [buFilter, setBuFilter] = useState('Tous')
+
+  const buOptions = useMemo(() =>
+    [...new Set(orders.map(o => o.opportunities?.bu || '').filter(Boolean))].sort()
+  , [orders])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return orders.filter(o => {
       const name = o.opportunities?.accounts?.name || o.opportunities?.title || ''
-      if (q && !name.toLowerCase().includes(q)) return false
+      if (q && !name.toLowerCase().includes(q) && !(o.opportunities?.vendor || '').toLowerCase().includes(q)) return false
       if (statusFilter !== 'Tous' && o.status !== statusFilter) return false
+      if (buFilter !== 'Tous' && (o.opportunities?.bu || '') !== buFilter) return false
       return true
     })
-  }, [orders, search, statusFilter])
+  }, [orders, search, statusFilter, buFilter])
+
+  const filteredTotal = useMemo(() =>
+    filtered.reduce((s, o) => s + (o.opportunities?.amount || 0), 0)
+  , [filtered])
 
   // Grouped by status
   const grouped = useMemo(() => {
@@ -167,14 +178,24 @@ export default function SupplyPage() {
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3 shadow-sm">
             <Search className="h-3.5 w-3.5 text-slate-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Chercher un compte…"
+              placeholder="Compte, vendor…"
               className="w-44 bg-transparent text-sm outline-none placeholder:text-slate-400" />
           </div>
-          <div className="text-xs text-slate-400">{filtered.length} résultat{filtered.length !== 1 ? 's' : ''}</div>
+          {buOptions.length > 1 && (
+            <select value={buFilter} onChange={e => setBuFilter(e.target.value)}
+              className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
+              <option value="Tous">BU: Tous</option>
+              {buOptions.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          )}
+          <div className="ml-auto flex items-center gap-3 text-xs text-slate-400">
+            <span>{filtered.length} commande{filtered.length !== 1 ? 's' : ''}</span>
+            <span className="font-semibold text-slate-700">{mad(filteredTotal)}</span>
+          </div>
         </div>
 
         {/* Table */}
