@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown } from 'lucide-react'
+import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, GitBranch } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AccountRow = { id: string; name: string; sector: string|null; segment: string|null; region: string|null; created_at: string|null }
@@ -575,6 +575,10 @@ export default function AccountsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
+                          <Link href={`/pipeline?account=${encodeURIComponent(a.name)}`}
+                            className="inline-flex h-7 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors">
+                            <GitBranch className="h-3 w-3" /> Pipeline
+                          </Link>
                           <Btn size="sm" variant="ghost" onClick={() => openEdit(a)}>
                             <Pencil className="h-3.5 w-3.5" /> Modifier
                           </Btn>
