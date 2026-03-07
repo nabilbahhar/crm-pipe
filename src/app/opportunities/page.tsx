@@ -14,7 +14,7 @@ type Deal = {
   id: string; title: string; status: 'Open' | 'Won' | 'Lost'
   stage: string; amount: number; prob: number
   created_at: string; updated_at?: string; owner_email?: string
-  closing_date?: string; booking_month?: string; closing_month?: string; closing?: string
+  close_date?: string; booking_month?: string
   bu?: string; vendor?: string; po_number?: string; next_step?: string
   accounts?: { name?: string; sector?: string } | null
 }
@@ -27,7 +27,7 @@ const fmtDate = (s?: string | null) =>
   s ? new Date(s).toLocaleDateString('fr-MA', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
 const closingOf = (d: Deal) =>
-  d.booking_month || d.closing_month || d.closing_date || d.closing
+  d.booking_month || d.close_date
 
 const STATUS_CFG = {
   Open: { bg: 'bg-amber-50',   text: 'text-amber-700',  border: 'border-amber-200',  icon: <Clock className="h-3 w-3" />,        dot: 'bg-amber-400'   },
@@ -197,7 +197,7 @@ export default function DealsPage() {
     setLoading(true)
     const { data, error } = await supabase
       .from('opportunities')
-      .select('id, title, status, stage, amount, prob, created_at, updated_at, owner_email, closing_date, booking_month, closing_month, closing, bu, vendor, po_number, next_step, accounts(name)')
+      .select('id, title, status, stage, amount, prob, created_at, updated_at, owner_email, close_date, booking_month, bu, vendor, po_number, next_step, accounts(name)')
       .order('created_at', { ascending: false })
       .limit(2000)
     if (error) { console.error('Deals query error:', error.message); setLoadErr(error.message); setLoading(false); return }
