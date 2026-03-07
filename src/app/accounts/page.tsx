@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, GitBranch } from 'lucide-react'
+import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, GitBranch, Download } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AccountRow = { id: string; name: string; sector: string|null; segment: string|null; region: string|null; created_at: string|null }
@@ -344,6 +344,23 @@ export default function AccountsPage() {
     })
   }, [filtered, sortKey, sortDir, dealCounts, wonAmtMap, lastDealMap])
 
+  function exportCSV() {
+    const header = ['Nom','Segment','Secteur','Région','Deals actifs','CA Won','Dernier deal','Créé le']
+    const csvRows = [header.join(';')]
+    for (const a of sorted) {
+      csvRows.push([
+        a.name, a.sector || '', a.segment || '', a.region || '',
+        dealCounts[a.id] || 0, wonAmtMap[a.id] || 0,
+        lastDealMap[a.id] || '', (a.created_at || '').slice(0, 10),
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+    }
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `comptes_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc]">
       <div className="mx-auto max-w-7xl px-4 py-6 space-y-5">
@@ -360,6 +377,9 @@ export default function AccountsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Btn variant="ghost" onClick={exportCSV} title="Export CSV">
+              <Download className="h-4 w-4" />
+            </Btn>
             <Btn variant="ghost" onClick={loadAll} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               Actualiser

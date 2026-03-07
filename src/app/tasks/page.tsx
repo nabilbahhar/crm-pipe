@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { mad, fmt } from '@/lib/utils'
 import {
   CheckCircle2, RefreshCw, ChevronRight, Package,
-  Search, ArrowUp, ArrowDown, ChevronsUpDown, X,
+  Search, ArrowUp, ArrowDown, ChevronsUpDown, X, Download,
   Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
 } from 'lucide-react'
 
@@ -295,6 +295,27 @@ export default function TasksPage() {
   const hasActiveFilters = search || typeFilter !== 'Tous' || prioFilter !== 'Tous' || statusFilter !== 'Tous'
   function resetFilters() { setSearch(''); setTypeFilter('Tous'); setPrioFilter('Tous'); setStatusFilter('Tous') }
 
+  function exportCSV() {
+    const typeLabel: Record<string, string> = {
+      relance_retard: 'Relance retard', achat_manquant: 'Fiche achat',
+      closing_retard: 'Closing retard', relance_semaine: 'Relance semaine',
+    }
+    const header = ['Type','Priorité','Titre','Détail','Montant','Retard (j)','Statut fiche']
+    const csvRows = [header.join(';')]
+    for (const t of visible) {
+      csvRows.push([
+        typeLabel[t.type] || t.type, t.priority === 'high' ? 'Haute' : 'Moyenne',
+        t.title, t.detail, t.amount, t.daysLate,
+        STATUS_CFG[t.ficheStatus]?.label || t.ficheStatus,
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+    }
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `tasks_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc]">
       <div className="mx-auto max-w-5xl px-4 py-6 space-y-5">
@@ -308,10 +329,16 @@ export default function TasksPage() {
               <p className="text-xs text-slate-500">{visible.length} affichées · {totalTasks} total</p>
             </div>
           </div>
-          <button onClick={load} disabled={loading}
-            className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex gap-2">
+            <button onClick={exportCSV} title="Export CSV"
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
+              <Download className="h-4 w-4" />
+            </button>
+            <button onClick={load} disabled={loading}
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
         {/* KPI bar */}

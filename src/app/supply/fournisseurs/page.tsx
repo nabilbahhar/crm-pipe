@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import {
-  Plus, Search, Edit2, Trash2, X, Save, Loader2,
+  Plus, Search, Edit2, Trash2, X, Save, Loader2, Download,
   Building2, Phone, Mail, MapPin, Tag, TrendingUp,
   Package, Users, ChevronUp, ChevronDown, ChevronsUpDown,
   BarChart2, ShoppingCart, FileText, RefreshCw, ChevronRight,
@@ -210,6 +210,25 @@ export default function SuppliersPage() {
     </th>
   )
 
+  function exportCSV() {
+    const header = ['Nom','Contact','Email','Téléphone','Catégorie','Commandes','Lignes','Achat HT','Vente HT','Marge %','Clients']
+    const csvRows = [header.join(';')]
+    for (const s of sorted) {
+      csvRows.push([
+        s.name, s.contact || '', s.email || '', s.tel || '', s.category || '',
+        s.total_orders || 0, s.total_lines || 0,
+        s.total_achat_ht || 0, s.total_vente_ht || 0,
+        s.avg_marge_pct != null ? s.avg_marge_pct.toFixed(1) : '',
+        s.nb_clients || 0,
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+    }
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `fournisseurs_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc]">
       <div className="mx-auto max-w-6xl px-4 py-6 space-y-5">
@@ -220,10 +239,16 @@ export default function SuppliersPage() {
             <h1 className="text-xl font-black text-slate-900 tracking-tight">Fournisseurs</h1>
             <p className="text-xs text-slate-500 mt-0.5">Base de données achats · {totalSuppliers} fournisseur{totalSuppliers > 1 ? 's' : ''}</p>
           </div>
-          <button onClick={() => setModal({})}
-            className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white hover:bg-slate-800 transition-colors shadow-sm">
-            <Plus className="h-4 w-4" /> Ajouter fournisseur
-          </button>
+          <div className="flex gap-2">
+            <button onClick={exportCSV} title="Export CSV"
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
+              <Download className="h-4 w-4" />
+            </button>
+            <button onClick={() => setModal({})}
+              className="inline-flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-bold text-white hover:bg-slate-800 transition-colors shadow-sm">
+              <Plus className="h-4 w-4" /> Ajouter fournisseur
+            </button>
+          </div>
         </div>
 
         {/* ── KPIs ── */}

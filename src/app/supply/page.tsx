@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { mad, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus } from '@/lib/utils'
 import PurchaseModal from '@/components/PurchaseModal'
-import { RefreshCw, Package, ChevronRight, Search, AlertCircle } from 'lucide-react'
+import { RefreshCw, Package, ChevronRight, Search, AlertCircle, Download } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
 type Order = {
@@ -131,6 +131,28 @@ export default function SupplyPage() {
 
   const toCommanderCount = grouped.a_commander.length
 
+  function exportCSV() {
+    const header = ['Compte','Deal','Statut','BU','Vendor','Montant','PO','PO Date','Fournisseurs','Note']
+    const csvRows = [header.join(';')]
+    for (const o of filtered) {
+      const opp = o.opportunities
+      const lines = opp?.purchase_info?.[0]?.purchase_lines || []
+      const fournisseurs = [...new Set(lines.map((l: any) => l.fournisseur).filter(Boolean))].join(', ')
+      csvRows.push([
+        opp?.accounts?.name || '', opp?.title || '',
+        STATUS_CONFIG[o.status]?.label || o.status,
+        opp?.bu || '', opp?.vendor || '', opp?.amount || 0,
+        opp?.po_number || '', opp?.po_date || '',
+        fournisseurs, o.supply_notes || '',
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+    }
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `supply_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc]">
       <div className="mx-auto max-w-7xl px-4 py-6 space-y-5">
@@ -153,10 +175,16 @@ export default function SupplyPage() {
               </p>
             </div>
           </div>
-          <button onClick={load} disabled={loading}
-            className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex gap-2">
+            <button onClick={exportCSV} title="Export CSV"
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+              <Download className="h-4 w-4" />
+            </button>
+            <button onClick={load} disabled={loading}
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
         {err && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</div>}

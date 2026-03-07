@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabaseClient'
 import {
   Plus, RefreshCw, X, Phone, Mail, ChevronRight,
   LayoutGrid, List, Flame, Thermometer, Snowflake, ArrowRightCircle,
-  ArrowUp, ArrowDown, ChevronsUpDown,
+  ArrowUp, ArrowDown, ChevronsUpDown, Download,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -242,6 +242,7 @@ export default function ProspectionPage() {
   const [heatFilter, setHeatFilter]     = useState('Tous')
   const [typeFilter, setTypeFilter]     = useState('Tous')
   const [statusFilter, setStatusFilter] = useState('Tous')
+  const [regionFilter, setRegionFilter] = useState('Tous')
   const [showOverdue, setShowOverdue]   = useState(false)
   const [dateFrom, setDateFrom]       = useState('')
   const [dateTo, setDateTo]           = useState('')
@@ -286,11 +287,12 @@ export default function ProspectionPage() {
     if (heatFilter !== 'Tous') r = r.filter(x => x.heat === heatFilter)
     if (typeFilter !== 'Tous') r = r.filter(x => x.type === typeFilter)
     if (statusFilter !== 'Tous') r = r.filter(x => x.status === statusFilter)
+    if (regionFilter !== 'Tous') r = r.filter(x => (x.region || '') === regionFilter)
     if (showOverdue) r = r.filter(x => isOverdue(x.next_date) && x.status !== 'Qualifié ✓')
     if (dateFrom) r = r.filter(x => (x.created_at || '') >= dateFrom)
     if (dateTo)   r = r.filter(x => (x.created_at || '') <= dateTo + 'T23:59:59')
     return r
-  }, [rows, search, heatFilter, typeFilter, statusFilter, showOverdue])
+  }, [rows, search, heatFilter, typeFilter, statusFilter, regionFilter, showOverdue])
 
   type SortKey = 'created_at'|'company_name'|'status'|'heat'|'attempts'|'next_date'|'type'
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
@@ -329,6 +331,24 @@ export default function ProspectionPage() {
       bySt: Object.fromEntries(STATUSES.map(s => [s, active.filter(x => x.status === s).length])),
     }
   }, [rows])
+
+  function exportCSV() {
+    const header = ['Société','Contact','Rôle','Téléphone','Email','Type','Statut','Heat','Tentatives','Dernière relance','Prochaine action','Prochaine date','Source','Secteur','Région','Créé le']
+    const csvRows = [header.join(';')]
+    for (const p of sorted) {
+      csvRows.push([
+        p.company_name, p.contact_name, p.contact_role || '', p.contact_phone || '',
+        p.contact_email || '', p.type, p.status, p.heat, p.attempts,
+        p.last_contact_at || '', p.next_action || '', p.next_date || '',
+        p.source || '', p.sector || '', p.region || '', (p.created_at || '').slice(0, 10),
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+    }
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `prospects_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+  }
 
   async function advanceStatus(p: Prospect) {
     const next = STATUS_NEXT[p.status]
@@ -449,6 +469,10 @@ export default function ProspectionPage() {
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm text-white hover:bg-slate-800">
               <Plus className="h-4 w-4" /> Nouveau prospect
             </button>
+            <button onClick={exportCSV} title="Export CSV"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">
+              <Download className="h-4 w-4" />
+            </button>
             <button onClick={load} disabled={loading}
               className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -536,9 +560,18 @@ export default function ProspectionPage() {
             {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
 
+          {/* Region filter */}
+          <select value={regionFilter} onChange={e => setRegionFilter(e.target.value)}
+            className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
+            <option value="Tous">Région: Tous</option>
+            {[...new Set(rows.filter(x => !x.converted_at).map(x => x.region).filter(Boolean))].sort().map(r => (
+              <option key={r} value={r!}>{r}</option>
+            ))}
+          </select>
+
           {/* Active filter indicator */}
-          {(statusFilter !== 'Tous' || typeFilter !== 'Tous' || heatFilter !== 'Tous' || showOverdue) && (
-            <button onClick={() => { setStatusFilter('Tous'); setTypeFilter('Tous'); setHeatFilter('Tous'); setShowOverdue(false) }}
+          {(statusFilter !== 'Tous' || typeFilter !== 'Tous' || heatFilter !== 'Tous' || regionFilter !== 'Tous' || showOverdue) && (
+            <button onClick={() => { setStatusFilter('Tous'); setTypeFilter('Tous'); setHeatFilter('Tous'); setRegionFilter('Tous'); setShowOverdue(false) }}
               className="inline-flex h-9 items-center gap-1 rounded-xl border bg-white px-3 text-xs text-slate-500 hover:text-red-500 shadow-sm">
               <X className="h-3.5 w-3.5" /> Reset
             </button>
