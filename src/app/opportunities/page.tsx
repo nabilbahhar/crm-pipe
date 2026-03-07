@@ -16,7 +16,6 @@ type Deal = {
   created_at: string; updated_at?: string; owner_email?: string
   close_date?: string; booking_month?: string
   bu?: string; vendor?: string; po_number?: string; next_step?: string
-  account_name?: string | null
   accounts?: { name?: string; sector?: string } | null
 }
 
@@ -203,11 +202,7 @@ export default function DealsPage() {
     if (error) { console.error('Deals query error:', error); setDeals([]); setLoading(false); return }
     if (data) setDeals(data.map(d => ({
       ...d,
-      accounts: d.accounts
-        ? (d.accounts as any)
-        : d.account_name
-          ? { name: d.account_name }
-          : null
+      accounts: d.accounts ? (d.accounts as any) : null
     })))
     setLoading(false)
   }
