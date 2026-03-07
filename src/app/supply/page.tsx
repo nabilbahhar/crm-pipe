@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { mad, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus } from '@/lib/utils'
 import PurchaseModal from '@/components/PurchaseModal'
 import Link from 'next/link'
-import { RefreshCw, Package, ChevronRight, Search, AlertCircle, Download } from 'lucide-react'
+import { RefreshCw, Package, ChevronRight, Search, AlertCircle, Download, Clock } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
 type Order = {
@@ -295,14 +295,34 @@ export default function SupplyPage() {
                             const hasPurchase  = (opp?.purchase_info?.length || 0) > 0
                             const nextCfg      = cfg.next ? STATUS_CONFIG[cfg.next] : null
 
+                            const isOverdue = status === 'a_commander' && (() => {
+                              const ts = order.placed_at || order.updated_at
+                              return ts ? (Date.now() - new Date(ts).getTime()) > 24*60*60*1000 : false
+                            })()
+                            const daysSince = (() => {
+                              const ts = status === 'a_commander' ? (order.placed_at || order.updated_at)
+                                : status === 'place' ? order.placed_at
+                                : status === 'commande' ? order.ordered_at
+                                : null
+                              if (!ts) return null
+                              return Math.floor((Date.now() - new Date(ts).getTime()) / 86400000)
+                            })()
+
                             return (
-                              <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
+                              <tr key={order.id} className={`hover:bg-slate-50/60 transition-colors ${isOverdue ? 'bg-red-50/40' : ''}`}>
                                 <td className="px-4 py-3">
                                   <Link href={`/opportunities/${opp?.id || order.opportunity_id}`} className="group/link">
                                     <div className="font-bold text-slate-900 group-hover/link:text-blue-600 transition-colors">
                                       {opp?.accounts?.name || opp?.title || '—'}
                                     </div>
-                                    <div className="text-xs text-slate-400 mt-0.5">{opp?.title}</div>
+                                    <div className="text-xs text-slate-400 mt-0.5">
+                                      {opp?.title}
+                                      {daysSince != null && daysSince > 0 && (
+                                        <span className={`ml-2 inline-flex items-center gap-0.5 text-[10px] font-bold ${isOverdue ? 'text-red-500' : 'text-slate-400'}`}>
+                                          <Clock className="h-2.5 w-2.5" />{daysSince}j
+                                        </span>
+                                      )}
+                                    </div>
                                   </Link>
                                 </td>
                                 <td className="px-4 py-3">
