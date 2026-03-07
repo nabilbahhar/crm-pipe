@@ -22,6 +22,7 @@ type Deal = {
   amount: number; prob: number|null; booking_month: string|null
   next_step: string|null; notes: string|null; multi_bu: boolean|null
   bu_lines: any; created_at: string|null; accounts?: { name?: string }|null
+  owner_email?: string|null
   // Supply join
   supply_orders?: { status: SupplyStatus }[] | null
   purchase_info?: { id: string; purchase_lines?: { pu_achat: number|null; fournisseur: string|null }[] }[] | null
@@ -165,6 +166,7 @@ function DealsPageInner() {
   const [supplyFilter, setSupplyFilter]   = useState<'Tous' | 'avec_supply' | 'sans_supply'>('Tous')
   const [dateFrom, setDateFrom]           = useState('')
   const [dateTo, setDateTo]               = useState('')
+  const [ownerFilter, setOwnerFilter]     = useState('Tous')
 
   // Sort
   const [sortKey, setSortKey]   = useState<SortKey>('amount')
@@ -255,6 +257,7 @@ function DealsPageInner() {
       if (buFilter     !== 'Tous' && bu !== buFilter) return false
       if (supplyFilter === 'avec_supply'  && getSupplyStatus(d) === null) return false
       if (supplyFilter === 'sans_supply'  && (status !== 'Won' || getSupplyStatus(d) !== null)) return false
+      if (ownerFilter  !== 'Tous' && (d.owner_email||'') !== ownerFilter) return false
 
       // ✅ FIX: comparaison date-only (évite les bugs de timezone)
       if (dateFrom && (d.created_at || '').slice(0, 10) < dateFrom) return false
@@ -268,7 +271,7 @@ function DealsPageInner() {
       )) return false
       return true
     })
-  }, [rows, search, statusFilter, stageFilter, buFilter, dateFrom, dateTo, supplyFilter])
+  }, [rows, search, statusFilter, stageFilter, buFilter, dateFrom, dateTo, supplyFilter, ownerFilter])
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1
@@ -309,10 +312,15 @@ function DealsPageInner() {
     )
   }
 
-  const hasFilters = search || statusFilter !== 'Tous' || stageFilter !== 'Tous' || buFilter !== 'Tous' || dateFrom || dateTo || supplyFilter !== 'Tous'
+  const ownerOptions = useMemo(() =>
+    [...new Set(rows.map(r => r.owner_email || '').filter(Boolean))].sort()
+  , [rows])
+
+  const hasFilters = search || statusFilter !== 'Tous' || stageFilter !== 'Tous' || buFilter !== 'Tous' || dateFrom || dateTo || supplyFilter !== 'Tous' || ownerFilter !== 'Tous'
   const resetFilters = () => {
     setSearch(''); setStatusFilter('Tous'); setStageFilter('Tous')
     setBuFilter('Tous'); setDateFrom(''); setDateTo(''); setSupplyFilter('Tous')
+    setOwnerFilter('Tous')
   }
 
   return (
@@ -451,6 +459,19 @@ function DealsPageInner() {
                   <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-slate-400" />
                 </div>
               </div>
+              {ownerOptions.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500">Owner :</span>
+                  <div className="relative">
+                    <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}
+                      className="h-8 appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-semibold text-slate-700 focus:outline-none">
+                      <option value="Tous">Tous</option>
+                      {ownerOptions.map(e => <option key={e} value={e}>{e.split('@')[0]}</option>)}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-slate-400" />
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-slate-500">Créé du :</span>
                 <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
