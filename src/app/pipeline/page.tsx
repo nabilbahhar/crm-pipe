@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { logActivity } from '@/lib/logActivity'
 import { mad, fmt, STAGE_CFG as STAGE_STYLE, BU_BADGE_CLS as BU_COLOR } from '@/lib/utils'
-import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2, X, AlertTriangle } from 'lucide-react'
+import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2, X, AlertTriangle, Download } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DealRow = {
@@ -345,6 +345,23 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
     </span>
   )
 
+  function exportCSV() {
+    const header = ['Client','Deal','Étape','BU','Carte','Montant','Prob %','Closing','Owner']
+    const csvRows = [header.join(';')]
+    for (const d of displayRows) {
+      csvRows.push([
+        d.accounts?.name || '', d.title || '', d.stage || '', d.bu || '',
+        d.vendor || '', d.amount || 0, d.prob || 0,
+        d.booking_month || '', d.owner_email || '',
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+    }
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `pipeline_${new Date().toISOString().slice(0,10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
+  }
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-50">
@@ -359,6 +376,10 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <button onClick={exportCSV}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">
+              <Download className="h-4 w-4" /> CSV
+            </button>
             <button onClick={() => setShowNewDeal(true)}
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm text-white hover:bg-slate-800">
               <Plus className="h-4 w-4" /> Nouveau deal
