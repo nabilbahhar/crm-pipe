@@ -183,6 +183,7 @@ export default function DealsPage() {
   const [undoing, setUndoing]     = useState(false)
 
   // Toast
+  const [loadErr, setLoadErr] = useState<string | null>(null)
   const [toast, setToast]         = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   useEffect(() => { loadDeals() }, [])
@@ -199,7 +200,7 @@ export default function DealsPage() {
       .select('id, title, status, stage, amount, prob, created_at, updated_at, owner_email, closing_date, booking_month, closing_month, closing, bu, vendor, po_number, next_step, accounts(name)')
       .order('created_at', { ascending: false })
       .limit(2000)
-    if (error) console.error('Deals query error:', error.message)
+    if (error) { console.error('Deals query error:', error.message); setLoadErr(error.message); setLoading(false); return }
     if (data) setDeals(data.map(d => ({ ...d, accounts: d.accounts as any })))
     setLoading(false)
   }
@@ -304,6 +305,13 @@ export default function DealsPage() {
             <TrendingUp className="h-4 w-4" /> Vue Pipeline
           </button>
         </div>
+
+        {/* Error banner */}
+        {loadErr && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            ⚠️ Erreur chargement des deals : {loadErr}
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
