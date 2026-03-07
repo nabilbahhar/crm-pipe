@@ -26,6 +26,8 @@ type DealRow = {
   bu_lines: any
   po_number?: string | null
   po_date?: string | null
+  owner_email?: string | null
+  owner_name?: string | null
   accounts?: { name?: string } | null
 }
 
@@ -79,9 +81,24 @@ function StageBadge({ stage }: { stage: string }) {
   )
 }
 
-function BuBadge({ bu }: { bu: string | null }) {
+function BuBadge({ bu, buLines }: { bu: string | null; buLines?: any }) {
   if (!bu) return <span className="text-slate-400">—</span>
   const cls = BU_COLOR[bu] || 'bg-slate-100 text-slate-600'
+  if (bu === 'MULTI' && Array.isArray(buLines) && buLines.length > 0) {
+    const tip = buLines.map((l: any) => {
+      const amt = Number(l.amount || 0)
+      const k = amt >= 1_000_000 ? `${(amt/1_000_000).toFixed(1)}M` : amt >= 1000 ? `${Math.round(amt/1000)}K` : String(Math.round(amt))
+      return `${l.bu || '?'} ${k}`
+    }).join(' · ')
+    return (
+      <span className={`group relative inline-flex rounded-md px-2 py-0.5 text-xs font-semibold cursor-default ${cls}`}>
+        MULTI
+        <span className="pointer-events-none absolute bottom-full left-0 mb-1 z-50 hidden group-hover:block w-max max-w-[220px] rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-medium text-white shadow-lg whitespace-pre-wrap">
+          {tip}
+        </span>
+      </span>
+    )
+  }
   return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${cls}`}>{bu}</span>
 }
 
@@ -115,6 +132,7 @@ function PipelineContent() {
   const [search, setSearch]           = useState('')
   const [accountFilter, setAccountFilter] = useState<string>(() => searchParams.get('account') || 'Tous')
   const [vendorFilter, setVendorFilter]   = useState<string>('Tous')
+  const [ownerFilter, setOwnerFilter]     = useState<string>('Tous')
   const [sortCol, setSortCol]         = useState<'amount'|'prob'|'booking_month'|'stage'|'account'|'vendor'>('booking_month')
   const [sortAsc, setSortAsc]         = useState(true)
 
@@ -127,7 +145,7 @@ function PipelineContent() {
 
   async function load() {
     setLoading(true); setErr(null)
-    const { data, error } = await supabase.from('opportunities').select('*, accounts(name)').order('created_at', { ascending:false })
+    const { data, error } = await supabase.from('opportunities').select('*, owner_email, owner_name, accounts(name)').order('created_at', { ascending:false })
     if (error) { setErr(error.message); setLoading(false); return }
     setRows((data as DealRow[])||[])
     setLoading(false)
@@ -220,7 +238,12 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
 
   const vendorOptions = useMemo(() => {
     const vendors = [...new Set(rows.map(r => r.vendor||'').filter(v => v && v !== 'MULTI'))].sort()
-    return ['Tous', ...vendors]
+    return ['Tous', ...vendors, 'MULTI']
+  }, [rows])
+
+  const ownerOptions = useMemo(() => {
+    const emails = [...new Set(rows.map(r => r.owner_email||'').filter(Boolean))].sort()
+    return ['Tous', ...emails]
   }, [rows])
 
   const displayRows = useMemo(() => {
@@ -235,7 +258,9 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
     // Account filter
     if (accountFilter!=='Tous') r = r.filter(x => (x.accounts?.name||'')=== accountFilter)
     // Vendor filter
-    if (vendorFilter!=='Tous') r = r.filter(x => (x.vendor||'')=== vendorFilter)
+    if (vendorFilter!=='Tous') r = r.filter(x => vendorFilter==='MULTI' ? (x.multi_bu===true) : (x.vendor||'')=== vendorFilter)
+    // Owner filter
+    if (ownerFilter!=='Tous') r = r.filter(x => (x.owner_email||'') === ownerFilter)
     // Search
     const q = search.trim().toLowerCase()
     if (q) r = r.filter(x =>
@@ -254,7 +279,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       return sortAsc?(av>bv?1:-1):(av<bv?1:-1)
     })
     return r
-  }, [rows, stageFilter, buFilter, accountFilter, vendorFilter, search, sortCol, sortAsc])
+  }, [rows, stageFilter, buFilter, accountFilter, vendorFilter, ownerFilter, search, sortCol, sortAsc])
 
   function toggleSort(col: 'amount'|'prob'|'booking_month'|'stage'|'account'|'vendor') {
     if (sortCol===col) setSortAsc(p=>!p)
@@ -423,6 +448,16 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
             {vendorOptions.map(v => <option key={v} value={v}>{v==='Tous'?'Tous vendors':v}</option>)}
           </select>
 
+          {/* Owner / AE */}
+          <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)}
+            className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none cursor-pointer">
+            {ownerOptions.map(o => (
+              <option key={o} value={o}>
+                {o === 'Tous' ? 'Tous AE' : o.split('@')[0]}
+              </option>
+            ))}
+          </select>
+
           {/* Search */}
           <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3 shadow-sm">
             <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -507,7 +542,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                           </Link>
                         </td>
                         <td className="px-4 py-3"><StageBadge stage={r.stage} /></td>
-                        <td className="px-4 py-3"><BuBadge bu={r.multi_bu?'MULTI':r.bu} /></td>
+                        <td className="px-4 py-3"><BuBadge bu={r.multi_bu?'MULTI':r.bu} buLines={r.bu_lines} /></td>
                         <td className="px-4 py-3 max-w-[140px] overflow-hidden">
                           <div className="truncate text-xs text-slate-700" title={vendorLabel}>{vendorLabel}</div>
                         </td>
@@ -528,6 +563,10 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                               <div className="text-xs font-semibold text-emerald-700">{r.po_number}</div>
                               {r.po_date && <div className="text-[10px] text-slate-400">{new Date(r.po_date).toLocaleDateString('fr-MA')}</div>}
                             </div>
+                          ) : r.status === 'Won' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[10px] font-bold text-orange-600">
+                              ⚠ PO manquant
+                            </span>
                           ) : <span className="text-slate-300 text-xs">—</span>}
                         </td>
                         <td className="px-4 py-3">
@@ -599,14 +638,14 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                       const nextS = STAGE_NEXT[r.stage]
                       return (
                         <div key={r.id} className={`rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-shadow
-                          ${isPast?'border-red-200':'border-slate-100'}`}>
+                          ${r.status==='Won'&&!r.po_number?'border-orange-300':isPast?'border-red-200':'border-slate-100'}`}>
                           <div className="font-semibold text-slate-900 text-xs leading-tight">{r.accounts?.name||'—'}</div>
                           <Link href={`/opportunities/${r.id}`}
                             className="mt-0.5 block truncate text-[11px] text-slate-500 hover:text-blue-600 hover:underline"
                             title={r.title}>{r.title}</Link>
 
                           <div className="mt-2 flex items-center justify-between gap-2">
-                            <BuBadge bu={r.multi_bu?'MULTI':r.bu} />
+                            <BuBadge bu={r.multi_bu?'MULTI':r.bu} buLines={r.bu_lines} />
                             <span className="text-xs font-bold text-slate-900 tabular-nums">{fmtAmt(Number(r.amount||0))} MAD</span>
                           </div>
 
@@ -624,8 +663,12 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                             <div className="mt-1 text-[11px] text-slate-400 italic truncate">{r.next_step}</div>
                           )}
 
-                          {r.po_number && (
+                          {r.po_number ? (
                             <div className="mt-1 text-[11px] font-semibold text-emerald-700">PO: {r.po_number}</div>
+                          ) : r.status === 'Won' && (
+                            <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-orange-50 border border-orange-200 px-1.5 py-0.5 text-[10px] font-bold text-orange-600">
+                              ⚠ PO manquant
+                            </div>
                           )}
 
                           <div className="mt-2 flex items-center gap-1.5 border-t pt-2">
