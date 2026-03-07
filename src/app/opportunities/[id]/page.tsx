@@ -223,6 +223,7 @@ export default function OpportunityDetailPage() {
   const [showEmail, setShowEmail] = useState(false)
 
   useEffect(() => { if (id) loadAll() }, [id])
+  useEffect(() => { if (opp) document.title = `${opp.title} \u00b7 CRM-PIPE` }, [opp])
 
   async function loadAll() {
     setLoading(true)

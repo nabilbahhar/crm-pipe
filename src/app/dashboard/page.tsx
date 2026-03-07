@@ -246,7 +246,7 @@ export default function Dashboard() {
   const [ANNUAL_TARGET, setAT] = useState(30_000_000)
   const [editingTarget, setEditingTarget] = useState(false)
   const [targetInput, setTargetInput] = useState('')
-  useEffect(() => { setAT(getAnnualTarget()) }, [])
+  useEffect(() => { document.title = 'Dashboard \u00b7 CRM-PIPE'; setAT(getAnnualTarget()) }, [])
   function saveTarget() {
     const v = Number(targetInput.replace(/\s/g, ''))
     if (v > 0) { setAnnualTarget(v); setAT(v) }

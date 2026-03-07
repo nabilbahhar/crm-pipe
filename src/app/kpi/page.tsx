@@ -63,7 +63,7 @@ export default function KPIPage() {
   const [email, setEmail] = useState<string|null>(null)
   const [activeQ, setActiveQ] = useState<string>('Q1')
   const [AT, setATState] = useState(30_000_000)
-  useEffect(() => { setATState(getAnnualTarget()) }, [])
+  useEffect(() => { document.title = 'KPI \u00b7 CRM-PIPE'; setATState(getAnnualTarget()) }, [])
 
   const profile = email ? (PROFILES[email]??null) : null
 

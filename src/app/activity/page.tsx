@@ -93,7 +93,7 @@ export default function ActivityPage() {
     setLoading(false)
   }
 
-  useEffect(() => { load(true) }, [])
+  useEffect(() => { document.title = 'Activit\u00e9 \u00b7 CRM-PIPE'; load(true) }, [])
 
   // Filtered rows (client-side for speed)
   const filtered = useMemo(() => {

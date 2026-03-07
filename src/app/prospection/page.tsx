@@ -261,6 +261,7 @@ export default function ProspectionPage() {
   const [accounts, setAccounts]   = useState<{ id: string; name: string }[]>([])
 
   useEffect(() => {
+    document.title = 'Prospection \u00b7 CRM-PIPE'
     supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null))
   }, [])
 

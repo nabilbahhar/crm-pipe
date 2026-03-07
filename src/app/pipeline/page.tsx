@@ -119,6 +119,8 @@ function PipelineContent() {
   const [quarterFilter, setQuarterFilter] = useState<1|2|3|4|'Tous'>('Tous')
   const [sortAsc, setSortAsc]         = useState(true)
 
+  useEffect(() => { document.title = 'Pipeline \u00b7 CRM-PIPE' }, [])
+
   // Sync si navigation back/forward change le param URL
   useEffect(() => {
     const acc = searchParams.get('account')

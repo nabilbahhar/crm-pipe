@@ -183,6 +183,8 @@ function DealsPageInner() {
   const [showNewDeal, setShowNewDeal] = useState(false)
   const [editRow, setEditRow]         = useState<any>(null)
 
+  useEffect(() => { document.title = 'Deals \u00b7 CRM-PIPE' }, [])
+
   // Open modal from ?edit= param after data loads
   useEffect(() => {
     const editId = searchParams.get('edit')

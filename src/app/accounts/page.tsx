@@ -188,7 +188,7 @@ export default function AccountsPage() {
     } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
     finally { setLoading(false) }
   }
-  useEffect(() => { loadAll() }, [])
+  useEffect(() => { document.title = 'Comptes \u00b7 CRM-PIPE'; loadAll() }, [])
 
   // ── Add ──────────────────────────────────────────────────────────────────
   const onAdd = async (ev: React.FormEvent) => {

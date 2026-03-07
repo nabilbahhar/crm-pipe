@@ -144,6 +144,7 @@ export default function SuppliersPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
+    document.title = 'Fournisseurs \u00b7 CRM-PIPE'
     supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null))
     loadAll()
   }, [])

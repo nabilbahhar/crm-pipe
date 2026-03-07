@@ -68,7 +68,7 @@ export default function TasksPage() {
   const [sortKey, setSortKey]           = useState<SortKey>('priority')
   const [sortDir, setSortDir]           = useState<'asc' | 'desc'>('desc')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { document.title = 'T\u00e2ches \u00b7 CRM-PIPE'; load() }, [])
 
   async function load() {
     setLoading(true); setErr(null)

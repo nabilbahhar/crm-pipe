@@ -45,6 +45,7 @@ export default function SupplyPage() {
   const [purchaseDeal, setPurchaseDeal] = useState<any | null>(null)
 
   useEffect(() => {
+    document.title = 'Supply \u00b7 CRM-PIPE'
     supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null))
     // Read vendor filter from URL params (e.g., from fournisseurs page link)
     const params = new URLSearchParams(window.location.search)
