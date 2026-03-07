@@ -14,19 +14,82 @@ import {
 import { mad, fmt, normStatus, STAGE_CFG, BU_BADGE_CLS } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+type SupplyStatus = 'a_commander' | 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'
+
 type Deal = {
   id: string; account_id: string|null; title: string; stage: string
   status: 'Open'|'Won'|'Lost'; bu: string|null; vendor: string|null
   amount: number; prob: number|null; booking_month: string|null
   next_step: string|null; notes: string|null; multi_bu: boolean|null
   bu_lines: any; created_at: string|null; accounts?: { name?: string }|null
+  // Supply join
+  supply_orders?: { status: SupplyStatus }[] | null
+  purchase_info?: { id: string; purchase_lines?: { pu_achat: number|null; fournisseur: string|null }[] }[] | null
 }
 
 const STAGES = ['Lead','Discovery','Qualified','Solutioning','Proposal Sent','Negotiation','Commit','Won','Lost / No decision'] as const
 const BUS    = ['HCI','Network','Storage','Cyber','Service','CSG'] as const
 const STATUS_ALL = ['Tous', 'Open', 'Won', 'Lost'] as const
 
-// ─── Helpers locaux ───────────────────────────────────────────────────────────
+// ─── Supply helpers ──────────────────────────────────────────────────────────
+const SUPPLY_CFG: Record<SupplyStatus, { label: string; icon: string; color: string; bg: string }> = {
+  a_commander: { label: 'À commander', icon: '📋', color: 'text-amber-700',   bg: 'bg-amber-50'   },
+  place:       { label: 'Placé',        icon: '📤', color: 'text-blue-700',    bg: 'bg-blue-50'    },
+  commande:    { label: 'Commandé',     icon: '🔄', color: 'text-violet-700',  bg: 'bg-violet-50'  },
+  en_stock:    { label: 'En stock',     icon: '📦', color: 'text-orange-700',  bg: 'bg-orange-50'  },
+  livre:       { label: 'Livré',        icon: '🚚', color: 'text-emerald-700', bg: 'bg-emerald-50' },
+  facture:     { label: 'Facturé',      icon: '✅', color: 'text-slate-600',   bg: 'bg-slate-100'  },
+}
+
+function getSupplyStatus(d: Deal): SupplyStatus | null {
+  const orders = d.supply_orders
+  if (!orders || orders.length === 0) return null
+  return orders[0].status
+}
+
+function getFicheStatus(d: Deal): 'complete' | 'en_cours' | 'a_faire' | null {
+  if (normStatus(d) !== 'Won') return null
+  const info = d.purchase_info
+  if (!info || info.length === 0) return 'a_faire'
+  const lines = info[0]?.purchase_lines || []
+  if (lines.length === 0) return 'en_cours'
+  const complete = lines.filter(l => Number(l.pu_achat) > 0 && l.fournisseur?.trim()).length
+  if (complete === lines.length) return 'complete'
+  return 'en_cours'
+}
+
+function SupplyBadge({ d }: { d: Deal }) {
+  const st = getSupplyStatus(d)
+  if (!st) return null
+  const cfg = SUPPLY_CFG[st]
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${cfg.bg} ${cfg.color}`}>
+      {cfg.icon} {cfg.label}
+    </span>
+  )
+}
+
+function FicheBadge({ d }: { d: Deal }) {
+  const st = getFicheStatus(d)
+  if (!st) return null
+  if (st === 'complete') return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 whitespace-nowrap">
+      ✓ Fiche OK
+    </span>
+  )
+  if (st === 'en_cours') return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600 whitespace-nowrap">
+      ⏳ En cours
+    </span>
+  )
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600 whitespace-nowrap">
+      ⚠ À faire
+    </span>
+  )
+}
+
+// ─── Helpers locaux ─────────────────────────────────────────────────────────────
 const mainBU = (d: Deal): string => {
   if (d.multi_bu || (Array.isArray(d.bu_lines) && d.bu_lines.length > 0)) return 'MULTI'
   return d.bu || '—'
@@ -99,6 +162,7 @@ function DealsPageInner() {
   const [stageFilter, setStageFilter]     = useState('Tous')
   const [buFilter, setBuFilter]           = useState('Tous')
   const [showFilters, setShowFilters]     = useState(false)
+  const [supplyFilter, setSupplyFilter]   = useState<'Tous' | 'avec_supply' | 'sans_supply'>('Tous')
   const [dateFrom, setDateFrom]           = useState('')
   const [dateTo, setDateTo]               = useState('')
 
@@ -125,7 +189,7 @@ function DealsPageInner() {
     setLoading(true); setErr(null)
     try {
       const { data, error } = await supabase.from('opportunities')
-        .select('*, accounts(name)')
+        .select('*, accounts(name), supply_orders(status), purchase_info(id, purchase_lines(pu_achat, fournisseur))')
         .order('created_at', { ascending: false })
         .limit(3000)
       if (error) throw error
@@ -158,6 +222,8 @@ function DealsPageInner() {
       if (statusFilter !== 'Tous' && status !== statusFilter) return false
       if (stageFilter  !== 'Tous' && d.stage !== stageFilter) return false
       if (buFilter     !== 'Tous' && bu !== buFilter) return false
+      if (supplyFilter === 'avec_supply'  && getSupplyStatus(d) === null) return false
+      if (supplyFilter === 'sans_supply'  && (status !== 'Won' || getSupplyStatus(d) !== null)) return false
 
       // ✅ FIX: comparaison date-only (évite les bugs de timezone)
       if (dateFrom && (d.created_at || '').slice(0, 10) < dateFrom) return false
@@ -171,7 +237,7 @@ function DealsPageInner() {
       )) return false
       return true
     })
-  }, [rows, search, statusFilter, stageFilter, buFilter, dateFrom, dateTo])
+  }, [rows, search, statusFilter, stageFilter, buFilter, dateFrom, dateTo, supplyFilter])
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1
@@ -212,10 +278,10 @@ function DealsPageInner() {
     )
   }
 
-  const hasFilters = search || statusFilter !== 'Tous' || stageFilter !== 'Tous' || buFilter !== 'Tous' || dateFrom || dateTo
+  const hasFilters = search || statusFilter !== 'Tous' || stageFilter !== 'Tous' || buFilter !== 'Tous' || dateFrom || dateTo || supplyFilter !== 'Tous'
   const resetFilters = () => {
     setSearch(''); setStatusFilter('Tous'); setStageFilter('Tous')
-    setBuFilter('Tous'); setDateFrom(''); setDateTo('')
+    setBuFilter('Tous'); setDateFrom(''); setDateTo(''); setSupplyFilter('Tous')
   }
 
   return (
@@ -343,6 +409,18 @@ function DealsPageInner() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500">Supply :</span>
+                <div className="relative">
+                  <select value={supplyFilter} onChange={e => setSupplyFilter(e.target.value as any)}
+                    className="h-8 appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-semibold text-slate-700 focus:outline-none">
+                    <option value="Tous">Tous</option>
+                    <option value="avec_supply">Avec commande supply</option>
+                    <option value="sans_supply">Won sans commande</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-slate-400" />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold text-slate-500">Créé du :</span>
                 <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
                   className="h-8 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 focus:outline-none focus:border-slate-400" />
@@ -375,6 +453,8 @@ function DealsPageInner() {
                     <TH col="amount" label="Montant" right />
                     <TH col="prob" label="Prob" />
                     <TH col="closing" label="Closing" />
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 whitespace-nowrap">Supply</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 whitespace-nowrap">Fiche achat</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Actions</th>
                   </tr>
                 </thead>
@@ -413,6 +493,14 @@ function DealsPageInner() {
                             <span className={isLate ? 'font-bold text-red-500' : 'text-slate-600'}>{d.booking_month}</span>
                           ) : <span className="text-slate-300">—</span>}
                         </td>
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          {status === 'Won' ? <SupplyBadge d={d} /> : <span className="text-slate-200 text-[10px]">—</span>}
+                        </td>
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          {status === 'Won' ? (
+                            <FicheBadge d={d} />
+                          ) : <span className="text-slate-200 text-[10px]">—</span>}
+                        </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Link href={`/opportunities/${d.id}`}
@@ -430,7 +518,7 @@ function DealsPageInner() {
                   })}
                   {sorted.length === 0 && (
                     <tr>
-                      <td colSpan={11} className="py-16 text-center text-sm text-slate-400">
+                      <td colSpan={13} className="py-16 text-center text-sm text-slate-400">
                         {rows.length === 0 ? 'Aucun deal.' : 'Aucun résultat pour ces filtres.'}
                       </td>
                     </tr>
