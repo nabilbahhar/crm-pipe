@@ -95,7 +95,9 @@ export default function AccountsPage() {
   const [loading, setLoading]   = useState(false)
   const [err, setErr]           = useState<string|null>(null)
   const [toast, setToast]       = useState<string|null>(null)
-  const [dealCounts, setDealCounts] = useState<Record<string, number>>({})
+  const [dealCounts, setDealCounts]   = useState<Record<string, number>>({})
+  const [wonAmtMap, setWonAmtMap]     = useState<Record<string, number>>({})
+  const [lastDealMap, setLastDealMap] = useState<Record<string, string>>({})
 
   // Filters
   const [search, setSearch] = useState('')
@@ -141,7 +143,7 @@ export default function AccountsPage() {
   const [showDatePicker, setShowDatePicker] = useState(false)
 
   // Sort
-  const [sortKey, setSortKey] = useState<'created_at'|'name'|'sector'|'segment'|'region'|'deals'>('name')
+  const [sortKey, setSortKey] = useState<'created_at'|'name'|'sector'|'segment'|'region'|'deals'|'won_amt'|'last_deal'>('name')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('asc')
   const existsName = (n: string, excludeId?: string) => accounts.some(a => a.id !== excludeId && (a.name || '').trim().toLowerCase() === n.trim().toLowerCase())
 
@@ -151,13 +153,30 @@ export default function AccountsPage() {
     try {
       const [{ data: acc, error: e1 }, { data: opps }] = await Promise.all([
         supabase.from('accounts').select('id,name,sector,segment,region,created_at').order('name'),
-        supabase.from('opportunities').select('account_id,status').eq('status', 'Open'),
+        supabase.from('opportunities').select('account_id,status,amount,booking_month,created_at'),
       ])
       if (e1) throw e1
       setAccounts((acc || []) as AccountRow[])
-      const counts: Record<string, number> = {}
-      for (const d of opps || []) { if (d.account_id) counts[d.account_id] = (counts[d.account_id] || 0) + 1 }
+
+      // ── Build maps from all opportunities ──────────────────────────────────
+      const counts: Record<string, number>  = {}
+      const wonAmt: Record<string, number>  = {}
+      const lastDeal: Record<string, string> = {}
+
+      for (const d of opps || []) {
+        const aid = d.account_id; if (!aid) continue
+        // Active pipeline count (Open only)
+        if (d.status === 'Open') counts[aid] = (counts[aid] || 0) + 1
+        // Won CA
+        if (d.status === 'Won') wonAmt[aid] = (wonAmt[aid] || 0) + (d.amount || 0)
+        // Last deal date (booking_month or created_at, keep most recent)
+        const dateKey = d.booking_month || (d.created_at || '').slice(0, 7)
+        if (dateKey && (!lastDeal[aid] || dateKey > lastDeal[aid])) lastDeal[aid] = dateKey
+      }
+
       setDealCounts(counts)
+      setWonAmtMap(wonAmt)
+      setLastDealMap(lastDeal)
     } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
     finally { setLoading(false) }
   }
@@ -315,13 +334,15 @@ export default function AccountsPage() {
         case 'segment':    va = a.segment||'';    vb = b.segment||'';    break
         case 'region':     va = a.region||'';     vb = b.region||'';     break
         case 'deals':      va = dealCounts[a.id]||0; vb = dealCounts[b.id]||0; break
+        case 'won_amt':    va = wonAmtMap[a.id]||0; vb = wonAmtMap[b.id]||0; break
+        case 'last_deal':  va = lastDealMap[a.id]||''; vb = lastDealMap[b.id]||''; break
         case 'created_at': va = a.created_at||''; vb = b.created_at||''; break
         default:           va = a.name||'';       vb = b.name||''
       }
       if (typeof va === 'number') return dir * (va - vb)
       return dir * String(va).localeCompare(String(vb), 'fr')
     })
-  }, [filtered, sortKey, sortDir, dealCounts])
+  }, [filtered, sortKey, sortDir, dealCounts, wonAmtMap, lastDealMap])
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
@@ -529,12 +550,14 @@ export default function AccountsPage() {
                   <TH col="segment" label="Secteur d'activité" />
                   <TH col="region" label="Région" />
                   <TH col="deals" label="Deals actifs" right />
+                  <TH col="won_amt" label="CA Won" right />
+                  <TH col="last_deal" label="Dernier deal" />
                   <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {sorted.length === 0 ? (
-                  <tr><td colSpan={7} className="py-16 text-center text-sm text-slate-400">
+                  <tr><td colSpan={9} className="py-16 text-center text-sm text-slate-400">
                     {accounts.length === 0 ? 'Aucun client. Commencez par en ajouter un.' : 'Aucun résultat pour ces filtres.'}
                   </td></tr>
                 ) : sorted.map(a => {
@@ -571,6 +594,22 @@ export default function AccountsPage() {
                             className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 hover:bg-blue-100 transition-colors">
                             {deals} deal{deals > 1 ? 's' : ''} <ExternalLink className="h-3 w-3" />
                           </Link>
+                        ) : <span className="text-xs text-slate-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">
+                        {wonAmtMap[a.id] ? (
+                          <span className="text-xs font-black text-emerald-700">
+                            {wonAmtMap[a.id] >= 1_000_000
+                              ? `${(wonAmtMap[a.id]/1_000_000).toFixed(1)}M`
+                              : wonAmtMap[a.id] >= 1000
+                              ? `${Math.round(wonAmtMap[a.id]/1000)}K`
+                              : String(Math.round(wonAmtMap[a.id]))} MAD
+                          </span>
+                        ) : <span className="text-xs text-slate-300">—</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        {lastDealMap[a.id] ? (
+                          <span className="text-xs font-semibold text-slate-500 tabular-nums">{lastDealMap[a.id]}</span>
                         ) : <span className="text-xs text-slate-300">—</span>}
                       </td>
                       <td className="px-4 py-3">
