@@ -134,6 +134,10 @@ function PipelineContent() {
   const [vendorFilter, setVendorFilter]   = useState<string>('Tous')
   const [ownerFilter, setOwnerFilter]     = useState<string>('Tous')
   const [sortCol, setSortCol]         = useState<'amount'|'prob'|'booking_month'|'stage'|'account'|'vendor'>('booking_month')
+  // Period filter
+  const thisYear = new Date().getFullYear()
+  const [yearFilter, setYearFilter]     = useState<number | 'Tous'>(thisYear)
+  const [quarterFilter, setQuarterFilter] = useState<1|2|3|4|'Tous'>('Tous')
   const [sortAsc, setSortAsc]         = useState(true)
 
   // Sync si navigation back/forward change le param URL
@@ -165,6 +169,23 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       stage: next, status: next==='Won'?'Won':'Open', prob: STAGE_PROB[next]??deal.prob
     }).eq('id', deal.id)
     if (error) { setErr(error.message); return }
+
+    // ── Auto-création supply_order quand Won ──────────────────────────────────
+    if (next === 'Won') {
+      // Vérifie qu'il n'en existe pas déjà un
+      const { data: existing } = await supabase
+        .from('supply_orders')
+        .select('id')
+        .eq('opportunity_id', deal.id)
+        .maybeSingle()
+      if (!existing) {
+        await supabase.from('supply_orders').insert({
+          opportunity_id: deal.id,
+          status: 'a_commander',
+        })
+      }
+    }
+
     await logActivity({
       action_type: next === 'Won' ? 'won' : 'stage',
       entity_type: 'deal',
@@ -261,6 +282,20 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
     if (vendorFilter!=='Tous') r = r.filter(x => vendorFilter==='MULTI' ? (x.multi_bu===true) : (x.vendor||'')=== vendorFilter)
     // Owner filter
     if (ownerFilter!=='Tous') r = r.filter(x => (x.owner_email||'') === ownerFilter)
+    // Period filter on booking_month
+    if (yearFilter !== 'Tous') {
+      const y = String(yearFilter)
+      r = r.filter(x => {
+        const bm = x.booking_month || ''
+        if (!bm.startsWith(y)) return false
+        if (quarterFilter !== 'Tous') {
+          const month = parseInt(bm.slice(5, 7), 10)
+          const q = Math.ceil(month / 3)
+          return q === quarterFilter
+        }
+        return true
+      })
+    }
     // Search
     const q = search.trim().toLowerCase()
     if (q) r = r.filter(x =>
@@ -279,7 +314,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       return sortAsc?(av>bv?1:-1):(av<bv?1:-1)
     })
     return r
-  }, [rows, stageFilter, buFilter, accountFilter, vendorFilter, ownerFilter, search, sortCol, sortAsc])
+  }, [rows, stageFilter, buFilter, accountFilter, vendorFilter, ownerFilter, yearFilter, quarterFilter, search, sortCol, sortAsc])
 
   function toggleSort(col: 'amount'|'prob'|'booking_month'|'stage'|'account'|'vendor') {
     if (sortCol===col) setSortAsc(p=>!p)
@@ -466,6 +501,35 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Compte, titre, vendor…"
               className="w-48 bg-transparent text-sm outline-none placeholder:text-slate-400" />
           </div>
+
+          {/* Année */}
+          <div className="flex rounded-xl border bg-white p-0.5 shadow-sm">
+            {([thisYear - 1, thisYear, thisYear + 1] as const).map(y => (
+              <button key={y} onClick={() => { setYearFilter(yearFilter === y ? 'Tous' : y); setQuarterFilter('Tous') }}
+                className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors
+                  ${yearFilter === y ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+                {y}
+              </button>
+            ))}
+            <button onClick={() => { setYearFilter('Tous'); setQuarterFilter('Tous') }}
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors
+                ${yearFilter === 'Tous' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+              Tout
+            </button>
+          </div>
+
+          {/* Trimestre */}
+          {yearFilter !== 'Tous' && (
+            <div className="flex rounded-xl border bg-white p-0.5 shadow-sm">
+              {([1,2,3,4] as const).map(q => (
+                <button key={q} onClick={() => setQuarterFilter(quarterFilter === q ? 'Tous' : q)}
+                  className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors
+                    ${quarterFilter === q ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
+                  Q{q}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* View toggle */}
           <div className="ml-auto flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
