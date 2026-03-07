@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { mad, fmt } from '@/lib/utils'
 import {
-  CheckCircle2, RefreshCw, ChevronRight, Package,
+  CheckCircle2, RefreshCw, ChevronRight, Package, Phone,
   Search, ArrowUp, ArrowDown, ChevronsUpDown, X, Download,
   Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
 } from 'lucide-react'
@@ -84,7 +84,7 @@ export default function TasksPage() {
     const today = new Date().toISOString().split('T')[0]
     const { data, error } = await supabase
       .from('prospects')
-      .select('id, company_name, contact_name, status, next_date, next_action')
+      .select('id, company_name, contact_name, contact_phone, status, next_date, next_action')
       .is('converted_at', null)
       .neq('status', 'Qualifié ✓')
       .lt('next_date', today)
@@ -118,7 +118,7 @@ export default function TasksPage() {
     const endStr = endOfWeek.toISOString().split('T')[0]
     const { data, error } = await supabase
       .from('prospects')
-      .select('id, company_name, contact_name, status, next_date, next_action')
+      .select('id, company_name, contact_name, contact_phone, status, next_date, next_action')
       .is('converted_at', null)
       .neq('status', 'Qualifié ✓')
       .gte('next_date', todayStr)
@@ -536,7 +536,13 @@ export default function TasksPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center justify-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {t.entity?.contact_phone && (
+                              <a href={`tel:${t.entity.contact_phone}`} title={t.entity.contact_phone}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors">
+                                <Phone className="h-3.5 w-3.5" />
+                              </a>
+                            )}
                             <a href="/prospection"
                               className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                               Voir <ChevronRight className="h-3.5 w-3.5" />
@@ -584,7 +590,13 @@ export default function TasksPage() {
                             </span>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center justify-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {t.entity?.contact_phone && (
+                                <a href={`tel:${t.entity.contact_phone}`} title={t.entity.contact_phone}
+                                  className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors">
+                                  <Phone className="h-3.5 w-3.5" />
+                                </a>
+                              )}
                               <a href="/prospection"
                                 className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                                 Voir <ChevronRight className="h-3.5 w-3.5" />
