@@ -7,7 +7,7 @@ import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { logActivity } from '@/lib/logActivity'
 import { mad, fmt, STAGE_CFG as STAGE_STYLE, BU_BADGE_CLS as BU_COLOR } from '@/lib/utils'
-import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2, X } from 'lucide-react'
+import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2, X, AlertTriangle } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DealRow = {
@@ -207,6 +207,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       ? `${now.getFullYear()+1}-01`
       : `${now.getFullYear()}-${String(now.getMonth()+2).padStart(2,'0')}`
     const urgent = open.filter(r => r.booking_month===thisM||r.booking_month===nextM)
+    const overdue = open.filter(r => r.booking_month && r.booking_month < thisM)
     const bySt = Object.fromEntries(STAGES.map(s => [s, { count:0, amount:0 }]))
     open.forEach(r => {
       const k = r.stage||'Lead'
@@ -224,6 +225,8 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       urgentAmount: urgent.reduce((s,r)=>s+Number(r.amount||0),0),
       winRate: won.length+lost.length>0 ? Math.round(won.length/(won.length+lost.length)*100) : 0,
       bySt,
+      overdueCount: overdue.length,
+      overdueAmount: overdue.reduce((s,r)=>s+Number(r.amount||0),0),
     }
   }, [rows])
 
@@ -250,6 +253,11 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
     if (stageFilter==='Open')  r = r.filter(x => x.status==='Open')
     else if (stageFilter==='Won')  r = r.filter(x => x.status==='Won')
     else if (stageFilter==='Lost') r = r.filter(x => x.status==='Lost')
+    else if (stageFilter==='Overdue') {
+      const now = new Date()
+      const curM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
+      r = r.filter(x => x.status==='Open' && x.booking_month && x.booking_month < curM)
+    }
     else if (stageFilter!=='Tous') r = r.filter(x => x.stage===stageFilter)
     // BU filter
     if (buFilter!=='Tous') r = r.filter(x => x.bu===buFilter||(x.multi_bu&&buFilter==='MULTI'))
@@ -342,6 +350,22 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
               className="ml-auto inline-flex items-center gap-1 rounded-lg border border-blue-200 bg-white px-2.5 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors"
             >
               <X className="h-3 w-3" /> Voir tout le pipeline
+            </button>
+          </div>
+        )}
+
+        {/* Overdue alert */}
+        {stats.overdueCount > 0 && stageFilter !== 'Overdue' && (
+          <div className="mt-4 flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5">
+            <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+            <span className="text-xs font-semibold text-red-700">
+              {stats.overdueCount} deal{stats.overdueCount > 1 ? 's' : ''} en retard ({mad(stats.overdueAmount)}) — closing dépassé
+            </span>
+            <button
+              onClick={() => setStageFilter('Overdue')}
+              className="ml-auto inline-flex items-center gap-1 rounded-lg border border-red-200 bg-white px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors"
+            >
+              Voir les retards
             </button>
           </div>
         )}
