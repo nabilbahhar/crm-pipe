@@ -234,6 +234,7 @@ export default function Dashboard() {
   // ── Supply & Marge data ──────────────────────────────────────────────────
   const [purchaseLines, setPurchaseLines] = useState<any[]>([])
   const [supplyOrders,  setSupplyOrders]  = useState<any[]>([])
+  const [prospects, setProspects] = useState<any[]>([])
 
   // ── Filtres avancés ──────────────────────────────────────────────────────
   const [showFilters, setShowFilters]   = useState(false)
@@ -288,15 +289,17 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true); setErr(null)
     try {
-      const [{ data: opps, error: e1 }, { data: accs, error: e2 }, { data: pLines }, { data: sOrders }] = await Promise.all([
+      const [{ data: opps, error: e1 }, { data: accs, error: e2 }, { data: pLines }, { data: sOrders }, { data: prosp }] = await Promise.all([
         supabase.from('opportunities').select('*, accounts(name,sector,segment,region)').order('created_at',{ascending:false}).limit(5000),
         supabase.from('accounts').select('id,name,sector,segment,region'),
         supabase.from('purchase_lines').select('*, purchase_info(opportunity_id)'),
         supabase.from('supply_orders').select('id, opportunity_id, status, placed_at, updated_at'),
+        supabase.from('prospects').select('id,status,heat,converted_at,created_at').is('converted_at', null),
       ])
       if (e1) throw e1; if (e2) throw e2
       setRows(opps||[]); setAccounts(accs||[])
       setPurchaseLines(pLines||[]); setSupplyOrders(sOrders||[])
+      setProspects(prosp||[])
     } catch(e:any) { setErr(e?.message||'Erreur') }
     finally { setLoading(false) }
   }
@@ -641,6 +644,16 @@ export default function Dashboard() {
       return new Date(ts).getTime() < limit
     })
   },[supplyOrders])
+
+  // ── Prospect stats ──────────────────────────────────────────────────────
+  const prospectStats = useMemo(()=>{
+    const total = prospects.length
+    const hot   = prospects.filter(p => p.heat === 'hot').length
+    const warm  = prospects.filter(p => p.heat === 'warm').length
+    const rdv   = prospects.filter(p => ['RDV demandé','RDV confirmé','RDV fait'].includes(p.status)).length
+    const qualifie = prospects.filter(p => p.status === 'Qualifié ✓').length
+    return { total, hot, warm, rdv, qualifie }
+  },[prospects])
 
   // ── Top Open / Won ────────────────────────────────────────────────────────
   const topOpen = useMemo(()=>[...openDeals].sort((a,b)=>b.amount-a.amount).slice(0,12),[openDeals])
@@ -991,6 +1004,53 @@ export default function Dashboard() {
               Voir Supply <ChevronDown className="h-4 w-4 rotate-[-90deg]" />
             </div>
           </a>
+        )}
+
+        {/* ══ PROSPECTION PIPELINE ══ */}
+        {prospectStats.total > 0 && (
+          <Link href="/prospection" className="block rounded-2xl bg-white ring-1 ring-slate-200/80 shadow-sm hover:shadow-md transition-all group overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-purple-400 text-white shadow-md">
+                  🎯
+                </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">Pipeline Prospection</div>
+                  <div className="text-xs text-slate-500">{prospectStats.total} prospects actifs · Cliquer pour voir</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                {prospectStats.hot > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <Flame className="h-4 w-4 text-red-500" />
+                    <span className="text-lg font-black text-red-600">{prospectStats.hot}</span>
+                    <span className="text-[10px] font-bold text-red-400 uppercase">Hot</span>
+                  </div>
+                )}
+                {prospectStats.warm > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-lg font-black text-amber-600">{prospectStats.warm}</span>
+                    <span className="text-[10px] font-bold text-amber-400 uppercase">Warm</span>
+                  </div>
+                )}
+                {prospectStats.rdv > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <Calendar className="h-3.5 w-3.5 text-blue-500" />
+                    <span className="text-lg font-black text-blue-600">{prospectStats.rdv}</span>
+                    <span className="text-[10px] font-bold text-blue-400 uppercase">RDV</span>
+                  </div>
+                )}
+                {prospectStats.qualifie > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                    <span className="text-lg font-black text-emerald-600">{prospectStats.qualifie}</span>
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase">Qualifiés</span>
+                  </div>
+                )}
+              </div>
+              <ChevronDown className="h-5 w-5 text-slate-300 rotate-[-90deg] group-hover:text-slate-500 transition-colors" />
+            </div>
+          </Link>
         )}
 
         {/* ══ SUPPLY STATUTS + MARGE PAR BU ══ */}

@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import Link from 'next/link'
-import { RefreshCw, Filter, X } from 'lucide-react'
+import { RefreshCw, Filter, X, Download } from 'lucide-react'
 
 type Activity = {
   id: string
@@ -130,6 +130,28 @@ export default function ActivityPage() {
     return groups
   }, [filtered])
 
+  function exportCSV() {
+    const header = ['Date','Heure','Utilisateur','Action','Type','Entité','Détail']
+    const csvRows = [header.join(';')]
+    for (const a of filtered) {
+      const d = new Date(a.created_at)
+      csvRows.push([
+        d.toLocaleDateString('fr-MA'),
+        d.toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit' }),
+        userName(a.user_email),
+        ACTION_LABEL[a.action_type] || a.action_type,
+        ENTITY_LABEL[a.entity_type] || a.entity_type,
+        a.entity_name,
+        a.detail || '',
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+    }
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const el = document.createElement('a'); el.href = url
+    el.download = `activites_${new Date().toISOString().slice(0, 10)}.csv`
+    el.click(); URL.revokeObjectURL(url)
+  }
+
   const hasFilters = filterUser !== 'Tous' || filterType !== 'Tous' || filterEntity !== 'Tous' || filterFrom || filterTo || search
 
   function resetFilters() {
@@ -149,11 +171,17 @@ export default function ActivityPage() {
               {filtered.length} événement{filtered.length > 1 ? 's' : ''} · Toutes les modifications de l'équipe
             </p>
           </div>
-          <button onClick={() => load(true)} disabled={loading}
-            className="inline-flex items-center gap-2 h-9 px-4 rounded-xl border bg-white text-sm hover:bg-slate-50 shadow-sm">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Actualiser
-          </button>
+          <div className="flex gap-2">
+            <button onClick={exportCSV} title="Export CSV"
+              className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border bg-white text-sm text-slate-600 hover:bg-slate-50 shadow-sm">
+              <Download className="h-4 w-4" />
+            </button>
+            <button onClick={() => load(true)} disabled={loading}
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-xl border bg-white text-sm hover:bg-slate-50 shadow-sm">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Actualiser
+            </button>
+          </div>
         </div>
 
         {/* Filters */}
@@ -269,6 +297,16 @@ export default function ActivityPage() {
                             </span>
                             {a.entity_id && a.entity_type === 'deal' ? (
                               <Link href={`/opportunities/${a.entity_id}`}
+                                className="text-sm font-semibold text-slate-800 hover:text-blue-600 hover:underline truncate">
+                                {a.entity_name}
+                              </Link>
+                            ) : a.entity_type === 'prospect' ? (
+                              <Link href="/prospection"
+                                className="text-sm font-semibold text-slate-800 hover:text-blue-600 hover:underline truncate">
+                                {a.entity_name}
+                              </Link>
+                            ) : a.entity_type === 'account' ? (
+                              <Link href="/accounts"
                                 className="text-sm font-semibold text-slate-800 hover:text-blue-600 hover:underline truncate">
                                 {a.entity_name}
                               </Link>

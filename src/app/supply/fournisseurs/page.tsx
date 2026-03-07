@@ -1,11 +1,12 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import Link from 'next/link'
 import {
   Plus, Search, Edit2, Trash2, X, Save, Loader2, Download,
   Building2, Phone, Mail, MapPin, Tag, TrendingUp,
   Package, Users, ChevronUp, ChevronDown, ChevronsUpDown,
-  BarChart2, ShoppingCart, FileText, RefreshCw, ChevronRight,
+  BarChart2, ShoppingCart, FileText, RefreshCw, ChevronRight, ExternalLink,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -339,7 +340,17 @@ export default function SuppliersPage() {
                                 {s.name.slice(0, 2).toUpperCase()}
                               </div>
                               <div>
-                                <div className="font-semibold text-slate-900 text-sm">{s.name}</div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-semibold text-slate-900 text-sm">{s.name}</span>
+                                  {Number(s.total_orders) > 0 && (
+                                    <Link href={`/supply?vendor=${encodeURIComponent(s.name)}`}
+                                      onClick={e => e.stopPropagation()}
+                                      title="Voir commandes"
+                                      className="inline-flex h-5 w-5 items-center justify-center rounded-md text-slate-300 hover:bg-blue-50 hover:text-blue-500 transition-colors">
+                                      <ExternalLink className="h-3 w-3" />
+                                    </Link>
+                                  )}
+                                </div>
                                 {s.address && <div className="text-[11px] text-slate-400">{s.address}</div>}
                               </div>
                             </div>

@@ -46,6 +46,10 @@ export default function SupplyPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null))
+    // Read vendor filter from URL params (e.g., from fournisseurs page link)
+    const params = new URLSearchParams(window.location.search)
+    const urlVendor = params.get('vendor')
+    if (urlVendor) setVendorFilter(urlVendor)
     load()
   }, [])
 
