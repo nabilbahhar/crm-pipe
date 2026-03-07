@@ -17,8 +17,8 @@ type Opp = {
   id: string; title: string; amount: number; status: string; stage: string
   prob?: number; bu?: string; po_number?: string; vendor?: string
   next_step?: string; contact_name?: string; contact_email?: string
-  closing_date?: string; booking_month?: string; closing_month?: string
-  closing?: string; created_at?: string; updated_at?: string
+  closing_date?: string; booking_month?: string
+  created_at?: string; updated_at?: string
   owner_email?: string; notes?: string; description?: string
   multi_bu?: boolean; forecast?: string
   accounts?: { id?: string; name?: string; sector?: string; segment?: string; region?: string } | null
@@ -50,8 +50,9 @@ type Activity = {
 // mad (as madFull), pct, fmtDate, fmtDateTime imported from @/lib/utils
 const mad = madFull
 
+/** booking_month est le champ canonique. Fallbacks pour données legacy. */
 const closingDate = (o: Opp) =>
-  o.booking_month || o.closing_month || o.closing_date || o.closing
+  o.booking_month || o.closing_date || null
 
 // ─── Supply & Stage config imported from @/lib/utils ──────────
 const STATUS_CFG = SUPPLY_STATUS_CFG
