@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { madFull, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus } from '@/lib/utils'
 import {
@@ -301,6 +302,15 @@ export default function OpportunityDetailPage() {
   return (
     <div className="min-h-screen bg-[#f8fafc]">
       <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
+
+        {/* ── Breadcrumb ── */}
+        <nav className="flex items-center gap-1.5 text-xs text-slate-400">
+          <Link href="/dashboard" className="hover:text-slate-600 transition-colors">Dashboard</Link>
+          <ChevronRight className="h-3 w-3" />
+          <Link href="/opportunities" className="hover:text-slate-600 transition-colors">Deals</Link>
+          <ChevronRight className="h-3 w-3" />
+          <span className="text-slate-600 font-medium truncate max-w-[200px]">{opp.title}</span>
+        </nav>
 
         {/* ── Header ── */}
         <div className="flex items-start gap-3">

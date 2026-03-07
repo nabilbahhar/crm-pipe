@@ -28,6 +28,8 @@ function ResetPasswordInner() {
   const sp = useSearchParams()
   const code = sp.get('code')
 
+  useEffect(() => { document.title = 'Réinitialiser · CRM-PIPE' }, [])
+
   const [email, setEmail]           = useState('')
   const [newPwd, setNewPwd]         = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')

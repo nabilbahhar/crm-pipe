@@ -356,6 +356,60 @@ function QuickSearch({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Keyboard Shortcuts Panel ─────────────────────────────────────────────────
+const SHORTCUTS = [
+  { keys: ["⌘", "K"], label: "Recherche rapide" },
+  { keys: ["?"], label: "Afficher les raccourcis" },
+  { keys: ["G", "D"], label: "Aller au Dashboard" },
+  { keys: ["G", "P"], label: "Aller au Pipeline" },
+  { keys: ["G", "T"], label: "Aller aux Tasks" },
+  { keys: ["G", "S"], label: "Aller au Supply" },
+  { keys: ["G", "A"], label: "Aller aux Comptes" },
+  { keys: ["G", "O"], label: "Aller aux Deals" },
+  { keys: ["G", "K"], label: "Aller aux KPI" },
+  { keys: ["G", "R"], label: "Aller à la Prospection" },
+  { keys: ["G", "H"], label: "Aller à l'Historique" },
+];
+
+function ShortcutsPanel({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) { if (e.key === "Escape") onClose() }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: 80 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 16, boxShadow: "0 24px 60px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #f1f5f9" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Raccourcis clavier</div>
+          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
+            <X style={{ width: 14, height: 14, color: "#94a3b8" }} />
+          </button>
+        </div>
+        <div style={{ padding: "8px 0" }}>
+          {SHORTCUTS.map((s, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 20px" }}>
+              <span style={{ fontSize: 13, color: "#475569" }}>{s.label}</span>
+              <div style={{ display: "flex", gap: 4 }}>
+                {s.keys.map((k, j) => (
+                  <kbd key={j} style={{ minWidth: 24, height: 24, borderRadius: 6, background: "#f1f5f9", border: "1px solid #e2e8f0", fontSize: 11, fontWeight: 600, color: "#475569", display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 6px", fontFamily: "monospace" }}>
+                    {k}
+                  </kbd>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #f1f5f9", textAlign: "center" }}>
+          <span style={{ fontSize: 11, color: "#94a3b8" }}>Appuie sur <kbd style={{ fontSize: 10, background: "#f1f5f9", borderRadius: 4, padding: "1px 5px", fontFamily: "monospace", border: "1px solid #e2e8f0" }}>?</kbd> pour afficher ce panneau</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── NavBar ────────────────────────────────────────────────────────────────────
 export default function NavBar() {
   const path = usePathname();
@@ -367,21 +421,69 @@ export default function NavBar() {
   const [showPwdModal, setShowPwdModal] = useState(false);
   const [taskCount, setTaskCount]   = useState(0);
   const [showSearch, setShowSearch] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const panelRef    = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const lastReadRef = useRef<string>("");
 
-  // Ctrl+K / Cmd+K global shortcut
+  // Global keyboard shortcuts
+  const router = useRouter();
+  const gPressedRef = useRef(false);
+  const gTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
+    function isInputFocused() {
+      const el = document.activeElement;
+      if (!el) return false;
+      const tag = el.tagName.toLowerCase();
+      return tag === "input" || tag === "textarea" || tag === "select" || (el as HTMLElement).isContentEditable;
+    }
+
     function handleKeyDown(e: KeyboardEvent) {
+      // Ctrl+K / Cmd+K
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         setShowSearch(v => !v);
+        return;
+      }
+
+      // Skip shortcuts if typing in a form
+      if (isInputFocused()) return;
+
+      // ? key → show shortcuts
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        setShowShortcuts(v => !v);
+        return;
+      }
+
+      // G + letter navigation shortcuts
+      if (e.key === "g" && !e.metaKey && !e.ctrlKey) {
+        gPressedRef.current = true;
+        if (gTimerRef.current) clearTimeout(gTimerRef.current);
+        gTimerRef.current = setTimeout(() => { gPressedRef.current = false }, 800);
+        return;
+      }
+
+      if (gPressedRef.current) {
+        const routes: Record<string, string> = {
+          d: "/dashboard", p: "/pipeline", t: "/tasks", s: "/supply",
+          a: "/accounts", o: "/opportunities", k: "/kpi", r: "/prospection",
+          h: "/activity",
+        };
+        const route = routes[e.key.toLowerCase()];
+        if (route) {
+          e.preventDefault();
+          gPressedRef.current = false;
+          if (gTimerRef.current) clearTimeout(gTimerRef.current);
+          router.push(route);
+        }
       }
     }
+
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [router]);
 
   // Load pending tasks count for badge (relances + achats + closing retard)
   async function loadTaskCount() {
@@ -671,6 +773,9 @@ export default function NavBar() {
 
       {/* ── Quick Search modal ── */}
       {showSearch && <QuickSearch onClose={() => setShowSearch(false)} />}
+
+      {/* ── Keyboard Shortcuts panel ── */}
+      {showShortcuts && <ShortcutsPanel onClose={() => setShowShortcuts(false)} />}
     </>
   );
 }

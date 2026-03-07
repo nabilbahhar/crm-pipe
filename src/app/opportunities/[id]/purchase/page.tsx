@@ -139,7 +139,10 @@ export default function PurchasePage() {
         .select('id, name, contact_name, email, tel')
         .order('name'),
     ])
-    if (dealRes.data) setDeal({ ...dealRes.data, accounts: dealRes.data.accounts as any })
+    if (dealRes.data) {
+      setDeal({ ...dealRes.data, accounts: dealRes.data.accounts as any })
+      document.title = `Achat · ${dealRes.data.title} · CRM-PIPE`
+    }
     if (fournsRes.data) setFourns(fournsRes.data)
 
     // Existing purchase info

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { Eye, EyeOff, TrendingUp, Users, Target, BarChart3 } from 'lucide-react'
@@ -19,6 +19,7 @@ const FEATURES = [
 
 export default function LoginPage() {
   const router = useRouter()
+  useEffect(() => { document.title = 'Connexion · CRM-PIPE' }, [])
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
   const [showPwd,  setShowPwd]  = useState(false)
