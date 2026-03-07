@@ -16,8 +16,7 @@ type Deal = {
   created_at: string; updated_at?: string; owner_email?: string
   close_date?: string; booking_month?: string
   bu?: string; vendor?: string; po_number?: string; next_step?: string
-  account_id?: string | null
-  accounts?: { name?: string } | null
+  accounts?: { name?: string; sector?: string } | null
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
@@ -184,6 +183,7 @@ export default function DealsPage() {
   const [undoing, setUndoing]     = useState(false)
 
   // Toast
+  const [loadErr, setLoadErr] = useState<string | null>(null)
   const [toast, setToast]         = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
 
   useEffect(() => { loadDeals() }, [])
@@ -195,23 +195,14 @@ export default function DealsPage() {
 
   async function loadDeals() {
     setLoading(true)
-    try {
-      const { data, error } = await supabase
-        .from('opportunities')
-        .select('id, title, status, stage, amount, prob, created_at, updated_at, owner_email, close_date, booking_month, bu, vendor, po_number, next_step, account_id')
-        .order('created_at', { ascending: false })
-        .limit(2000)
-      if (error) { console.error('Deals query error:', error); setDeals([]) }
-      else if (data) setDeals(data.map(d => ({
-        ...d,
-        accounts: null
-      })))
-    } catch (e) {
-      console.error('loadDeals exception:', e)
-      setDeals([])
-    } finally {
-      setLoading(false)
-    }
+    const { data, error } = await supabase
+      .from('opportunities')
+      .select('id, title, status, stage, amount, prob, created_at, updated_at, owner_email, close_date, booking_month, bu, vendor, po_number, next_step, accounts(name)')
+      .order('created_at', { ascending: false })
+      .limit(2000)
+    if (error) { console.error('Deals query error:', error.message); setLoadErr(error.message); setLoading(false); return }
+    if (data) setDeals(data.map(d => ({ ...d, accounts: d.accounts as any })))
+    setLoading(false)
   }
 
   // ── Delete ──────────────────────────────────────────────────
@@ -314,6 +305,13 @@ export default function DealsPage() {
             <TrendingUp className="h-4 w-4" /> Vue Pipeline
           </button>
         </div>
+
+        {/* Error banner */}
+        {loadErr && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            ⚠️ Erreur chargement des deals : {loadErr}
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
