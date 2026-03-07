@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { mad, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus } from '@/lib/utils'
 import PurchaseModal from '@/components/PurchaseModal'
+import Link from 'next/link'
 import { RefreshCw, Package, ChevronRight, Search, AlertCircle, Download } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -293,10 +294,12 @@ export default function SupplyPage() {
                             return (
                               <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
                                 <td className="px-4 py-3">
-                                  <div className="font-bold text-slate-900">
-                                    {opp?.accounts?.name || opp?.title || '—'}
-                                  </div>
-                                  <div className="text-xs text-slate-400 mt-0.5">{opp?.title}</div>
+                                  <Link href={`/opportunities/${opp?.id || order.opportunity_id}`} className="group/link">
+                                    <div className="font-bold text-slate-900 group-hover/link:text-blue-600 transition-colors">
+                                      {opp?.accounts?.name || opp?.title || '—'}
+                                    </div>
+                                    <div className="text-xs text-slate-400 mt-0.5">{opp?.title}</div>
+                                  </Link>
                                 </td>
                                 <td className="px-4 py-3">
                                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
