@@ -98,11 +98,13 @@ export default function AccountsPage() {
   const [dealCounts, setDealCounts]   = useState<Record<string, number>>({})
   const [wonAmtMap, setWonAmtMap]     = useState<Record<string, number>>({})
   const [lastDealMap, setLastDealMap] = useState<Record<string, string>>({})
+  const [primaryContacts, setPrimaryContacts] = useState<Record<string, ContactRow>>({})
 
   // Filters
   const [search, setSearch] = useState('')
   const [segFilter, setSegFilter] = useState('Tous')
   const [regFilter, setRegFilter] = useState('Tous')
+  const [sectorFilter, setSectorFilter] = useState('Tous')
 
   // Add form
   const [aName, setAName]       = useState('')
@@ -151,12 +153,18 @@ export default function AccountsPage() {
   const loadAll = async () => {
     setLoading(true); setErr(null)
     try {
-      const [{ data: acc, error: e1 }, { data: opps }] = await Promise.all([
+      const [{ data: acc, error: e1 }, { data: opps }, { data: ctcs }] = await Promise.all([
         supabase.from('accounts').select('id,name,sector,segment,region,created_at').order('name'),
         supabase.from('opportunities').select('account_id,status,amount,booking_month,created_at'),
+        supabase.from('account_contacts').select('id,account_id,full_name,email,phone,role,is_primary').eq('is_primary', true),
       ])
       if (e1) throw e1
       setAccounts((acc || []) as AccountRow[])
+
+      // Build primary contacts map
+      const pcMap: Record<string, ContactRow> = {}
+      for (const c of (ctcs || []) as ContactRow[]) { if (c.account_id) pcMap[c.account_id] = c }
+      setPrimaryContacts(pcMap)
 
       // ── Build maps from all opportunities ──────────────────────────────────
       const counts: Record<string, number>  = {}
@@ -319,10 +327,11 @@ export default function AccountsPage() {
       (!q || (a.name||'').toLowerCase().includes(q) || (a.segment||'').toLowerCase().includes(q) || (a.region||'').toLowerCase().includes(q)) &&
       (segFilter === 'Tous' || a.sector === segFilter) &&
       (regFilter === 'Tous' || a.region === regFilter) &&
+      (sectorFilter === 'Tous' || a.segment === sectorFilter) &&
       (!dateFrom || (a.created_at || '') >= dateFrom) &&
       (!dateTo   || (a.created_at || '') <= dateTo + 'T23:59:59')
     )
-  }, [accounts, search, segFilter, regFilter, dateFrom, dateTo])
+  }, [accounts, search, segFilter, regFilter, sectorFilter, dateFrom, dateTo])
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1
@@ -533,10 +542,18 @@ export default function AccountsPage() {
               ))}
             </div>
 
+            {uniqueSectors.length > 1 && (
+              <select value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}
+                className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-600 outline-none">
+                <option value="Tous">Secteur: Tous</option>
+                {uniqueSectors.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
+
             <div className="ml-auto flex items-center gap-2 text-xs text-slate-400">
               {filtered.length} / {accounts.length} comptes
-              {(search || segFilter !== 'Tous' || regFilter !== 'Tous' || dateFrom || dateTo) && (
-                <button onClick={() => { setSearch(''); setSegFilter('Tous'); setRegFilter('Tous'); setDateFrom(''); setDateTo('') }}
+              {(search || segFilter !== 'Tous' || regFilter !== 'Tous' || sectorFilter !== 'Tous' || dateFrom || dateTo) && (
+                <button onClick={() => { setSearch(''); setSegFilter('Tous'); setRegFilter('Tous'); setSectorFilter('Tous'); setDateFrom(''); setDateTo('') }}
                   className="text-blue-600 hover:underline font-semibold">Réinitialiser</button>
               )}
             </div>
@@ -598,6 +615,16 @@ export default function AccountsPage() {
                       </td>
                       <td className="px-5 py-3">
                         <div className="font-bold text-slate-900">{a.name}</div>
+                        {primaryContacts[a.id] && (
+                          <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-400">
+                            <span className="font-medium text-slate-500">{primaryContacts[a.id].full_name}</span>
+                            {primaryContacts[a.id].phone && (
+                              <a href={`tel:${primaryContacts[a.id].phone}`} className="inline-flex items-center gap-0.5 hover:text-blue-500">
+                                <Phone className="h-2.5 w-2.5" />{primaryContacts[a.id].phone}
+                              </a>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3"><SegBadge seg={a.sector} /></td>
                       <td className="px-4 py-3 text-slate-600 text-sm">{a.segment || <span className="text-slate-300">—</span>}</td>
