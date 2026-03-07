@@ -239,9 +239,10 @@ export default function ProspectionPage() {
 
   // Filters
   const [search, setSearch]           = useState('')
-  const [heatFilter, setHeatFilter]   = useState('Tous')
-  const [typeFilter, setTypeFilter]   = useState('Tous')
-  const [showOverdue, setShowOverdue] = useState(false)
+  const [heatFilter, setHeatFilter]     = useState('Tous')
+  const [typeFilter, setTypeFilter]     = useState('Tous')
+  const [statusFilter, setStatusFilter] = useState('Tous')
+  const [showOverdue, setShowOverdue]   = useState(false)
   const [dateFrom, setDateFrom]       = useState('')
   const [dateTo, setDateTo]           = useState('')
   const [showDatePicker, setShowDatePicker] = useState(false)
@@ -284,11 +285,12 @@ export default function ProspectionPage() {
     )
     if (heatFilter !== 'Tous') r = r.filter(x => x.heat === heatFilter)
     if (typeFilter !== 'Tous') r = r.filter(x => x.type === typeFilter)
+    if (statusFilter !== 'Tous') r = r.filter(x => x.status === statusFilter)
     if (showOverdue) r = r.filter(x => isOverdue(x.next_date) && x.status !== 'Qualifié ✓')
     if (dateFrom) r = r.filter(x => (x.created_at || '') >= dateFrom)
     if (dateTo)   r = r.filter(x => (x.created_at || '') <= dateTo + 'T23:59:59')
     return r
-  }, [rows, search, heatFilter, typeFilter, showOverdue])
+  }, [rows, search, heatFilter, typeFilter, statusFilter, showOverdue])
 
   type SortKey = 'created_at'|'company_name'|'status'|'heat'|'attempts'|'next_date'|'type'
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
@@ -493,8 +495,13 @@ export default function ProspectionPage() {
           <div className="flex gap-1 overflow-x-auto pb-1">
             {STATUSES.map(s => {
               const st = STATUS_STYLE[s]
+              const active = statusFilter === s
               return (
-                <div key={s} className={`flex-1 min-w-[90px] rounded-xl border px-3 py-2.5 ${st.bg} ${st.border}`}>
+                <div key={s}
+                  onClick={() => setStatusFilter(active ? 'Tous' : s)}
+                  className={`flex-1 min-w-[90px] rounded-xl border px-3 py-2.5 cursor-pointer transition-all
+                    ${active ? 'ring-2 ring-slate-900 ring-offset-1' : 'hover:ring-1 hover:ring-slate-300'}
+                    ${st.bg} ${st.border}`}>
                   <div className={`text-[10px] font-semibold uppercase tracking-wide truncate ${st.text}`}>{s}</div>
                   <div className={`mt-0.5 text-xl font-bold ${st.text}`}>{stats.bySt[s] || 0}</div>
                 </div>
@@ -521,6 +528,21 @@ export default function ProspectionPage() {
                   ${heatFilter===k ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{l}</button>
             ))}
           </div>
+
+          {/* Type filter */}
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+            className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
+            <option value="Tous">Type: Tous</option>
+            {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+
+          {/* Active filter indicator */}
+          {(statusFilter !== 'Tous' || typeFilter !== 'Tous' || heatFilter !== 'Tous' || showOverdue) && (
+            <button onClick={() => { setStatusFilter('Tous'); setTypeFilter('Tous'); setHeatFilter('Tous'); setShowOverdue(false) }}
+              className="inline-flex h-9 items-center gap-1 rounded-xl border bg-white px-3 text-xs text-slate-500 hover:text-red-500 shadow-sm">
+              <X className="h-3.5 w-3.5" /> Reset
+            </button>
+          )}
 
           {/* View toggle */}
           <div className="ml-auto flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
