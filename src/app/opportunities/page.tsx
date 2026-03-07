@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabaseClient'
 import {
   Search, RefreshCw, Plus, Pencil, Eye, X, ChevronDown,
   TrendingUp, CheckCircle2, XCircle, Clock, AlertTriangle,
-  ArrowUp, ArrowDown, ChevronsUpDown, Filter,
+  ArrowUp, ArrowDown, ChevronsUpDown, Filter, Download,
 } from 'lucide-react'
 
 // ─── Import depuis utils ──────────────────────────────────────────────────────
@@ -175,6 +175,7 @@ function DealsPageInner() {
   const [dateFrom, setDateFrom]           = useState('')
   const [dateTo, setDateTo]               = useState('')
   const [ownerFilter, setOwnerFilter]     = useState(initOwner)
+  const [vendorFilter, setVendorFilter]   = useState('Tous')
 
   // Sort
   const [sortKey, setSortKey]   = useState<SortKey>('amount')
@@ -262,6 +263,7 @@ function DealsPageInner() {
       if (supplyFilter === 'avec_supply'  && getSupplyStatus(d) === null) return false
       if (supplyFilter === 'sans_supply'  && (status !== 'Won' || getSupplyStatus(d) !== null)) return false
       if (ownerFilter  !== 'Tous' && (d.owner_email||'') !== ownerFilter) return false
+      if (vendorFilter !== 'Tous' && (d.vendor||'') !== vendorFilter) return false
 
       // ✅ FIX: comparaison date-only (évite les bugs de timezone)
       if (dateFrom && (d.created_at || '').slice(0, 10) < dateFrom) return false
@@ -275,7 +277,7 @@ function DealsPageInner() {
       )) return false
       return true
     })
-  }, [rows, search, statusFilter, stageFilter, buFilter, dateFrom, dateTo, supplyFilter, ownerFilter])
+  }, [rows, search, statusFilter, stageFilter, buFilter, dateFrom, dateTo, supplyFilter, ownerFilter, vendorFilter])
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1
@@ -320,11 +322,32 @@ function DealsPageInner() {
     [...new Set(rows.map(r => r.owner_email || '').filter(Boolean))].sort()
   , [rows])
 
-  const hasFilters = search || statusFilter !== 'Tous' || stageFilter !== 'Tous' || buFilter !== 'Tous' || dateFrom || dateTo || supplyFilter !== 'Tous' || ownerFilter !== 'Tous'
+  const vendorOptions = useMemo(() =>
+    [...new Set(rows.map(r => r.vendor || '').filter(Boolean))].sort()
+  , [rows])
+
+  const hasFilters = search || statusFilter !== 'Tous' || stageFilter !== 'Tous' || buFilter !== 'Tous' || dateFrom || dateTo || supplyFilter !== 'Tous' || ownerFilter !== 'Tous' || vendorFilter !== 'Tous'
   const resetFilters = () => {
     setSearch(''); setStatusFilter('Tous'); setStageFilter('Tous')
     setBuFilter('Tous'); setDateFrom(''); setDateTo(''); setSupplyFilter('Tous')
-    setOwnerFilter('Tous')
+    setOwnerFilter('Tous'); setVendorFilter('Tous')
+  }
+
+  function exportCSV() {
+    const header = ['Client','Deal','Étape','Statut','BU','Vendor','Montant','Prob %','Closing','Créé le']
+    const csvRows = [header.join(';')]
+    for (const d of sorted) {
+      csvRows.push([
+        d.accounts?.name || '', d.title || '', d.stage || '', normStatus(d),
+        mainBU(d), d.vendor || '', d.amount || 0, d.prob || 0,
+        d.booking_month || '', (d.created_at || '').slice(0, 10),
+      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
+    }
+    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url
+    a.download = `deals_${new Date().toISOString().slice(0,10)}.csv`
+    a.click(); URL.revokeObjectURL(url)
   }
 
   return (
@@ -343,6 +366,10 @@ function DealsPageInner() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={exportCSV} type="button"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
+              <Download className="h-4 w-4" /> CSV
+            </button>
             <button onClick={load} disabled={loading} type="button"
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-60">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -471,6 +498,19 @@ function DealsPageInner() {
                       className="h-8 appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-semibold text-slate-700 focus:outline-none">
                       <option value="Tous">Tous</option>
                       {ownerOptions.map(e => <option key={e} value={e}>{e.split('@')[0]}</option>)}
+                    </select>
+                    <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-slate-400" />
+                  </div>
+                </div>
+              )}
+              {vendorOptions.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-500">Carte :</span>
+                  <div className="relative">
+                    <select value={vendorFilter} onChange={e => setVendorFilter(e.target.value)}
+                      className="h-8 appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-semibold text-slate-700 focus:outline-none">
+                      <option value="Tous">Toutes</option>
+                      {vendorOptions.map(v => <option key={v} value={v}>{v}</option>)}
                     </select>
                     <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-slate-400" />
                   </div>
