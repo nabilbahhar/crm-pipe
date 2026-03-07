@@ -68,9 +68,14 @@ export default function SupplyPage() {
   }
 
   const [buFilter, setBuFilter] = useState('Tous')
+  const [vendorFilter, setVendorFilter] = useState('Tous')
 
   const buOptions = useMemo(() =>
     [...new Set(orders.map(o => o.opportunities?.bu || '').filter(Boolean))].sort()
+  , [orders])
+
+  const vendorOptions = useMemo(() =>
+    [...new Set(orders.map(o => o.opportunities?.vendor || '').filter(Boolean))].sort()
   , [orders])
 
   const filtered = useMemo(() => {
@@ -83,9 +88,10 @@ export default function SupplyPage() {
         && !(o.supply_notes || '').toLowerCase().includes(q)) return false
       if (statusFilter !== 'Tous' && o.status !== statusFilter) return false
       if (buFilter !== 'Tous' && (o.opportunities?.bu || '') !== buFilter) return false
+      if (vendorFilter !== 'Tous' && (o.opportunities?.vendor || '') !== vendorFilter) return false
       return true
     })
-  }, [orders, search, statusFilter, buFilter])
+  }, [orders, search, statusFilter, buFilter, vendorFilter])
 
   const filteredTotal = useMemo(() =>
     filtered.reduce((s, o) => s + (o.opportunities?.amount || 0), 0)
@@ -221,6 +227,13 @@ export default function SupplyPage() {
               className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
               <option value="Tous">BU: Tous</option>
               {buOptions.map(b => <option key={b} value={b}>{b}</option>)}
+            </select>
+          )}
+          {vendorOptions.length > 1 && (
+            <select value={vendorFilter} onChange={e => setVendorFilter(e.target.value)}
+              className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
+              <option value="Tous">Carte: Tous</option>
+              {vendorOptions.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           )}
           <div className="ml-auto flex items-center gap-3 text-xs text-slate-400">
