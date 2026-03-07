@@ -2,13 +2,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import { mad, fmt } from '@/lib/utils'
 import {
   CheckCircle2, RefreshCw, ChevronRight, Package,
   Search, ArrowUp, ArrowDown, ChevronsUpDown, X,
-  Clock, AlertCircle, PlayCircle, CircleDashed,
+  Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
 } from 'lucide-react'
 
-type TaskType   = 'relance_retard' | 'achat_manquant'
+type TaskType   = 'relance_retard' | 'achat_manquant' | 'closing_retard'
 type Priority   = 'high' | 'medium'
 type FicheStatus = 'a_faire' | 'en_cours' | 'complete'
 type SortKey    = 'priority' | 'title' | 'amount' | 'daysLate' | 'ficheStatus'
@@ -30,10 +31,7 @@ type Task = {
   entity?: any
 }
 
-const mad = (n: number) =>
-  new Intl.NumberFormat('fr-MA', { style: 'currency', currency: 'MAD', maximumFractionDigits: 0 }).format(n || 0)
-const fmtAmt = (n: number) =>
-  n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M MAD` : `${Math.round(n / 1000)}K MAD`
+const fmtAmt = (n: number) => `${fmt(n)} MAD`
 
 // ── Status config ─────────────────────────────────────────────
 const STATUS_CFG: Record<FicheStatus, { label: string; icon: React.ReactNode; badge: string; row: string }> = {
@@ -75,8 +73,8 @@ export default function TasksPage() {
   async function load() {
     setLoading(true); setErr(null)
     try {
-      const [a, b] = await Promise.all([loadRelances(), loadAchats()])
-      setTasks([...a, ...b])
+      const [a, b, c] = await Promise.all([loadRelances(), loadAchats(), loadClosingRetards()])
+      setTasks([...a, ...b, ...c])
     } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
     finally { setLoading(false) }
   }
@@ -175,6 +173,38 @@ export default function TasksPage() {
       })
   }
 
+  // ── Deals en retard closing ──────────────────────────────
+  async function loadClosingRetards(): Promise<Task[]> {
+    const now = new Date()
+    const thisM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+    const { data, error } = await supabase
+      .from('opportunities')
+      .select('id, title, amount, bu, booking_month, stage, accounts(name)')
+      .eq('status', 'Open')
+      .lt('booking_month', thisM)
+      .order('booking_month', { ascending: true })
+    if (error) throw error
+    return (data || []).map((d: any) => {
+      const bm = d.booking_month || ''
+      const bmDate = new Date(bm + '-01')
+      const daysLate = Math.max(0, Math.floor((now.getTime() - bmDate.getTime()) / 86400000))
+      return {
+        id: `closing_${d.id}`,
+        type: 'closing_retard' as TaskType,
+        priority: (daysLate > 60 ? 'high' : 'medium') as Priority,
+        title: (d.accounts as any)?.name || d.title,
+        subtitle: d.title,
+        detail: `${d.stage} · ${d.bu || '—'} · Closing: ${bm}`,
+        amount: d.amount || 0,
+        daysLate,
+        ficheStatus: 'a_faire' as FicheStatus,
+        ficheProgress: 0,
+        linesTotal: 0, linesComplete: 0,
+        entity_id: d.id, entity: d,
+      }
+    })
+  }
+
   // ── Filtered & sorted list ────────────────────────────────
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -204,6 +234,7 @@ export default function TasksPage() {
   const totalAchatAmt  = achatTasks.reduce((s, t) => s + t.amount, 0)
   const relances       = visible.filter(t => t.type === 'relance_retard')
   const achats         = visible.filter(t => t.type === 'achat_manquant')
+  const closingRetards = visible.filter(t => t.type === 'closing_retard')
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -273,11 +304,11 @@ export default function TasksPage() {
 
           {/* Type filter */}
           <div className="flex rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
-            {(['Tous', 'achat_manquant', 'relance_retard'] as const).map(t => (
+            {(['Tous', 'achat_manquant', 'relance_retard', 'closing_retard'] as const).map(t => (
               <button key={t} onClick={() => setTypeFilter(t)}
                 className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap
                   ${typeFilter === t ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}>
-                {t === 'Tous' ? 'Tout' : t === 'achat_manquant' ? '📦 Fiches achat' : '⏰ Relances'}
+                {t === 'Tous' ? 'Tout' : t === 'achat_manquant' ? '📦 Fiches achat' : t === 'relance_retard' ? '⏰ Relances' : '📅 Closing retard'}
               </button>
             ))}
           </div>
@@ -446,6 +477,56 @@ export default function TasksPage() {
                               className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                               Voir <ChevronRight className="h-3.5 w-3.5" />
                             </a>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TaskSection>
+            )}
+
+            {/* ── Closing en retard ── */}
+            {closingRetards.length > 0 && (typeFilter === 'Tous' || typeFilter === 'closing_retard') && (
+              <TaskSection icon="📅" title="Deals — closing dépassé" count={closingRetards.length} color="red">
+                <table className="w-full min-w-[600px] text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/50">
+                      <TH col="title"    label="Compte" />
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">Deal</th>
+                      <TH col="amount"   label="Montant" right />
+                      <TH col="daysLate" label="Retard" right />
+                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {closingRetards.map(t => (
+                      <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full shrink-0 ${t.priority === 'high' ? 'bg-red-500' : 'bg-amber-400'}`} />
+                            <span className="font-bold text-slate-900">{t.title}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px]">
+                          <span className="truncate block">{t.subtitle}</span>
+                          <span className="text-[10px] text-slate-400">{t.detail}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">
+                          {t.amount > 0 ? mad(t.amount) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full
+                            ${t.daysLate > 60 ? 'bg-red-100 text-red-700' : t.daysLate > 30 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                            {t.daysLate}j
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center">
+                            <button onClick={() => router.push(`/opportunities/${t.entity_id}`)}
+                              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                              Voir <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
