@@ -9,7 +9,7 @@ import {
   Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
 } from 'lucide-react'
 
-type TaskType   = 'relance_retard' | 'achat_manquant' | 'closing_retard'
+type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard'
 type Priority   = 'high' | 'medium'
 type FicheStatus = 'a_faire' | 'en_cours' | 'complete'
 type SortKey    = 'priority' | 'title' | 'amount' | 'daysLate' | 'ficheStatus'
@@ -73,8 +73,8 @@ export default function TasksPage() {
   async function load() {
     setLoading(true); setErr(null)
     try {
-      const [a, b, c] = await Promise.all([loadRelances(), loadAchats(), loadClosingRetards()])
-      setTasks([...a, ...b, ...c])
+      const [a, b, c, d] = await Promise.all([loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine()])
+      setTasks([...a, ...b, ...c, ...d])
     } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
     finally { setLoading(false) }
   }
@@ -101,6 +101,42 @@ export default function TasksPage() {
         detail: `${p.next_action || 'Relancer'} · ${p.status}`,
         amount: 0, daysLate,
         ficheStatus: 'a_faire',
+        ficheProgress: 0,
+        linesTotal: 0, linesComplete: 0,
+        entity_id: p.id, entity: p,
+      }
+    })
+  }
+
+  // ── Relances cette semaine (à venir, pas en retard) ─────────
+  async function loadRelancesSemaine(): Promise<Task[]> {
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0]
+    // Fin de semaine (dimanche)
+    const endOfWeek = new Date(today)
+    endOfWeek.setDate(today.getDate() + (7 - today.getDay()))
+    const endStr = endOfWeek.toISOString().split('T')[0]
+    const { data, error } = await supabase
+      .from('prospects')
+      .select('id, company_name, contact_name, status, next_date, next_action')
+      .is('converted_at', null)
+      .neq('status', 'Qualifié ✓')
+      .gte('next_date', todayStr)
+      .lte('next_date', endStr)
+      .order('next_date', { ascending: true })
+    if (error) throw error
+    return (data || []).map(p => {
+      const daysUntil = Math.max(0, Math.ceil((new Date(p.next_date).getTime() - Date.now()) / 86400000))
+      return {
+        id: `rsem_${p.id}`,
+        type: 'relance_semaine' as TaskType,
+        priority: (daysUntil === 0 ? 'high' : 'medium') as Priority,
+        title: p.company_name,
+        subtitle: p.contact_name || '',
+        detail: `${p.next_action || 'Relancer'} · ${p.status} · ${p.next_date}`,
+        amount: 0,
+        daysLate: -daysUntil, // negative = in the future
+        ficheStatus: 'a_faire' as FicheStatus,
         ficheProgress: 0,
         linesTotal: 0, linesComplete: 0,
         entity_id: p.id, entity: p,
@@ -232,9 +268,10 @@ export default function TasksPage() {
   const enCoursTasks   = achatTasks.filter(t => t.ficheStatus === 'en_cours')
   const aFaireTasks    = achatTasks.filter(t => t.ficheStatus === 'a_faire')
   const totalAchatAmt  = achatTasks.reduce((s, t) => s + t.amount, 0)
-  const relances       = visible.filter(t => t.type === 'relance_retard')
-  const achats         = visible.filter(t => t.type === 'achat_manquant')
-  const closingRetards = visible.filter(t => t.type === 'closing_retard')
+  const relances        = visible.filter(t => t.type === 'relance_retard')
+  const relancesSemaine = visible.filter(t => t.type === 'relance_semaine')
+  const achats          = visible.filter(t => t.type === 'achat_manquant')
+  const closingRetards  = visible.filter(t => t.type === 'closing_retard')
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -303,12 +340,12 @@ export default function TasksPage() {
           </div>
 
           {/* Type filter */}
-          <div className="flex rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
-            {(['Tous', 'achat_manquant', 'relance_retard', 'closing_retard'] as const).map(t => (
+          <div className="flex flex-wrap rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
+            {(['Tous', 'achat_manquant', 'relance_retard', 'relance_semaine', 'closing_retard'] as const).map(t => (
               <button key={t} onClick={() => setTypeFilter(t)}
                 className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap
                   ${typeFilter === t ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}>
-                {t === 'Tous' ? 'Tout' : t === 'achat_manquant' ? '📦 Fiches achat' : t === 'relance_retard' ? '⏰ Relances' : '📅 Closing retard'}
+                {t === 'Tous' ? 'Tout' : t === 'achat_manquant' ? '📦 Fiches achat' : t === 'relance_retard' ? '⏰ Retards' : t === 'relance_semaine' ? '📆 Semaine' : '📅 Closing retard'}
               </button>
             ))}
           </div>
@@ -481,6 +518,55 @@ export default function TasksPage() {
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </TaskSection>
+            )}
+
+            {/* ── Relances cette semaine ── */}
+            {relancesSemaine.length > 0 && (typeFilter === 'Tous' || typeFilter === 'relance_semaine') && (
+              <TaskSection icon="📆" title="Relances cette semaine" count={relancesSemaine.length} color="amber">
+                <table className="w-full min-w-[600px] text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/50">
+                      <TH col="title"    label="Prospect" />
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">Contact</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">Action prévue</th>
+                      <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400">Quand</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {relancesSemaine.map(t => {
+                      const daysUntil = Math.abs(t.daysLate)
+                      const dayLabel = daysUntil === 0 ? "Aujourd'hui" : daysUntil === 1 ? 'Demain' : `Dans ${daysUntil}j`
+                      return (
+                        <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${daysUntil === 0 ? 'bg-red-500' : 'bg-blue-400'}`} />
+                              <span className="font-bold text-slate-900">{t.title}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500">{t.subtitle || '—'}</td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{t.entity?.next_action || '—'}</td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full
+                              ${daysUntil === 0 ? 'bg-red-100 text-red-700' : daysUntil <= 1 ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-600'}`}>
+                              {dayLabel}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-center">
+                              <a href="/prospection"
+                                className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                                Voir <ChevronRight className="h-3.5 w-3.5" />
+                              </a>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </TaskSection>
