@@ -373,16 +373,14 @@ export default function PurchasePage() {
   const [uploadingFile, setUploadingFile] = useState<string | null>(null)
   const [uploadError, setUploadError]     = useState<string | null>(null)
 
-  // Upload immédiat dès sélection → persistance après refresh
+  // Upload immédiat via server-side route (bypasse RLS) → persistance après refresh
   async function uploadFileNow(file: File, type: 'bc_client' | 'devis_compucom' | 'autre') {
     setUploadingFile(type)
     setUploadError(null)
     try {
-      // Récupérer l'email directement (state userEmail peut être null au 1er mount)
       const { data: authData } = await supabase.auth.getUser()
       const email = authData?.user?.email || userEmail || 'unknown'
 
-      // Nettoyer le nom de fichier (espaces/accents posent problème en Storage)
       const safeName = file.name.replace(/[^a-zA-Z0-9._\-]/g, '_')
       const path = `${id}/${type}/${Date.now()}_${safeName}`
 
@@ -390,37 +388,42 @@ export default function PurchasePage() {
       if (type !== 'autre') {
         const old = dbFiles.find(f => f.file_type === type)
         if (old?.file_url) {
-          await supabase.storage.from('deal-files').remove([old.file_url])
+          await fetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [old.file_url] }) })
           await supabase.from('deal_files').delete().eq('opportunity_id', id).eq('file_type', type)
           setDbFiles(p => p.filter(f => f.file_type !== type))
         }
       }
 
-      const { data: stored, error: storageErr } = await supabase.storage
-        .from('deal-files').upload(path, file, { upsert: true })
+      // Upload via server route (service role key → no RLS issues)
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('path', path)
+      formData.append('bucket', 'deal-files')
 
-      if (storageErr) {
-        setUploadError(`Erreur stockage : ${storageErr.message}`)
+      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const result = await res.json()
+
+      if (!res.ok || result.error) {
+        setUploadError(`Erreur stockage : ${result.error || 'Upload échoué'}`)
         setUploadingFile(null)
         return
       }
 
-      if (stored) {
-        const { error: dbErr } = await supabase.from('deal_files').insert({
-          opportunity_id: id, file_type: type,
-          file_name: file.name, file_url: stored.path,
-          uploaded_by: email,
-        })
-        if (dbErr) {
-          setUploadError(`Erreur DB : ${dbErr.message}`)
-          setUploadingFile(null)
-          return
-        }
-        // Recharger depuis DB pour avoir l'id exact
-        const { data: fresh } = await supabase.from('deal_files')
-          .select('id, file_type, file_name, file_url').eq('opportunity_id', id)
-        if (fresh) setDbFiles(fresh)
+      // Sauvegarder métadonnées en DB
+      const { error: dbErr } = await supabase.from('deal_files').insert({
+        opportunity_id: id, file_type: type,
+        file_name: file.name, file_url: result.path,
+        uploaded_by: email,
+      })
+      if (dbErr) {
+        setUploadError(`Erreur DB : ${dbErr.message}`)
+        setUploadingFile(null)
+        return
       }
+      // Recharger depuis DB pour avoir l'id exact
+      const { data: fresh } = await supabase.from('deal_files')
+        .select('id, file_type, file_name, file_url').eq('opportunity_id', id)
+      if (fresh) setDbFiles(fresh)
     } catch (e: any) {
       setUploadError(`Erreur inattendue : ${e?.message || 'inconnue'}`)
     }
@@ -429,7 +432,7 @@ export default function PurchasePage() {
 
   async function deleteDbFile(fileId: string, fileUrl: string) {
     try {
-      await supabase.storage.from('deal-files').remove([fileUrl])
+      await fetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [fileUrl] }) })
       await supabase.from('deal_files').delete().eq('id', fileId)
       setDbFiles(p => p.filter(f => f.id !== fileId))
     } catch (e: any) {
@@ -637,20 +640,20 @@ export default function PurchasePage() {
           )}
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full" style={{ minWidth: 1120 }}>
+            <table className="w-full" style={{ minWidth: 1020 }}>
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50">
                   {[
-                    { l:'Réf',        w:100, r:false },
+                    { l:'Réf',        w:80,  r:false },
                     { l:'Désignation *', w:0, r:false },
-                    { l:'Qté',        w:90,  r:true  },
-                    { l:'PU Vente',   w:145, r:true  },
-                    { l:'PT Vente',   w:155, r:true  },
-                    { l:'PU Achat ★', w:155, r:true, amber:true },
-                    { l:'PT Achat',   w:155, r:true  },
-                    { l:'Marge',      w:100, r:true  },
-                    { l:'Fournisseur',w:220, r:false },
-                    { l:'',           w:44,  r:false },
+                    { l:'Qté',        w:70,  r:true  },
+                    { l:'PU Vente',   w:120, r:true  },
+                    { l:'PT Vente',   w:130, r:true  },
+                    { l:'PU Achat ★', w:120, r:true, amber:true },
+                    { l:'PT Achat',   w:130, r:true  },
+                    { l:'Marge',      w:80,  r:true  },
+                    { l:'Fournisseur',w:180, r:false },
+                    { l:'',           w:40,  r:false },
                   ].map(({ l, w, r, amber }, i) => (
                     <th key={i} style={w ? { width: w } : {}} className={`px-4 py-3 text-[11px] font-bold uppercase tracking-wide ${r?'text-right':'text-left'} ${amber?'text-amber-500':'text-slate-400'}`}>
                       {l}
@@ -671,9 +674,13 @@ export default function PurchasePage() {
                           placeholder="C1300…" className={inp} />
                       </td>
                       <td className="px-4 py-3">
-                        <input value={l.designation} onChange={e => updateLine(i,'designation',e.target.value)}
+                        <textarea value={l.designation}
+                          onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                          onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
                           placeholder="Description du produit *"
-                          className={`${inp} ${!l.designation.trim()?'border-red-300 bg-red-50 focus:border-red-400':''}`} />
+                          rows={1}
+                          className={`${inp} resize-none overflow-hidden leading-snug py-2.5 ${!l.designation.trim()?'border-red-300 bg-red-50 focus:border-red-400':''}`}
+                          style={{ minHeight: 40 }} />
                       </td>
                       <td className="px-4 py-3">
                         <input type="number" min={1} value={Number(l.qty) || 1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}

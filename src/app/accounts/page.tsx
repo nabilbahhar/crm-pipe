@@ -353,21 +353,32 @@ export default function AccountsPage() {
     })
   }, [filtered, sortKey, sortDir, dealCounts, wonAmtMap, lastDealMap])
 
-  function exportCSV() {
-    const header = ['Nom','Segment','Secteur','Région','Deals actifs','CA Won','Dernier deal','Créé le']
-    const csvRows = [header.join(';')]
-    for (const a of sorted) {
-      csvRows.push([
-        a.name, a.sector || '', a.segment || '', a.region || '',
-        dealCounts[a.id] || 0, wonAmtMap[a.id] || 0,
-        lastDealMap[a.id] || '', (a.created_at || '').slice(0, 10),
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
-    }
-    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url
-    a.download = `comptes_${new Date().toISOString().slice(0, 10)}.csv`
-    a.click(); URL.revokeObjectURL(url)
+  const [exporting, setExporting] = useState(false)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      const spec = {
+        filename: `comptes_${new Date().toISOString().slice(0,10)}.xlsx`,
+        sheets: [{
+          name: 'Comptes',
+          title: `Comptes Clients · ${sorted.length} comptes · ${new Date().toLocaleDateString('fr-MA')}`,
+          headers: ['Nom','Segment','Secteur','Région','Deals actifs','CA Won (MAD)','Dernier deal','Créé le'],
+          rows: sorted.map(a => [
+            a.name, a.sector||'—', a.segment||'—', a.region||'—',
+            dealCounts[a.id]||0, wonAmtMap[a.id]||0,
+            lastDealMap[a.id]||'—', (a.created_at||'').slice(0,10),
+          ]),
+          totalsRow: ['TOTAL', `${sorted.length} comptes`, '', '', '', sorted.reduce((s,a)=>s+(wonAmtMap[a.id]||0),0), '', ''],
+        }],
+      }
+      const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
+      if (!res.ok) throw new Error('Export échoué')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href=url; a.download=spec.filename; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) { alert(e?.message||'Erreur export') }
+    finally { setExporting(false) }
   }
 
   return (
@@ -386,8 +397,8 @@ export default function AccountsPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Btn variant="ghost" onClick={exportCSV} title="Export CSV">
-              <Download className="h-4 w-4" />
+            <Btn variant="ghost" onClick={exportExcel} title="Export Excel" disabled={exporting}>
+              <Download className="h-4 w-4" /> {exporting ? '…' : ''}
             </Btn>
             <Btn variant="ghost" onClick={loadAll} disabled={loading}>
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
@@ -672,7 +683,7 @@ export default function AccountsPage() {
                             <Users className="h-3.5 w-3.5" /> Contacts
                           </Btn>
                           <Btn size="sm" variant="ghost" onClick={() => deleteAccount(a)}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:bg-red-50 border-red-100">
+                            className="text-red-400 hover:bg-red-50 hover:text-red-600 border-red-100">
                             <Trash2 className="h-3.5 w-3.5" />
                           </Btn>
                         </div>

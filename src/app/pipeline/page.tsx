@@ -356,21 +356,33 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
     </span>
   )
 
-  function exportCSV() {
-    const header = ['Client','Deal','Étape','BU','Carte','Montant','Prob %','Closing','Owner']
-    const csvRows = [header.join(';')]
-    for (const d of displayRows) {
-      csvRows.push([
-        d.accounts?.name || '', d.title || '', d.stage || '', d.bu || '',
-        d.vendor || '', d.amount || 0, d.prob || 0,
-        d.booking_month || '', d.owner_email || '',
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
-    }
-    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url
-    a.download = `pipeline_${new Date().toISOString().slice(0,10)}.csv`
-    a.click(); URL.revokeObjectURL(url)
+  const [exporting, setExporting] = useState(false)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      const totalAmt = displayRows.reduce((s,d)=>s+(Number(d.amount)||0),0)
+      const spec = {
+        filename: `pipeline_${new Date().toISOString().slice(0,10)}.xlsx`,
+        sheets: [{
+          name: 'Pipeline',
+          title: `Pipeline · ${displayRows.length} deals · ${new Date().toLocaleDateString('fr-MA')}`,
+          headers: ['Client','Deal','Étape','BU','Carte','Montant (MAD)','Prob %','Closing','Owner'],
+          rows: displayRows.map(d => [
+            d.accounts?.name||'—', d.title||'—', d.stage||'Lead', d.bu||'—',
+            d.vendor||'—', d.amount||0, d.prob||0,
+            d.booking_month||'—', d.owner_email||'—',
+          ]),
+          totalsRow: ['TOTAL', `${displayRows.length} deals`, '', '', '', totalAmt, '', '', ''],
+        }],
+      }
+      const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
+      if (!res.ok) throw new Error('Export échoué')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href=url; a.download=spec.filename; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) { alert(e?.message||'Erreur export') }
+    finally { setExporting(false) }
   }
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -387,9 +399,9 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <button onClick={exportCSV}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">
-              <Download className="h-4 w-4" /> CSV
+            <button onClick={exportExcel} disabled={exporting}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50 disabled:opacity-60">
+              <Download className="h-4 w-4" /> {exporting ? 'Export…' : 'Excel'}
             </button>
             <button onClick={() => setShowNewDeal(true)}
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm text-white hover:bg-slate-800">

@@ -7,8 +7,9 @@ import { supabase } from '@/lib/supabaseClient'
 import {
   Search, RefreshCw, Plus, Pencil, Eye, X, ChevronDown,
   TrendingUp, CheckCircle2, XCircle, Clock, AlertTriangle,
-  ArrowUp, ArrowDown, ChevronsUpDown, Filter, Download,
+  ArrowUp, ArrowDown, ChevronsUpDown, Filter, Download, Trash2,
 } from 'lucide-react'
+import { logActivity } from '@/lib/logActivity'
 
 // ─── Import depuis utils ──────────────────────────────────────────────────────
 import { mad, fmt, normStatus, STAGE_CFG, BU_BADGE_CLS } from '@/lib/utils'
@@ -182,8 +183,23 @@ function DealsPageInner() {
   const [sortDir, setSortDir]   = useState<'asc'|'desc'>('desc')
   const [showNewDeal, setShowNewDeal] = useState(false)
   const [editRow, setEditRow]         = useState<any>(null)
+  const [confirmDel, setConfirmDel]   = useState<{ open: boolean; deal: Deal | null }>({ open: false, deal: null })
+  const [deleting, setDeleting]       = useState(false)
 
   useEffect(() => { document.title = 'Deals \u00b7 CRM-PIPE' }, [])
+
+  const deleteDeal = async () => {
+    if (!confirmDel.deal) return
+    setDeleting(true)
+    try {
+      const { error } = await supabase.from('opportunities').delete().eq('id', confirmDel.deal.id)
+      if (error) throw error
+      await logActivity({ action_type: 'delete', entity_type: 'deal', entity_id: confirmDel.deal.id, entity_name: confirmDel.deal.title || '—', detail: `${confirmDel.deal.accounts?.name || ''} · ${mad(confirmDel.deal.amount || 0)}` })
+      setConfirmDel({ open: false, deal: null })
+      load()
+    } catch (e: any) { alert(e?.message?.includes('foreign') ? 'Impossible de supprimer : ce deal a des données liées (supply, fiche achat…). Supprimez-les d\'abord.' : e?.message || 'Erreur suppression') }
+    finally { setDeleting(false) }
+  }
 
   // Open modal from ?edit= param after data loads
   useEffect(() => {
@@ -335,21 +351,34 @@ function DealsPageInner() {
     setOwnerFilter('Tous'); setVendorFilter('Tous')
   }
 
-  function exportCSV() {
-    const header = ['Client','Deal','Étape','Statut','BU','Vendor','Montant','Prob %','Closing','Créé le']
-    const csvRows = [header.join(';')]
-    for (const d of sorted) {
-      csvRows.push([
-        d.accounts?.name || '', d.title || '', d.stage || '', normStatus(d),
-        mainBU(d), d.vendor || '', d.amount || 0, d.prob || 0,
-        d.booking_month || '', (d.created_at || '').slice(0, 10),
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
-    }
-    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url
-    a.download = `deals_${new Date().toISOString().slice(0,10)}.csv`
-    a.click(); URL.revokeObjectURL(url)
+  const [exporting, setExporting] = useState(false)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      const totalAmt = sorted.reduce((s,d) => s + (d.amount||0), 0)
+      const wonAmt = sorted.filter(d => normStatus(d)==='Won').reduce((s,d) => s+(d.amount||0), 0)
+      const spec = {
+        filename: `deals_${new Date().toISOString().slice(0,10)}.xlsx`,
+        sheets: [{
+          name: 'Deals',
+          title: `Export Deals · ${sorted.length} deals · ${new Date().toLocaleDateString('fr-MA')}`,
+          headers: ['Client','Deal','Étape','Statut','BU','Vendor','Montant (MAD)','Prob %','Closing','Créé le'],
+          rows: sorted.map(d => [
+            d.accounts?.name || '—', d.title || '—', d.stage || 'Lead', normStatus(d),
+            mainBU(d), d.vendor || '—', d.amount || 0, d.prob || 0,
+            d.booking_month || '—', (d.created_at || '').slice(0, 10),
+          ]),
+          totalsRow: ['TOTAL', `${sorted.length} deals`, '', '', '', '', totalAmt, '', '', `Won: ${mad(wonAmt)}`],
+        }],
+      }
+      const res = await fetch('/api/excel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec) })
+      if (!res.ok) throw new Error('Export échoué')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = spec.filename; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) { alert(e?.message || 'Erreur export') }
+    finally { setExporting(false) }
   }
 
   return (
@@ -368,9 +397,9 @@ function DealsPageInner() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={exportCSV} type="button"
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors">
-              <Download className="h-4 w-4" /> CSV
+            <button onClick={exportExcel} type="button" disabled={exporting}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-60">
+              <Download className="h-4 w-4" /> {exporting ? 'Export…' : 'Excel'}
             </button>
             <button onClick={load} disabled={loading} type="button"
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-60">
@@ -538,7 +567,7 @@ function DealsPageInner() {
           {/* Table */}
           <div className="overflow-auto">
             <div className="max-h-[640px] overflow-auto">
-              <table className="w-full min-w-[900px] text-sm">
+              <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-slate-50 border-b border-slate-200">
                   <tr>
                     <TH col="created_at" label="Créé" />
@@ -547,13 +576,11 @@ function DealsPageInner() {
                     <TH col="stage" label="Étape" />
                     <TH col="status" label="Statut" />
                     <TH col="bu" label="BU" />
-                    <TH col="vendor" label="Carte" />
                     <TH col="amount" label="Montant" right />
                     <TH col="prob" label="Prob" />
                     <TH col="closing" label="Closing" />
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 whitespace-nowrap">Supply</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 whitespace-nowrap">Fiche achat</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Actions</th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold text-slate-400 whitespace-nowrap">Supply</th>
+                    <th className="px-2 py-3 text-left text-xs font-semibold text-slate-400">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -564,7 +591,7 @@ function DealsPageInner() {
                     const isLate  = d.booking_month && d.booking_month < new Date().toISOString().slice(0, 7) && status === 'Open'
                     return (
                       <tr key={d.id} className={`group transition-colors ${isLate ? 'hover:bg-red-50/30' : 'hover:bg-slate-50/70'}`}>
-                        <td className="w-[78px] min-w-[78px] pl-3 pr-1 py-2.5">
+                        <td className="w-[70px] min-w-[70px] pl-3 pr-1 py-2">
                           {(() => { const c = fmtCreated(d.created_at); return c ? (
                             <div className="flex flex-col gap-0.5 leading-none">
                               <span className="text-[10px] font-semibold text-slate-500 tabular-nums whitespace-nowrap">{c.d}</span>
@@ -572,42 +599,49 @@ function DealsPageInner() {
                             </div>
                           ) : <span className="text-slate-200 text-[10px]">—</span> })()}
                         </td>
-                        <td className="px-4 py-2.5 font-bold text-slate-900 text-xs whitespace-nowrap max-w-[130px] truncate" title={account}>
+                        <td className="px-3 py-2 font-bold text-slate-900 text-xs whitespace-nowrap max-w-[120px] truncate" title={account}>
                           {account}
                         </td>
-                        <td className="px-4 py-2.5 max-w-[170px]">
+                        <td className="px-3 py-2 max-w-[180px]">
                           <div className="truncate text-xs text-slate-700 font-medium" title={d.title || ''}>{d.title || '—'}</div>
+                          {d.vendor && <div className="truncate text-[10px] text-slate-400 mt-0.5">{d.vendor}</div>}
                         </td>
-                        <td className="px-4 py-2.5"><StagePill stage={d.stage || 'Lead'} /></td>
-                        <td className="px-4 py-2.5"><StatusBadge status={status} /></td>
-                        <td className="px-4 py-2.5"><BUPill bu={bu} /></td>
-                        <td className="px-4 py-2.5 text-xs text-slate-500 max-w-[100px] truncate">{d.vendor || '—'}</td>
-                        <td className="px-4 py-2.5 text-right font-black text-slate-900 tabular-nums text-xs whitespace-nowrap">
+                        <td className="px-3 py-2"><StagePill stage={d.stage || 'Lead'} /></td>
+                        <td className="px-3 py-2"><StatusBadge status={status} /></td>
+                        <td className="px-3 py-2"><BUPill bu={bu} /></td>
+                        <td className="px-3 py-2 text-right font-black text-slate-900 tabular-nums text-xs whitespace-nowrap">
                           {mad(d.amount || 0)}
                         </td>
-                        <td className="px-4 py-2.5"><ProbBar prob={d.prob || 0} /></td>
-                        <td className="px-4 py-2.5 text-xs tabular-nums">
+                        <td className="px-3 py-2"><ProbBar prob={d.prob || 0} /></td>
+                        <td className="px-3 py-2 text-xs tabular-nums">
                           {d.booking_month ? (
                             <span className={isLate ? 'font-bold text-red-500' : 'text-slate-600'}>{d.booking_month}</span>
                           ) : <span className="text-slate-300">—</span>}
                         </td>
-                        <td className="px-4 py-2.5 whitespace-nowrap">
-                          {status === 'Won' ? <SupplyBadge d={d} /> : <span className="text-slate-200 text-[10px]">—</span>}
-                        </td>
-                        <td className="px-4 py-2.5 whitespace-nowrap">
+                        <td className="px-3 py-2 whitespace-nowrap">
                           {status === 'Won' ? (
-                            <FicheBadge d={d} />
+                            <div className="flex flex-col gap-0.5">
+                              <SupplyBadge d={d} />
+                              <FicheBadge d={d} />
+                            </div>
                           ) : <span className="text-slate-200 text-[10px]">—</span>}
                         </td>
                         <td className="px-4 py-2.5">
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-1">
                             <Link href={`/opportunities/${d.id}`}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                              title="Voir le deal">
                               <Eye className="h-3.5 w-3.5" />
                             </Link>
                             <button onClick={() => setEditRow(d)}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-colors">
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-amber-600 transition-colors"
+                              title="Modifier">
                               <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                            <button onClick={() => setConfirmDel({ open: true, deal: d })}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors"
+                              title="Supprimer">
+                              <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         </td>
@@ -616,7 +650,7 @@ function DealsPageInner() {
                   })}
                   {sorted.length === 0 && (
                     <tr>
-                      <td colSpan={13} className="py-16 text-center text-sm text-slate-400">
+                      <td colSpan={11} className="py-16 text-center text-sm text-slate-400">
                         {rows.length === 0 ? 'Aucun deal.' : 'Aucun résultat pour ces filtres.'}
                       </td>
                     </tr>
@@ -646,6 +680,39 @@ function DealsPageInner() {
         )}
 
       </div>
+
+      {/* ── Confirm delete modal ── */}
+      {confirmDel.open && confirmDel.deal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100">
+                  <Trash2 className="h-5 w-5 text-red-600" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-slate-900">Supprimer ce deal ?</div>
+                  <div className="text-xs text-slate-500">Cette action est irréversible</div>
+                </div>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-3 mb-4">
+                <div className="text-xs font-bold text-slate-800 truncate">{confirmDel.deal.title}</div>
+                <div className="text-[11px] text-slate-500 mt-0.5">{confirmDel.deal.accounts?.name || '—'} · {mad(confirmDel.deal.amount || 0)}</div>
+              </div>
+              <div className="flex items-center gap-2 justify-end">
+                <button onClick={() => setConfirmDel({ open: false, deal: null })}
+                  className="h-9 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                  Annuler
+                </button>
+                <button onClick={deleteDeal} disabled={deleting}
+                  className="h-9 rounded-xl bg-red-600 px-4 text-sm font-semibold text-white hover:bg-red-700 transition-colors disabled:opacity-60">
+                  {deleting ? 'Suppression…' : 'Supprimer'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -212,23 +212,34 @@ export default function SuppliersPage() {
     </th>
   )
 
-  function exportCSV() {
-    const header = ['Nom','Contact','Email','Téléphone','Catégorie','Commandes','Lignes','Achat HT','Vente HT','Marge %','Clients']
-    const csvRows = [header.join(';')]
-    for (const s of sorted) {
-      csvRows.push([
-        s.name, s.contact || '', s.email || '', s.tel || '', s.category || '',
-        s.total_orders || 0, s.total_lines || 0,
-        s.total_achat_ht || 0, s.total_vente_ht || 0,
-        s.avg_marge_pct != null ? s.avg_marge_pct.toFixed(1) : '',
-        s.nb_clients || 0,
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
-    }
-    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url
-    a.download = `fournisseurs_${new Date().toISOString().slice(0, 10)}.csv`
-    a.click(); URL.revokeObjectURL(url)
+  const [exporting, setExporting] = useState(false)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      const spec = {
+        filename: `fournisseurs_${new Date().toISOString().slice(0,10)}.xlsx`,
+        sheets: [{
+          name: 'Fournisseurs',
+          title: `Fournisseurs · ${sorted.length} · ${new Date().toLocaleDateString('fr-MA')}`,
+          headers: ['Nom','Contact','Email','Téléphone','Catégorie','Commandes','Lignes','Achat HT (MAD)','Vente HT (MAD)','Marge %','Clients'],
+          rows: sorted.map(s => [
+            s.name, s.contact||'—', s.email||'—', s.tel||'—', s.category||'—',
+            s.total_orders||0, s.total_lines||0,
+            s.total_achat_ht||0, s.total_vente_ht||0,
+            s.avg_marge_pct!=null ? Number(s.avg_marge_pct.toFixed(1)) : 0,
+            s.nb_clients||0,
+          ]),
+          totalsRow: ['TOTAL', `${sorted.length}`, '', '', '', sorted.reduce((s,x)=>s+(x.total_orders||0),0), sorted.reduce((s,x)=>s+(x.total_lines||0),0), sorted.reduce((s,x)=>s+(x.total_achat_ht||0),0), sorted.reduce((s,x)=>s+(x.total_vente_ht||0),0), '', ''],
+        }],
+      }
+      const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
+      if (!res.ok) throw new Error('Export échoué')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href=url; a.download=spec.filename; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) { alert(e?.message||'Erreur export') }
+    finally { setExporting(false) }
   }
 
   return (
@@ -242,8 +253,8 @@ export default function SuppliersPage() {
             <p className="text-xs text-slate-500 mt-0.5">Base de données achats · {totalSuppliers} fournisseur{totalSuppliers > 1 ? 's' : ''}</p>
           </div>
           <div className="flex gap-2">
-            <button onClick={exportCSV} title="Export CSV"
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
+            <button onClick={exportExcel} title="Export Excel" disabled={exporting}
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-60">
               <Download className="h-4 w-4" />
             </button>
             <button onClick={() => setModal({})}
