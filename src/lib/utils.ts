@@ -148,6 +148,23 @@ export const STAGE_CFG: Record<string, { bg: string; text: string; dot: string; 
   'Lost / No decision':  { bg: 'bg-red-50',     text: 'text-red-600',     dot: 'bg-red-400',     border: 'border-red-200'    },
 }
 
+// ─── Objectif annuel ──────────────────────────────────────────────────────────
+
+const DEFAULT_ANNUAL_TARGET = 30_000_000 // 30M MAD
+
+/** Retourne l'objectif annuel Won (localStorage override ou 30M par défaut) */
+export const getAnnualTarget = (): number => {
+  if (typeof window === 'undefined') return DEFAULT_ANNUAL_TARGET
+  const stored = localStorage.getItem('crm_annual_target')
+  if (stored) { const n = Number(stored); if (n > 0) return n }
+  return DEFAULT_ANNUAL_TARGET
+}
+
+/** Persiste un nouvel objectif annuel */
+export const setAnnualTarget = (value: number): void => {
+  if (typeof window !== 'undefined') localStorage.setItem('crm_annual_target', String(value))
+}
+
 // ─── Supply ───────────────────────────────────────────────────────────────────
 
 export type SupplyStatus = 'a_commander' | 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'

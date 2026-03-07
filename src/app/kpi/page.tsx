@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
-import { normSBU, ymFrom } from '@/lib/utils'
+import { normSBU, ymFrom, getAnnualTarget } from '@/lib/utils'
 import {
   ResponsiveContainer, Tooltip, ComposedChart, CartesianGrid,
   Bar, Line, XAxis, YAxis,
@@ -62,6 +62,8 @@ export default function KPIPage() {
   const [year, setYear] = useState(2026)
   const [email, setEmail] = useState<string|null>(null)
   const [activeQ, setActiveQ] = useState<string>('Q1')
+  const [AT, setATState] = useState(30_000_000)
+  useEffect(() => { setATState(getAnnualTarget()) }, [])
 
   const profile = email ? (PROFILES[email]??null) : null
 
@@ -95,22 +97,22 @@ export default function KPIPage() {
       return months.includes(parseInt(ym.split('-')[1]||'0'))
     })
     const s = buildStats(deals)
-    const target = 30_000_000/4
+    const target = AT/4
     const ok = s.total>=target && s.cirsR>=CIRS_MIN
     return { q, deals:deals.length, ...s, target, ok, earned: ok?5000:0 }
-  }),[wonYear])
+  }),[wonYear,AT])
 
   const nc = useMemo(()=>{
     const { total: won, csgR } = annual
-    const hitObj = won>=30_000_000
+    const hitObj = won>=AT
     const goodMix = csgR>=CSG_MIN&&csgR<=CSG_MAX
-    const surperf = won>30_000_000
-    const surplus = Math.max(0,won-30_000_000)
+    const surperf = won>AT
+    const surplus = Math.max(0,won-AT)
     const base = hitObj?300_000:0
     const bonusMix = hitObj&&goodMix?150_000:0
     const bonusSurperf = surperf?surplus*0.02:0
     return { hitObj, goodMix, surperf, base, bonusMix, bonusSurperf, surplus, total:base+bonusMix+bonusSurperf }
-  },[annual])
+  },[annual,AT])
 
   const monthlyData = useMemo(()=>{
     const mMap:Record<string,number> = {}
@@ -120,8 +122,8 @@ export default function KPIPage() {
       if (ym&&mMap[ym]!==undefined) mMap[ym]+=Number(r?.amount??0)||0
     }
     let cumul=0
-    return Object.entries(mMap).sort().map(([,val],i)=>{ cumul+=val; return { month:MONTHS_FR[i], mensuel:val, cumul, objectif:30_000_000 } })
-  },[wonYear,year])
+    return Object.entries(mMap).sort().map(([,val],i)=>{ cumul+=val; return { month:MONTHS_FR[i], mensuel:val, cumul, objectif:AT } })
+  },[wonYear,year,AT])
 
   const topAccounts = useMemo(()=>{
     const m:Record<string,number>={}
@@ -129,7 +131,7 @@ export default function KPIPage() {
     return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,6)
   },[wonYear])
 
-  const pct = Math.min(100,annual.total>0?(annual.total/30_000_000)*100:0)
+  const pct = Math.min(100,annual.total>0?(annual.total/AT)*100:0)
   const selQ = quarters.find(q=>q.q===activeQ)
   const salimEarned = quarters.reduce((s,q)=>s+q.earned,0)
 
@@ -268,8 +270,8 @@ export default function KPIPage() {
           </div>
           <div className="flex justify-between mt-1 text-xs text-slate-400">
             <span>0</span>
-            <span className="font-medium text-slate-600">Reste : {fmtMAD(Math.max(0,30_000_000-annual.total),true)}</span>
-            <span>30 M</span>
+            <span className="font-medium text-slate-600">Reste : {fmtMAD(Math.max(0,AT-annual.total),true)}</span>
+            <span>{fmtMAD(AT,true)}</span>
           </div>
         </div>
 
@@ -281,8 +283,8 @@ export default function KPIPage() {
           </div>
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">Reste objectif</div>
-            <div className={`text-2xl font-bold mt-1 ${annual.total>=30_000_000?'text-emerald-600':'text-slate-900'}`}>
-              {annual.total>=30_000_000?'Atteint':fmtMAD(30_000_000-annual.total,true)}
+            <div className={`text-2xl font-bold mt-1 ${annual.total>=AT?'text-emerald-600':'text-slate-900'}`}>
+              {annual.total>=AT?'Atteint':fmtMAD(AT-annual.total,true)}
             </div>
             <div className="text-xs text-slate-500 mt-0.5">{pct.toFixed(1)}% accompli</div>
           </div>
@@ -302,9 +304,9 @@ export default function KPIPage() {
           <div className="text-sm font-bold uppercase tracking-wide text-slate-500 mb-4">Commission {year}</div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div className={`rounded-xl p-4 ${nc.hitObj?'bg-white shadow-sm':'bg-white/60'}`}>
-              <div className="text-xs font-medium text-slate-500 mb-1">Base — Objectif 30M</div>
+              <div className="text-xs font-medium text-slate-500 mb-1">Base — Objectif {fmtMAD(AT,true)}</div>
               <div className={`text-2xl font-black ${nc.hitObj?'text-slate-900':'text-slate-300'}`}>{fmtMAD(nc.base,true)}</div>
-              <div className="text-xs mt-1 text-slate-500">{nc.hitObj?'1% x 30M':'Manque '+fmtMAD(30_000_000-annual.total,true)}</div>
+              <div className="text-xs mt-1 text-slate-500">{nc.hitObj?`1% x ${fmtMAD(AT,true)}`:'Manque '+fmtMAD(AT-annual.total,true)}</div>
             </div>
             <div className={`rounded-xl p-4 ${nc.goodMix&&nc.hitObj?'bg-white shadow-sm':'bg-white/60'}`}>
               <div className="text-xs font-medium text-slate-500 mb-1">Bonus Mix 50/50</div>

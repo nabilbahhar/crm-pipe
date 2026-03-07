@@ -15,7 +15,7 @@ import {
   LabelList, FunnelChart, Funnel, ComposedChart, Area,
 } from 'recharts'
 import CRMChatbot from './CRMChatbot'
-import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG } from '@/lib/utils'
+import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONSTANTS
@@ -27,7 +27,8 @@ const SBU_ORDER = ['HCI', 'Network', 'Storage', 'Cyber', 'Service', 'CSG'] as co
 type SBU = (typeof SBU_ORDER)[number] | 'MULTI' | 'Other'
 const STAGE_ORDER = ['Lead','Discovery','Qualified','Solutioning','Proposal Sent','Negotiation','Commit','Won','Lost / No decision'] as const
 
-const ANNUAL_TARGET = 30_000_000   // 30M MAD objectif Won annuel
+// ANNUAL_TARGET est maintenant configurable via utils (localStorage)
+// Chargé dans le composant via getAnnualTarget()
 
 const C = {
   pipeline: '#2563eb', forecast: '#7c3aed', commit: '#d97706',
@@ -239,6 +240,17 @@ export default function Dashboard() {
   const [stageFilters, setStageFilters] = useState<Set<string>>(new Set())
   const [statusFilter, setStatusFilter] = useState<Set<string>>(new Set())
   const [buFilters, setBuFilters]       = useState<Set<string>>(new Set())
+
+  // ── Objectif annuel configurable ─────────────────────────────────────────
+  const [ANNUAL_TARGET, setAT] = useState(30_000_000)
+  const [editingTarget, setEditingTarget] = useState(false)
+  const [targetInput, setTargetInput] = useState('')
+  useEffect(() => { setAT(getAnnualTarget()) }, [])
+  function saveTarget() {
+    const v = Number(targetInput.replace(/\s/g, ''))
+    if (v > 0) { setAnnualTarget(v); setAT(v) }
+    setEditingTarget(false)
+  }
 
   const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, v: string) =>
     setter(prev => { const n=new Set(prev); n.has(v)?n.delete(v):n.add(v); return n })
@@ -867,7 +879,21 @@ export default function Dashboard() {
               </div>
               <div>
                 <div className="text-sm font-black text-slate-900">Objectif annuel {year} — Won</div>
-                <div className="text-xs text-slate-500">Cible : 30 000 000 MAD</div>
+                {editingTarget ? (
+                  <div className="flex items-center gap-1">
+                    <input value={targetInput} onChange={e => setTargetInput(e.target.value)}
+                      onKeyDown={e => { if (e.key==='Enter') saveTarget(); if (e.key==='Escape') setEditingTarget(false) }}
+                      autoFocus placeholder="30000000"
+                      className="h-6 w-28 rounded border border-slate-300 px-2 text-xs outline-none focus:border-blue-400" />
+                    <button onClick={saveTarget} className="h-6 rounded bg-slate-900 px-2 text-[10px] font-bold text-white">OK</button>
+                    <button onClick={() => setEditingTarget(false)} className="h-6 rounded border px-2 text-[10px] text-slate-500">✕</button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setTargetInput(String(ANNUAL_TARGET)); setEditingTarget(true) }}
+                    className="text-xs text-slate-500 hover:text-blue-600 transition-colors cursor-pointer">
+                    Cible : {new Intl.NumberFormat('fr-MA').format(ANNUAL_TARGET)} MAD ✎
+                  </button>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-6">
@@ -893,7 +919,7 @@ export default function Dashboard() {
               />
             </div>
             <div className="mt-1.5 flex justify-between text-[10px] text-slate-400 font-medium">
-              <span>0</span><span>7.5M (Q1)</span><span>15M (Q2)</span><span>22.5M (Q3)</span><span>30M</span>
+              <span>0</span><span>{fmt(ANNUAL_TARGET*0.25)} (Q1)</span><span>{fmt(ANNUAL_TARGET*0.5)} (Q2)</span><span>{fmt(ANNUAL_TARGET*0.75)} (Q3)</span><span>{fmt(ANNUAL_TARGET)}</span>
             </div>
           </div>
         </div>
