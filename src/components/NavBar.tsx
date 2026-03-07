@@ -4,7 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Bell, X, ChevronDown, KeyRound, LogOut } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, X, ChevronDown, KeyRound, LogOut, Search } from "lucide-react";
 
 const NAV_ITEMS = [
   { label: "Dashboard",   href: "/dashboard" },
@@ -244,6 +245,117 @@ function PasswordModal({ onClose, userEmail }: { onClose: () => void; userEmail:
   );
 }
 
+// ── Quick Search (Ctrl+K) ────────────────────────────────────────────────────
+type SearchResult = { type: 'deal' | 'account' | 'prospect'; id: string; title: string; sub: string }
+
+function QuickSearch({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => { inputRef.current?.focus() }, []);
+
+  useEffect(() => {
+    if (!q.trim()) { setResults([]); return }
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => search(q.trim()), 250);
+    return () => { if (timerRef.current) clearTimeout(timerRef.current) };
+  }, [q]);
+
+  async function search(term: string) {
+    setLoading(true);
+    const like = `%${term}%`;
+    const [{ data: deals }, { data: accounts }, { data: prospects }] = await Promise.all([
+      supabase.from("opportunities").select("id,title,amount,status,accounts(name)").or(`title.ilike.${like},accounts.name.ilike.${like}`).limit(6),
+      supabase.from("accounts").select("id,name,sector,region").ilike("name", like).limit(4),
+      supabase.from("prospects").select("id,company_name,contact_name,status").ilike("company_name", like).is("converted_at", null).limit(4),
+    ]);
+    const res: SearchResult[] = [];
+    for (const d of deals || []) {
+      const acName = (d as any).accounts?.name || '';
+      res.push({ type: 'deal', id: d.id, title: d.title || '—', sub: `${acName} · ${d.status} · ${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(d.amount || 0)} MAD` });
+    }
+    for (const a of accounts || []) {
+      res.push({ type: 'account', id: a.id, title: a.name, sub: [a.sector, a.region].filter(Boolean).join(' · ') || 'Compte' });
+    }
+    for (const p of prospects || []) {
+      res.push({ type: 'prospect', id: p.id, title: p.company_name, sub: `${p.contact_name} · ${p.status}` });
+    }
+    setResults(res);
+    setSelected(0);
+    setLoading(false);
+  }
+
+  function go(r: SearchResult) {
+    onClose();
+    if (r.type === 'deal') router.push(`/opportunities/${r.id}`);
+    else if (r.type === 'account') router.push(`/accounts`);
+    else router.push(`/prospection`);
+  }
+
+  function handleKey(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); setSelected(s => Math.min(s + 1, results.length - 1)) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setSelected(s => Math.max(s - 1, 0)) }
+    else if (e.key === 'Enter' && results[selected]) { go(results[selected]) }
+    else if (e.key === 'Escape') { onClose() }
+  }
+
+  const ICONS: Record<string, string> = { deal: '💼', account: '🏢', prospect: '🎯' };
+  const LABELS: Record<string, string> = { deal: 'Deal', account: 'Compte', prospect: 'Prospect' };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 80 }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div style={{ width: '100%', maxWidth: 560, background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
+          <Search style={{ width: 18, height: 18, color: '#94a3b8', flexShrink: 0 }} />
+          <input ref={inputRef} value={q} onChange={e => setQ(e.target.value)} onKeyDown={handleKey}
+            placeholder="Rechercher un deal, compte ou prospect…"
+            style={{ flex: 1, border: 'none', outline: 'none', fontSize: 15, color: '#0f172a', background: 'transparent' }} />
+          <kbd style={{ fontSize: 11, color: '#94a3b8', background: '#f1f5f9', borderRadius: 6, padding: '2px 6px', fontFamily: 'monospace' }}>ESC</kbd>
+        </div>
+        <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+          {loading && <div style={{ padding: '16px', textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>Recherche…</div>}
+          {!loading && q && results.length === 0 && <div style={{ padding: '24px 16px', textAlign: 'center', fontSize: 13, color: '#94a3b8' }}>Aucun résultat pour &ldquo;{q}&rdquo;</div>}
+          {results.map((r, i) => (
+            <div key={`${r.type}-${r.id}`} onClick={() => go(r)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', cursor: 'pointer',
+                background: i === selected ? '#f1f5f9' : 'transparent', transition: 'background 0.1s',
+              }}
+              onMouseEnter={() => setSelected(i)}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: '#f8fafc', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>
+                {ICONS[r.type]}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+                <div style={{ fontSize: 11, color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sub}</div>
+              </div>
+              <span style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', background: '#f1f5f9', borderRadius: 6, padding: '2px 8px', flexShrink: 0 }}>
+                {LABELS[r.type]}
+              </span>
+            </div>
+          ))}
+        </div>
+        {!q && (
+          <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {NAV_ITEMS.map(it => (
+              <a key={it.href} href={it.href} onClick={onClose}
+                style={{ fontSize: 11, fontWeight: 500, color: '#64748b', background: '#f8fafc', borderRadius: 8, padding: '4px 10px', textDecoration: 'none', border: '1px solid #e2e8f0' }}>
+                {it.label}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── NavBar ────────────────────────────────────────────────────────────────────
 export default function NavBar() {
   const path = usePathname();
@@ -254,9 +366,22 @@ export default function NavBar() {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showPwdModal, setShowPwdModal] = useState(false);
   const [taskCount, setTaskCount]   = useState(0);
+  const [showSearch, setShowSearch] = useState(false);
   const panelRef    = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const lastReadRef = useRef<string>("");
+
+  // Ctrl+K / Cmd+K global shortcut
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        setShowSearch(v => !v);
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Load pending tasks count for badge (relances + achats + closing retard)
   async function loadTaskCount() {
@@ -394,6 +519,21 @@ export default function NavBar() {
 
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
 
+            {/* ── Quick Search ── */}
+            <button
+              onClick={() => setShowSearch(true)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                height: 34, padding: "0 10px", borderRadius: 10,
+                border: "1px solid #e2e8f0", background: "#f8fafc",
+                cursor: "pointer", fontSize: 12, color: "#94a3b8",
+              }}
+            >
+              <Search style={{ width: 14, height: 14 }} />
+              <span>Recherche</span>
+              <kbd style={{ fontSize: 10, background: '#e2e8f0', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace', fontWeight: 600, color: '#64748b' }}>⌘K</kbd>
+            </button>
+
             {/* ── User menu ── */}
             {email && (
               <div style={{ position: "relative" }} ref={userMenuRef}>
@@ -528,6 +668,9 @@ export default function NavBar() {
 
       {/* ── Password modal (outside navbar flow) ── */}
       {showPwdModal && <PasswordModal onClose={() => setShowPwdModal(false)} userEmail={email || ""} />}
+
+      {/* ── Quick Search modal ── */}
+      {showSearch && <QuickSearch onClose={() => setShowSearch(false)} />}
     </>
   );
 }
