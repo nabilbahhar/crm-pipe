@@ -145,7 +145,7 @@ function PipelineContent() {
 
   async function load() {
     setLoading(true); setErr(null)
-    const { data, error } = await supabase.from('opportunities').select('*, owner_email, owner_name, accounts(name)').order('created_at', { ascending:false })
+    const { data, error } = await supabase.from('opportunities').select('*,accounts(name)').order('created_at', { ascending:false })
     if (error) { setErr(error.message); setLoading(false); return }
     setRows((data as DealRow[])||[])
     setLoading(false)
