@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import { logActivity } from '@/lib/logActivity'
 import { mad, pct } from '@/lib/utils'
 import {
@@ -128,7 +129,7 @@ export default function PurchaseModal({
     setExtracting(true); setExtractErr(null)
     try {
       const base64 = await fileToBase64(devisFile)
-      const res = await fetch('/api/extract-devis', {
+      const res = await authFetch('/api/extract-devis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pdfBase64: base64 }),

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import {
   Search, RefreshCw, Plus, Pencil, Eye, X, ChevronDown,
   TrendingUp, CheckCircle2, XCircle, Clock, AlertTriangle,
@@ -46,7 +47,7 @@ const SUPPLY_CFG: Record<SupplyStatus, { label: string; icon: string; color: str
 function getSupplyStatus(d: Deal): SupplyStatus | null {
   const orders = d.supply_orders
   if (!orders || orders.length === 0) return null
-  return orders[0].status
+  return orders[0]?.status ?? null
 }
 
 function getFicheStatus(d: Deal): 'complete' | 'en_cours' | 'a_faire' | null {
@@ -427,7 +428,7 @@ function DealsPageInner() {
           ]),
         },
       }
-      const res = await fetch('/api/excel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec) })
+      const res = await authFetch('/api/excel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)

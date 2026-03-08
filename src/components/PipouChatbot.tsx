@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import {
   X, Send, FileSpreadsheet, Bot, User,
   Loader2, Download, Sparkles, Zap,
@@ -141,7 +142,7 @@ const SUGGESTIONS = [
 // EXCEL GENERATOR
 // ─────────────────────────────────────────────────────────────
 async function generateExcel(spec: ExcelSpec) {
-  const response = await fetch('/api/excel', {
+  const response = await authFetch('/api/excel', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(spec),
@@ -259,7 +260,7 @@ export default function PipouChatbot() {
       const context = buildContext(deals)
       const history = messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
-      const response = await fetch('/api/chat', {
+      const response = await authFetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

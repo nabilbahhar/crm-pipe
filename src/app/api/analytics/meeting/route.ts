@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer } from "@/lib/supabaseServer"
+import { requireAuth } from "@/lib/apiAuth"
 
 export const runtime = "nodejs"
 
@@ -65,6 +66,9 @@ function prevMonth(year: number, month: number) {
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAuth(req)
+    if (auth instanceof NextResponse) return auth
+
     const { searchParams } = new URL(req.url)
 
     const year = Number(searchParams.get("year") || new Date().getFullYear())

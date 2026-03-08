@@ -1,22 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabaseServer'
+import { requireAuth } from '@/lib/apiAuth'
 
 export const runtime = 'nodejs'
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'text/csv',
+  'application/octet-stream',
+]
 
 /**
  * POST /api/upload
  * Server-side file upload to Supabase Storage + optional DB record insert.
  * Uses service role key (bypasses RLS).
- * Expects multipart/form-data with fields:
- *   - file: the file blob
- *   - bucket: storage bucket name (default: 'deal-files')
- *   - path: destination path in the bucket
- *   - opportunity_id (optional): if provided, also inserts a deal_files row
- *   - file_type (optional): bc_client, devis_compucom, autre
- *   - uploaded_by (optional): user email
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAuth(req)
+    if (auth instanceof NextResponse) return auth
+
     const formData = await req.formData()
     const file   = formData.get('file') as File | null
     const bucket = (formData.get('bucket') as string) || 'deal-files'
@@ -29,6 +38,16 @@ export async function POST(req: NextRequest) {
 
     if (!file || !path) {
       return NextResponse.json({ error: 'Missing file or path' }, { status: 400 })
+    }
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json({ error: `Fichier trop volumineux (max ${MAX_FILE_SIZE / 1024 / 1024} MB)` }, { status: 400 })
+    }
+
+    // Validate file type
+    if (!ALLOWED_TYPES.includes(file.type)) {
+      return NextResponse.json({ error: `Type de fichier non autorisé: ${file.type}` }, { status: 400 })
     }
 
     // Convert File to ArrayBuffer then Buffer for upload
@@ -84,6 +103,9 @@ export async function POST(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
+    const auth = await requireAuth(req)
+    if (auth instanceof NextResponse) return auth
+
     const body = await req.json()
     const bucket  = body.bucket || 'deal-files'
     const paths   = body.paths as string[]

@@ -660,7 +660,7 @@ export default function Dashboard() {
 
   // ── Sorted deals list ────────────────────────────────────────────────────
   const sortedDeals = useMemo(()=>{
-    const best=(d:Deal)=>[...d.lines].sort((a,b)=>b.amount-a.amount)[0]
+    const best=(d:Deal)=>[...(d.lines||[])].sort((a,b)=>b.amount-a.amount)[0]
     return [...inPeriod].sort((a,b)=>{
       const dir=sortDir==='asc'?1:-1
       let va:any='',vb:any=''
@@ -1512,7 +1512,7 @@ export default function Dashboard() {
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {topWon.map(d=>{
-                      const best=[...d.lines].sort((a,b)=>b.amount-a.amount)[0]
+                      const best=[...(d.lines||[])].sort((a,b)=>b.amount-a.amount)[0]
                       return (
                         <tr key={d.id} className="hover:bg-emerald-50/30 transition-colors">
                           <td className="py-2 pr-3 font-bold text-slate-900 text-xs whitespace-nowrap">{d.account_name}</td>
@@ -1624,7 +1624,7 @@ export default function Dashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {sortedDeals.map(d=>{
-                    const best=[...d.lines].sort((a,b)=>b.amount-a.amount)[0]
+                    const best=[...(d.lines||[])].sort((a,b)=>b.amount-a.amount)[0]
                     const mainSbu=String(best?.sbu||'—')
                     const mainCard=d.isMulti?`Multi (${d.lines.length})`:(best?.card||'—')
                     const isLate=d.closingYmReal&&d.closingYmReal<periodMonths[0]&&d.status==='Open'

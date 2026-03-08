@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import Link from 'next/link'
 import { RefreshCw, Filter, X, Download } from 'lucide-react'
 import { ownerName } from '@/lib/utils'
@@ -153,7 +154,7 @@ export default function ActivityPage() {
           totalsRow: ['TOTAL', `${filtered.length} actions`, '', '', '', '', ''],
         }],
       }
-      const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
+      const res = await authFetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)

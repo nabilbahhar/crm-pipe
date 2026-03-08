@@ -2,9 +2,13 @@
 // Ajouter ANTHROPIC_API_KEY dans .env.local + Vercel env vars
 
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/apiAuth'
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request)
+    if (auth instanceof NextResponse) return auth
+
     const { pdfBase64 } = await request.json()
     if (!pdfBase64) return NextResponse.json({ error: 'No PDF' }, { status: 400 })
 

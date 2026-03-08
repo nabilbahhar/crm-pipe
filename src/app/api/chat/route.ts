@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/apiAuth'
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAuth(req)
+    if (auth instanceof NextResponse) return auth
+
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {
       return NextResponse.json({ error: 'ANTHROPIC_API_KEY manquante' }, { status: 500 })

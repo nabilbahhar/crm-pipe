@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import { logActivity } from '@/lib/logActivity'
 import { mad, fmt, STAGE_CFG as STAGE_STYLE, BU_BADGE_CLS as BU_COLOR, ownerName } from '@/lib/utils'
 import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2, X, AlertTriangle, Download } from 'lucide-react'
@@ -418,7 +419,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
           ]),
         },
       }
-      const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
+      const res = await authFetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)

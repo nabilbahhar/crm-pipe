@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, GitBranch, Download } from 'lucide-react'
 import { mad } from '@/lib/utils'
 
@@ -398,7 +399,7 @@ export default function AccountsPage() {
           ]),
         },
       }
-      const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
+      const res = await authFetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)

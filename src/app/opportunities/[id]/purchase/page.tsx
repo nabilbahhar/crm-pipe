@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import { logActivity } from '@/lib/logActivity'
 import {
   ArrowLeft, Upload, Loader2, Plus, Trash2, Save,
@@ -196,7 +197,7 @@ export default function PurchasePage() {
     setExtracting(true); setExtractErr(null)
     try {
       const base64 = await fileToBase64(devisFile)
-      const res = await fetch('/api/extract-devis', {
+      const res = await authFetch('/api/extract-devis', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pdfBase64: base64 }),
       })
@@ -388,7 +389,7 @@ export default function PurchasePage() {
       if (type !== 'autre') {
         const old = dbFiles.find(f => f.file_type === type)
         if (old?.file_url) {
-          await fetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [old.file_url], fileIds: [old.id] }) })
+          await authFetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [old.file_url], fileIds: [old.id] }) })
           setDbFiles(p => p.filter(f => f.file_type !== type))
         }
       }
@@ -402,7 +403,7 @@ export default function PurchasePage() {
       formData.append('file_type', type)
       formData.append('uploaded_by', email)
 
-      const res = await fetch('/api/upload', { method: 'POST', body: formData })
+      const res = await authFetch('/api/upload', { method: 'POST', body: formData })
       const result = await res.json()
 
       if (!res.ok || result.error) {
@@ -423,7 +424,7 @@ export default function PurchasePage() {
 
   async function deleteDbFile(fileId: string, fileUrl: string) {
     try {
-      await fetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [fileUrl], fileIds: [fileId] }) })
+      await authFetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [fileUrl], fileIds: [fileId] }) })
       setDbFiles(p => p.filter(f => f.id !== fileId))
     } catch (e: any) {
       setErr(`Erreur suppression : ${e?.message}`)

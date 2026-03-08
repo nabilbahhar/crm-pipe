@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAuth } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
 
@@ -219,6 +220,9 @@ function weighted(amount: number, prob: number) {
 
 export async function GET(req: NextRequest) {
   try {
+    const auth = await requireAuth(req)
+    if (auth instanceof NextResponse) return auth
+
     const sp = req.nextUrl.searchParams
     const year = Number(sp.get('year') || new Date().getFullYear())
     const mode = (sp.get('mode') as Mode) || 'quarter'

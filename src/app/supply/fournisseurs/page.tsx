@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import Link from 'next/link'
 import {
   Plus, Search, Edit2, Trash2, X, Save, Loader2, Download,
@@ -258,7 +259,7 @@ export default function SuppliersPage() {
           ]),
         },
       }
-      const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
+      const res = await authFetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)

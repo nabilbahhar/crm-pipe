@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ExcelJS from 'exceljs'
+import { requireAuth } from '@/lib/apiAuth'
 
 // Status-based row color tinting
 const STATUS_COLORS: Record<string, string> = {
@@ -10,6 +11,9 @@ const STATUS_COLORS: Record<string, string> = {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireAuth(req)
+    if (auth instanceof NextResponse) return auth
+
     const spec = await req.json()
     const wb = new ExcelJS.Workbook()
     wb.creator = 'CRM-PIPE'

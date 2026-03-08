@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import { mad, fmt, getAnnualTarget } from '@/lib/utils'
 import {
   CheckCircle2, RefreshCw, ChevronRight, Package, Phone,
@@ -319,7 +320,7 @@ export default function TasksPage() {
           ],
         },
       }
-      const res = await fetch('/api/excel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec) })
+      const res = await authFetch('/api/excel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
