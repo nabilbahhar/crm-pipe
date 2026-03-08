@@ -339,22 +339,50 @@ export default function ProspectionPage() {
     }
   }, [rows])
 
-  function exportCSV() {
-    const header = ['Société','Contact','Rôle','Téléphone','Email','Type','Statut','Heat','Tentatives','Dernière relance','Prochaine action','Prochaine date','Source','Secteur','Région','Créé le']
-    const csvRows = [header.join(';')]
-    for (const p of sorted) {
-      csvRows.push([
-        p.company_name, p.contact_name, p.contact_role || '', p.contact_phone || '',
-        p.contact_email || '', p.type, p.status, p.heat, p.attempts,
-        p.last_contact_at || '', p.next_action || '', p.next_date || '',
-        p.source || '', p.sector || '', p.region || '', (p.created_at || '').slice(0, 10),
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
-    }
-    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url
-    a.download = `prospects_${new Date().toISOString().slice(0, 10)}.csv`
-    a.click(); URL.revokeObjectURL(url)
+  const [exporting, setExporting] = useState(false)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      // Status breakdown
+      const statusMap = new Map<string, number>()
+      sorted.forEach(p => statusMap.set(p.status, (statusMap.get(p.status)||0) + 1))
+
+      const spec = {
+        filename: `prospects_${new Date().toISOString().slice(0,10)}.xlsx`,
+        sheets: [{
+          name: 'Prospects',
+          title: `Prospection · ${sorted.length} prospects · ${new Date().toLocaleDateString('fr-MA')}`,
+          headers: ['Société','Contact','Rôle','Téléphone','Email','Statut','Heat','Tentatives','Dernière relance','Prochaine action','Prochaine date','Source','Secteur','Région','Créé le'],
+          rows: sorted.map(p => [
+            p.company_name, p.contact_name, p.contact_role||'—', p.contact_phone||'—',
+            p.contact_email||'—', p.status, p.heat, p.attempts,
+            p.last_contact_at||'—', p.next_action||'—', p.next_date||'—',
+            p.source||'—', p.sector||'—', p.region||'—', (p.created_at||'').slice(0,10),
+          ]),
+          totalsRow: ['TOTAL', `${sorted.length} prospects`, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+        }],
+        summary: {
+          title: `Résumé Prospection · ${new Date().toLocaleDateString('fr-MA')}`,
+          kpis: [
+            { label: 'Total prospects', value: sorted.length, detail: `${sorted.filter(p=>p.heat==='hot').length} prospects chauds` },
+            { label: 'Moy. tentatives', value: sorted.length > 0 ? (sorted.reduce((s,p)=>s+p.attempts,0)/sorted.length).toFixed(1) : '0', detail: 'Tentatives de contact par prospect' },
+            { label: 'Taux de conversion', value: `${rows.length > 0 ? Math.round(rows.filter(p=>(p as any).converted_at).length / rows.length * 100) : 0}%`, detail: 'Prospects qualifiés / total' },
+          ],
+          breakdownTitle: 'Répartition par statut',
+          breakdownHeaders: ['Statut', 'Nombre', '', '% du total'],
+          breakdown: [...statusMap.entries()].sort((a,b)=>b[1]-a[1]).map(([st, count]) => [
+            st, count, '', sorted.length > 0 ? `${Math.round(count/sorted.length*100)}%` : '0%',
+          ]),
+        },
+      }
+      const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
+      if (!res.ok) throw new Error('Export échoué')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href=url; a.download=spec.filename; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) { alert(e?.message||'Erreur export') }
+    finally { setExporting(false) }
   }
 
   async function advanceStatus(p: Prospect) {
@@ -476,9 +504,9 @@ export default function ProspectionPage() {
               className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm text-white hover:bg-slate-800">
               <Plus className="h-4 w-4" /> Nouveau prospect
             </button>
-            <button onClick={exportCSV} title="Export CSV"
-              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">
-              <Download className="h-4 w-4" />
+            <button onClick={exportExcel} disabled={exporting} title="Export Excel"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50 disabled:opacity-60">
+              <Download className="h-4 w-4" /> {exporting ? 'Export…' : 'Excel'}
             </button>
             <button onClick={load} disabled={loading}
               className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">

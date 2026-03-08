@@ -216,6 +216,18 @@ export default function SuppliersPage() {
   async function exportExcel() {
     setExporting(true)
     try {
+      const totalAchat = sorted.reduce((s,x) => s+(x.total_achat_ht||0), 0)
+      const totalVente = sorted.reduce((s,x) => s+(x.total_vente_ht||0), 0)
+      const totalOrders = sorted.reduce((s,x) => s+(x.total_orders||0), 0)
+      const avgMarge = sorted.length > 0 ? sorted.reduce((s,x) => s+(x.avg_marge_pct||0), 0) / sorted.length : 0
+
+      const catMap = new Map<string, { count: number; achat: number }>()
+      sorted.forEach(s => {
+        const cat = s.category || 'Non catégorisé'
+        const prev = catMap.get(cat) || { count: 0, achat: 0 }
+        catMap.set(cat, { count: prev.count + 1, achat: prev.achat + (s.total_achat_ht||0) })
+      })
+
       const spec = {
         filename: `fournisseurs_${new Date().toISOString().slice(0,10)}.xlsx`,
         sheets: [{
@@ -229,8 +241,22 @@ export default function SuppliersPage() {
             s.avg_marge_pct!=null ? Number(s.avg_marge_pct.toFixed(1)) : 0,
             s.nb_clients||0,
           ]),
-          totalsRow: ['TOTAL', `${sorted.length}`, '', '', '', sorted.reduce((s,x)=>s+(x.total_orders||0),0), sorted.reduce((s,x)=>s+(x.total_lines||0),0), sorted.reduce((s,x)=>s+(x.total_achat_ht||0),0), sorted.reduce((s,x)=>s+(x.total_vente_ht||0),0), '', ''],
+          totalsRow: ['TOTAL', `${sorted.length}`, '', '', '', totalOrders, sorted.reduce((s,x)=>s+(x.total_lines||0),0), totalAchat, totalVente, '', ''],
         }],
+        summary: {
+          title: `Résumé Fournisseurs · ${new Date().toLocaleDateString('fr-MA')}`,
+          kpis: [
+            { label: 'Total fournisseurs', value: sorted.length, detail: `${totalOrders} commandes au total` },
+            { label: 'Total achat HT', value: totalAchat, detail: 'Montant total des achats' },
+            { label: 'Total vente HT', value: totalVente, detail: 'Montant total des ventes' },
+            { label: 'Marge moyenne', value: `${avgMarge.toFixed(1)}%`, detail: 'Marge brute moyenne' },
+          ],
+          breakdownTitle: 'Répartition par catégorie',
+          breakdownHeaders: ['Catégorie', 'Achat HT (MAD)', 'Nb fournisseurs', '% du total'],
+          breakdown: [...catMap.entries()].sort((a,b) => b[1].achat - a[1].achat).map(([cat, v]) => [
+            cat, v.achat, v.count, totalAchat > 0 ? `${Math.round(v.achat / totalAchat * 100)}%` : '0%',
+          ]),
+        },
       }
       const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')

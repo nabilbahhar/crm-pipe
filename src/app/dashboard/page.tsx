@@ -15,7 +15,7 @@ import {
   LabelList, FunnelChart, Funnel, ComposedChart, Area,
 } from 'recharts'
 import CRMChatbot from './CRMChatbot'
-import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget } from '@/lib/utils'
+import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget, ownerName } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONSTANTS
@@ -756,7 +756,7 @@ export default function Dashboard() {
               )}
             </button>
 
-            <button onClick={load} disabled={loading} type="button"
+            <button onClick={load} disabled={loading} type="button" title="Rafraîchir les données"
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-60">
               <RefreshCw className={`h-4 w-4 ${loading?'animate-spin':''}`}/>
               {loading?'Chargement…':'Actualiser'}
@@ -1587,7 +1587,7 @@ export default function Dashboard() {
                 const actionColors: Record<string,string> = { create:'#10b981', update:'#3b82f6', delete:'#ef4444', stage:'#f59e0b', won:'#16a34a', lost:'#dc2626', convert:'#8b5cf6' }
                 const actionLabels: Record<string,string> = { create:'Ajouté', update:'Modifié', delete:'Supprimé', stage:'Stage →', won:'Won ✓', lost:'Lost ✗', convert:'Converti' }
                 const entityIcons: Record<string,string> = { deal:'💼', account:'🏢', prospect:'🎯', contact:'👤', card:'🃏' }
-                const userName = (e: string) => e === 'nabil.imdh@gmail.com' ? 'Nabil' : e === 's.chitachny@compucom.ma' ? 'Salim' : e.split('@')[0]
+                const userName = (e: string) => ownerName(e)
                 const ago = (iso: string) => {
                   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
                   if (s < 60) return 'à l\'instant'

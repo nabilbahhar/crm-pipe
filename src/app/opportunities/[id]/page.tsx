@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { madFull, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus } from '@/lib/utils'
+import { madFull, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, ownerName } from '@/lib/utils'
 import {
   ArrowLeft, Package, Mail, Edit2, Loader2, X,
   Copy, Check, ExternalLink, FileText, Building2,
@@ -384,6 +384,7 @@ export default function OpportunityDetailPage() {
               {opp.vendor && <DetailRow icon={<Building2 className="h-3.5 w-3.5"/>} label="Vendor / Constructeur" value={opp.vendor} />}
               {opp.po_number && <DetailRow icon={<Tag className="h-3.5 w-3.5"/>} label="N° PO" value={opp.po_number} />}
               {opp.forecast && <DetailRow icon={<TrendingUp className="h-3.5 w-3.5"/>} label="Forecast" value={opp.forecast} />}
+              {opp.owner_email && <DetailRow icon={<User className="h-3.5 w-3.5"/>} label="Owner" value={ownerName(opp.owner_email)} />}
               <DetailRow icon={<Calendar className="h-3.5 w-3.5"/>} label="Créé le" value={fmtDate(opp.created_at)} />
               {opp.updated_at && <DetailRow icon={<Clock className="h-3.5 w-3.5"/>} label="Mis à jour" value={fmtDate(opp.updated_at)} />}
             </div>

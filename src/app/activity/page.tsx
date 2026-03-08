@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import Link from 'next/link'
 import { RefreshCw, Filter, X, Download } from 'lucide-react'
+import { ownerName } from '@/lib/utils'
 
 type Activity = {
   id: string
@@ -32,9 +33,7 @@ const ENTITY_LABEL: Record<string, string> = {
 }
 
 function userName(email: string) {
-  if (email === 'nabil.imdh@gmail.com') return 'Nabil'
-  if (email === 's.chitachny@compucom.ma') return 'Salim'
-  return email.split('@')[0]
+  return ownerName(email)
 }
 
 function formatDate(iso: string) {
@@ -130,26 +129,38 @@ export default function ActivityPage() {
     return groups
   }, [filtered])
 
-  function exportCSV() {
-    const header = ['Date','Heure','Utilisateur','Action','Type','Entité','Détail']
-    const csvRows = [header.join(';')]
-    for (const a of filtered) {
-      const d = new Date(a.created_at)
-      csvRows.push([
-        d.toLocaleDateString('fr-MA'),
-        d.toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit' }),
-        userName(a.user_email),
-        ACTION_LABEL[a.action_type] || a.action_type,
-        ENTITY_LABEL[a.entity_type] || a.entity_type,
-        a.entity_name,
-        a.detail || '',
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
-    }
-    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const el = document.createElement('a'); el.href = url
-    el.download = `activites_${new Date().toISOString().slice(0, 10)}.csv`
-    el.click(); URL.revokeObjectURL(url)
+  const [exporting, setExporting] = useState(false)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      const spec = {
+        filename: `activites_${new Date().toISOString().slice(0,10)}.xlsx`,
+        sheets: [{
+          name: 'Activités',
+          title: `Journal d'activité · ${filtered.length} actions · ${new Date().toLocaleDateString('fr-MA')}`,
+          headers: ['Date','Heure','Utilisateur','Action','Type','Entité','Détail'],
+          rows: filtered.map(a => {
+            const d = new Date(a.created_at)
+            return [
+              d.toLocaleDateString('fr-MA'),
+              d.toLocaleTimeString('fr-MA', { hour: '2-digit', minute: '2-digit' }),
+              userName(a.user_email),
+              ACTION_LABEL[a.action_type] || a.action_type,
+              ENTITY_LABEL[a.entity_type] || a.entity_type,
+              a.entity_name, a.detail || '—',
+            ]
+          }),
+          totalsRow: ['TOTAL', `${filtered.length} actions`, '', '', '', '', ''],
+        }],
+      }
+      const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
+      if (!res.ok) throw new Error('Export échoué')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const el = document.createElement('a'); el.href=url; el.download=spec.filename; el.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) { alert(e?.message||'Erreur export') }
+    finally { setExporting(false) }
   }
 
   const hasFilters = filterUser !== 'Tous' || filterType !== 'Tous' || filterEntity !== 'Tous' || filterFrom || filterTo || search
@@ -172,9 +183,9 @@ export default function ActivityPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button onClick={exportCSV} title="Export CSV"
-              className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border bg-white text-sm text-slate-600 hover:bg-slate-50 shadow-sm">
-              <Download className="h-4 w-4" />
+            <button onClick={exportExcel} disabled={exporting} title="Export Excel"
+              className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border bg-white text-sm text-slate-600 hover:bg-slate-50 shadow-sm disabled:opacity-60">
+              <Download className="h-4 w-4" /> {exporting ? 'Export…' : 'Excel'}
             </button>
             <button onClick={() => load(true)} disabled={loading}
               className="inline-flex items-center gap-2 h-9 px-4 rounded-xl border bg-white text-sm hover:bg-slate-50 shadow-sm">

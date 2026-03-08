@@ -594,7 +594,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
             className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none cursor-pointer">
             {ownerOptions.map(o => (
               <option key={o} value={o}>
-                {o === 'Tous' ? 'Tous AE' : o.split('@')[0]}
+                {o === 'Tous' ? 'Tous AE' : ownerName(o)}
               </option>
             ))}
           </select>
