@@ -23,7 +23,12 @@ type SupplierStats = {
 }
 type SupplierRow = Supplier & Partial<SupplierStats>
 
-const CATEGORIES = ['Matériel IT', 'Logiciels', 'Réseau & Infra', 'Périphériques', 'Services', 'Autre']
+const CATEGORIES = [
+  'Distributeur IT', 'VAD Cybersécurité', 'Distributeur Réseau',
+  'Distributeur Apple', 'Distributeur Audiovisuel', 'Grossiste local',
+  'Matériel IT', 'Logiciels', 'Réseau & Infra', 'Périphériques',
+  'Fournisseur SSL/Téléphonie', 'Services', 'Autre',
+]
 
 const mad = (n: number | null | undefined) =>
   n == null ? '—' : new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n) + ' MAD'
@@ -92,10 +97,10 @@ function SupplierModal({
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Catégorie</label>
-              <select value={form.category} onChange={e => set('category', e.target.value)} className={inp}>
-                <option value="">— Choisir —</option>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <input list="cat-list" value={form.category} onChange={e => set('category', e.target.value)} placeholder="Ex: Distributeur IT" className={inp} />
+              <datalist id="cat-list">
+                {CATEGORIES.map(c => <option key={c} value={c} />)}
+              </datalist>
             </div>
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Email</label>
@@ -361,7 +366,7 @@ export default function SuppliersPage() {
                     <Th label="Volume achat" k="total_achat_ht" right />
                     <Th label="Marge moy." k="avg_marge_pct" right />
                     <Th label="Dernière cmd." k="last_order_date" right />
-                    <th className="px-4 py-3 w-[80px]" />
+                    <th className="px-4 py-3 w-[140px]" />
                   </tr>
                 </thead>
                 <tbody>
@@ -439,13 +444,13 @@ export default function SuppliersPage() {
                             {s.last_order_date ? new Date(s.last_order_date).toLocaleDateString('fr-MA') : <span className="text-slate-200">—</span>}
                           </td>
                           <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                            <div className="flex items-center justify-end gap-1">
+                            <div className="flex items-center justify-end gap-1.5">
                               <button onClick={() => setModal(s)}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                                <Edit2 className="h-3.5 w-3.5" />
+                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors shadow-sm">
+                                <Edit2 className="h-3 w-3" /> Modifier
                               </button>
                               <button onClick={() => handleDelete(s.id)} disabled={deleting === s.id}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors">
+                                className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors shadow-sm">
                                 {deleting === s.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </button>
                             </div>

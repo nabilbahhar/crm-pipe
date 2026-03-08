@@ -16,7 +16,7 @@ type Deal = {
   accounts?: { name?: string } | null
   bu?: string | null; po_number?: string | null
 }
-type Fournisseur = { id: string; name: string; contact_name?: string; email?: string; tel?: string }
+type Fournisseur = { id: string; name: string; contact?: string; email?: string; tel?: string }
 type PurchaseLine = {
   id?: string; ref: string; designation: string
   qty: number; pu_vente: number; pt_vente: number; pu_achat: number
@@ -106,7 +106,7 @@ export default function PurchasePage() {
 
   // New fournisseur modal
   const [showFournModal, setShowFournModal] = useState(false)
-  const [newFourn, setNewFourn] = useState({ name:'', contact_name:'', email:'', tel:'' })
+  const [newFourn, setNewFourn] = useState({ name:'', contact:'', email:'', tel:'' })
   const [addingFourn, setAddingFourn] = useState(false)
 
   const bcRef    = useRef<HTMLInputElement>(null!)
@@ -137,7 +137,7 @@ export default function PurchasePage() {
         .select('id, title, amount, bu, po_number, accounts(name)')
         .eq('id', id).single(),
       supabase.from('suppliers')
-        .select('id, name, contact_name, email, tel')
+        .select('id, name, contact, email, tel')
         .order('name'),
     ])
     if (dealRes.data) {
@@ -222,10 +222,10 @@ export default function PurchasePage() {
     const tel = newFourn.tel ? normalizePhone(newFourn.tel) : ''
     const { data, error } = await supabase.from('suppliers')
       .insert({ ...newFourn, tel, is_active: true })
-      .select('id, name, contact_name, email, tel').single()
+      .select('id, name, contact, email, tel').single()
     if (!error && data) {
       setFourns(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
-      setNewFourn({ name:'', contact_name:'', email:'', tel:'' })
+      setNewFourn({ name:'', contact:'', email:'', tel:'' })
       setShowFournModal(false)
     }
     setAddingFourn(false)
@@ -304,7 +304,7 @@ export default function PurchasePage() {
             pt_vente: l.pt_vente || l.qty*l.pu_vente, pu_achat: l.pu_achat,
             fournisseur_id: l.fournisseur_id || null,
             fournisseur: fourn?.name || l.fournisseur || null,
-            contact_fournisseur: fourn?.contact_name || null,
+            contact_fournisseur: fourn?.contact || null,
             email_fournisseur: fourn?.email || null,
             tel_fournisseur: fourn?.tel || null,
           }
@@ -883,7 +883,7 @@ export default function PurchasePage() {
             <div className="p-6 space-y-4">
               {[
                 { f:'name',         l:'Nom *',   p:'Dell, HP, Lenovo…' },
-                { f:'contact_name', l:'Contact', p:'Nom du commercial' },
+                { f:'contact',      l:'Contact', p:'Nom du commercial' },
                 { f:'email',        l:'Email',   p:'contact@fournisseur.com' },
                 { f:'tel',          l:'Tél',     p:'06XXXXXXXX / +212…' },
               ].map(({ f, l, p }) => (
