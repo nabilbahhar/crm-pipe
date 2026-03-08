@@ -999,7 +999,7 @@ export default function ProspectionPage() {
             {/* ── Body ── */}
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
-              {/* Duplicate warning */}
+              {/* Duplicate warning — strict block, no bypass */}
               {dupWarning && (
                 <div className="flex flex-col gap-2 rounded-2xl border border-red-200 bg-red-50 p-4">
                   <div className="flex items-start gap-2">
@@ -1008,19 +1008,14 @@ export default function ProspectionPage() {
                       <strong>{dupWarning.company_name}</strong> existe déjà dans les prospects
                       <span className="ml-1.5 font-normal text-red-700">— statut : {dupWarning.status}</span>
                       {dupWarning.contact_name && <span className="ml-1.5 font-normal text-red-700">· Contact : {dupWarning.contact_name}</span>}
-                      <p className="mt-1 text-xs font-normal text-red-600">Impossible de créer un doublon. Modifiez le prospect existant pour mettre à jour les infos.</p>
+                      <p className="mt-1 text-xs font-normal text-red-600">1 société = 1 prospect. Pour ajouter un contact, modifiez le prospect existant.</p>
                     </div>
                   </div>
-                  <div className="flex gap-2 pl-7">
+                  <div className="pl-7">
                     <button type="button"
-                      onClick={() => { setModalOpen(false); setTimeout(() => openEdit(dupWarning), 50) }}
+                      onClick={() => { setModalOpen(false); setDupWarning(null); setFormErr(null); setTimeout(() => openEdit(dupWarning), 50) }}
                       className="rounded-xl border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors">
                       ✏️ Modifier le prospect existant
-                    </button>
-                    <button type="button"
-                      onClick={() => { setDupWarning(null); setFormErr(null) }}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-colors">
-                      Changer le nom
                     </button>
                   </div>
                 </div>
