@@ -361,19 +361,46 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
     setExporting(true)
     try {
       const totalAmt = displayRows.reduce((s,d)=>s+(Number(d.amount)||0),0)
+      const forecastAmt = displayRows.reduce((s,d)=>s+(Number(d.amount)||0)*((d.prob||0)/100),0)
+
+      // Stage breakdown
+      const stageMap = new Map<string, { count: number; amount: number }>()
+      displayRows.forEach(d => {
+        const st = d.stage || 'Lead'
+        const prev = stageMap.get(st) || { count: 0, amount: 0 }
+        stageMap.set(st, { count: prev.count + 1, amount: prev.amount + (Number(d.amount) || 0) })
+      })
+
       const spec = {
         filename: `pipeline_${new Date().toISOString().slice(0,10)}.xlsx`,
         sheets: [{
           name: 'Pipeline',
           title: `Pipeline · ${displayRows.length} deals · ${new Date().toLocaleDateString('fr-MA')}`,
-          headers: ['Client','Deal','Étape','BU','Carte','Montant (MAD)','Prob %','Closing','Owner'],
+          headers: ['Client','Deal','Étape','Statut','BU','Carte','Montant (MAD)','Prob %','Forecast (MAD)','Closing','Owner','Next Step'],
           rows: displayRows.map(d => [
-            d.accounts?.name||'—', d.title||'—', d.stage||'Lead', d.bu||'—',
+            d.accounts?.name||'—', d.title||'—', d.stage||'Lead', d.status||'Open', d.bu||'—',
             d.vendor||'—', d.amount||0, d.prob||0,
+            Math.round((d.amount||0)*((d.prob||0)/100)),
             d.booking_month||'—', ownerName(d.owner_email),
+            d.next_step||'—',
           ]),
-          totalsRow: ['TOTAL', `${displayRows.length} deals`, '', '', '', totalAmt, '', '', ''],
+          totalsRow: ['TOTAL', `${displayRows.length} deals`, '', '', '', '', totalAmt, '', Math.round(forecastAmt), '', '', ''],
+          notes: `Pipeline total: ${mad(totalAmt)} · Forecast pondéré: ${mad(forecastAmt)}`,
         }],
+        summary: {
+          title: `Résumé Pipeline · ${new Date().toLocaleDateString('fr-MA')}`,
+          kpis: [
+            { label: 'Deals en pipeline', value: displayRows.length, detail: 'Opportunités actives' },
+            { label: 'Pipeline total', value: totalAmt, detail: 'Montant total' },
+            { label: 'Forecast pondéré', value: Math.round(forecastAmt), detail: 'Montant × probabilité' },
+            { label: 'Ticket moyen', value: displayRows.length > 0 ? Math.round(totalAmt / displayRows.length) : 0, detail: 'Pipeline / nb deals' },
+          ],
+          breakdownTitle: 'Répartition par étape',
+          breakdownHeaders: ['Étape', 'Montant (MAD)', 'Nb deals', '% du pipeline'],
+          breakdown: [...stageMap.entries()].map(([stage, v]) => [
+            stage, v.amount, v.count, totalAmt > 0 ? `${Math.round(v.amount / totalAmt * 100)}%` : '0%',
+          ]),
+        },
       }
       const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')

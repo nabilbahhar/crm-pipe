@@ -150,12 +150,22 @@ export default function SupplyPage() {
   async function exportExcel() {
     setExporting(true)
     try {
+      const totalAmt = filtered.reduce((s,o) => s+(o.opportunities?.amount||0), 0)
+
+      // Status breakdown
+      const statusMap = new Map<string, { count: number; amount: number }>()
+      filtered.forEach(o => {
+        const label = STATUS_CONFIG[o.status]?.label || o.status
+        const prev = statusMap.get(label) || { count: 0, amount: 0 }
+        statusMap.set(label, { count: prev.count + 1, amount: prev.amount + (o.opportunities?.amount||0) })
+      })
+
       const spec = {
         filename: `supply_${new Date().toISOString().slice(0,10)}.xlsx`,
         sheets: [{
           name: 'Supply',
           title: `Suivi Supply · ${filtered.length} commandes · ${new Date().toLocaleDateString('fr-MA')}`,
-          headers: ['Compte','Deal','Statut','BU','Vendor','Montant (MAD)','PO','PO Date','Fournisseurs','Note'],
+          headers: ['Compte','Deal','Statut','BU','Vendor','Montant (MAD)','PO','PO Date','Fournisseurs','Placé le','Commandé le','Livré le','Note'],
           rows: filtered.map(o => {
             const opp = o.opportunities
             const lines = opp?.purchase_info?.[0]?.purchase_lines || []
@@ -165,11 +175,30 @@ export default function SupplyPage() {
               STATUS_CONFIG[o.status]?.label||o.status,
               opp?.bu||'—', opp?.vendor||'—', opp?.amount||0,
               opp?.po_number||'—', opp?.po_date||'—',
-              fournisseurs||'—', o.supply_notes||'—',
+              fournisseurs||'—',
+              o.placed_at ? new Date(o.placed_at).toLocaleDateString('fr-MA') : '—',
+              o.ordered_at ? new Date(o.ordered_at).toLocaleDateString('fr-MA') : '—',
+              o.delivered_at ? new Date(o.delivered_at).toLocaleDateString('fr-MA') : '—',
+              o.supply_notes||'—',
             ]
           }),
-          totalsRow: ['TOTAL', `${filtered.length} commandes`, '', '', '', filtered.reduce((s,o)=>s+(o.opportunities?.amount||0),0), '', '', '', ''],
+          totalsRow: ['TOTAL', `${filtered.length} commandes`, '', '', '', totalAmt, '', '', '', '', '', '', ''],
+          notes: `Montant total: ${mad(totalAmt)}`,
         }],
+        summary: {
+          title: `Résumé Supply · ${new Date().toLocaleDateString('fr-MA')}`,
+          kpis: [
+            { label: 'Total commandes', value: filtered.length, detail: `Montant: ${mad(totalAmt)}` },
+            { label: 'En cours', value: filtered.filter(o => !['livre','facture'].includes(o.status)).length, detail: 'À commander + Placé + Commandé + En stock' },
+            { label: 'Livrées', value: filtered.filter(o => o.status === 'livre').length, detail: 'En attente facturation' },
+            { label: 'Facturées', value: filtered.filter(o => o.status === 'facture').length, detail: 'Cycle terminé' },
+          ],
+          breakdownTitle: 'Répartition par statut',
+          breakdownHeaders: ['Statut', 'Montant (MAD)', 'Nb commandes', '% du total'],
+          breakdown: [...statusMap.entries()].map(([label, v]) => [
+            label, v.amount, v.count, totalAmt > 0 ? `${Math.round(v.amount / totalAmt * 100)}%` : '0%',
+          ]),
+        },
       }
       const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')

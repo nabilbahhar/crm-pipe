@@ -7,6 +7,7 @@ import {
   CheckCircle2, RefreshCw, ChevronRight, Package, Phone,
   Search, ArrowUp, ArrowDown, ChevronsUpDown, X, Download,
   Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
+  FileText, AlertTriangle, TrendingUp, Users,
 } from 'lucide-react'
 
 type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard'
@@ -24,42 +25,46 @@ type Task = {
   amount: number
   daysLate: number
   ficheStatus: FicheStatus
-  ficheProgress: number   // 0–100 % des lignes complètes
+  ficheProgress: number
   linesTotal: number
   linesComplete: number
   entity_id: string
   entity?: any
 }
 
-const fmtAmt = (n: number) => `${fmt(n)} MAD`
+const TYPE_LABELS: Record<TaskType, string> = {
+  relance_retard: 'Relance retard',
+  relance_semaine: 'Relance semaine',
+  achat_manquant: 'Fiche achat',
+  closing_retard: 'Closing retard',
+}
 
-// ── Status config ─────────────────────────────────────────────
 const STATUS_CFG: Record<FicheStatus, { label: string; icon: React.ReactNode; badge: string; row: string }> = {
   a_faire:  {
     label: 'À faire',
     icon: <CircleDashed className="h-3.5 w-3.5" />,
-    badge: 'bg-slate-100 text-slate-500',
+    badge: 'bg-slate-100 text-slate-500 border border-slate-200',
     row: '',
   },
   en_cours: {
     label: 'En cours',
     icon: <PlayCircle className="h-3.5 w-3.5" />,
-    badge: 'bg-blue-100 text-blue-700',
-    row: 'bg-blue-50/30',
+    badge: 'bg-blue-50 text-blue-700 border border-blue-200',
+    row: '',
   },
   complete: {
     label: 'Complet',
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
-    badge: 'bg-emerald-100 text-emerald-700',
+    badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
     row: '',
   },
 }
 
 export default function TasksPage() {
   const router = useRouter()
-  const [tasks, setTasks]             = useState<Task[]>([])
-  const [loading, setLoading]         = useState(true)
-  const [err, setErr]                 = useState<string | null>(null)
+  const [tasks, setTasks]   = useState<Task[]>([])
+  const [loading, setLoading] = useState(true)
+  const [err, setErr]       = useState<string | null>(null)
 
   const [search, setSearch]             = useState('')
   const [typeFilter, setTypeFilter]     = useState<'Tous' | TaskType>('Tous')
@@ -68,7 +73,7 @@ export default function TasksPage() {
   const [sortKey, setSortKey]           = useState<SortKey>('priority')
   const [sortDir, setSortDir]           = useState<'asc' | 'desc'>('desc')
 
-  useEffect(() => { document.title = 'T\u00e2ches \u00b7 CRM-PIPE'; load() }, [])
+  useEffect(() => { document.title = 'Tâches · CRM-PIPE'; load() }, [])
 
   async function load() {
     setLoading(true); setErr(null)
@@ -93,26 +98,18 @@ export default function TasksPage() {
     return (data || []).map(p => {
       const daysLate = Math.floor((Date.now() - new Date(p.next_date).getTime()) / 86400000)
       return {
-        id: `relance_${p.id}`,
-        type: 'relance_retard',
-        priority: daysLate > 3 ? 'high' : 'medium',
-        title: p.company_name,
-        subtitle: p.contact_name || '',
+        id: `relance_${p.id}`, type: 'relance_retard', priority: daysLate > 3 ? 'high' : 'medium',
+        title: p.company_name, subtitle: p.contact_name || '',
         detail: `${p.next_action || 'Relancer'} · ${p.status}`,
-        amount: 0, daysLate,
-        ficheStatus: 'a_faire',
-        ficheProgress: 0,
-        linesTotal: 0, linesComplete: 0,
-        entity_id: p.id, entity: p,
-      }
+        amount: 0, daysLate, ficheStatus: 'a_faire', ficheProgress: 0,
+        linesTotal: 0, linesComplete: 0, entity_id: p.id, entity: p,
+      } as Task
     })
   }
 
-  // ── Relances cette semaine (à venir, pas en retard) ─────────
   async function loadRelancesSemaine(): Promise<Task[]> {
     const today = new Date()
     const todayStr = today.toISOString().split('T')[0]
-    // Fin de semaine (dimanche)
     const endOfWeek = new Date(today)
     endOfWeek.setDate(today.getDate() + (7 - today.getDay()))
     const endStr = endOfWeek.toISOString().split('T')[0]
@@ -128,23 +125,17 @@ export default function TasksPage() {
     return (data || []).map(p => {
       const daysUntil = Math.max(0, Math.ceil((new Date(p.next_date).getTime() - Date.now()) / 86400000))
       return {
-        id: `rsem_${p.id}`,
-        type: 'relance_semaine' as TaskType,
+        id: `rsem_${p.id}`, type: 'relance_semaine' as TaskType,
         priority: (daysUntil === 0 ? 'high' : 'medium') as Priority,
-        title: p.company_name,
-        subtitle: p.contact_name || '',
+        title: p.company_name, subtitle: p.contact_name || '',
         detail: `${p.next_action || 'Relancer'} · ${p.status} · ${p.next_date}`,
-        amount: 0,
-        daysLate: -daysUntil, // negative = in the future
-        ficheStatus: 'a_faire' as FicheStatus,
-        ficheProgress: 0,
-        linesTotal: 0, linesComplete: 0,
+        amount: 0, daysLate: -daysUntil, ficheStatus: 'a_faire' as FicheStatus,
+        ficheProgress: 0, linesTotal: 0, linesComplete: 0,
         entity_id: p.id, entity: p,
-      }
+      } as Task
     })
   }
 
-  // ── Fiches achat ─────────────────────────────────────────────
   async function loadAchats(): Promise<Task[]> {
     const { data: won, error } = await supabase
       .from('opportunities')
@@ -159,57 +150,44 @@ export default function TasksPage() {
       .select('opportunity_id, purchase_lines(id, pu_achat, fournisseur, designation)')
       .in('opportunity_id', won.map((d: any) => d.id))
 
-    // Build a map: opp_id → { total lines, complete lines }
     const infoMap = new Map<string, { total: number; complete: number }>()
     ;(infos || []).forEach((info: any) => {
       const lines: any[] = info.purchase_lines || []
-      const complete = lines.filter(
-        (ln: any) => Number(ln.pu_achat) > 0 && ln.fournisseur?.trim()
-      ).length
+      const complete = lines.filter((ln: any) => Number(ln.pu_achat) > 0 && ln.fournisseur?.trim()).length
       infoMap.set(info.opportunity_id, { total: lines.length, complete })
     })
 
     return won
       .filter((d: any) => {
         const info = infoMap.get(d.id)
-        // Hide only if ALL lines are complete (total > 0 and complete === total)
         if (info && info.total > 0 && info.complete === info.total) return false
         return true
       })
       .map((d: any) => {
         const info = infoMap.get(d.id)
         let ficheStatus: FicheStatus = 'a_faire'
-        let ficheProgress = 0
-        let linesTotal = 0
-        let linesComplete = 0
+        let ficheProgress = 0, linesTotal = 0, linesComplete = 0
 
         if (info) {
-          linesTotal    = info.total
+          linesTotal = info.total
           linesComplete = info.complete
           ficheProgress = info.total > 0 ? Math.round((info.complete / info.total) * 100) : 0
-          ficheStatus   = info.total === 0 ? 'en_cours' : 'en_cours' // has a purchase_info record
+          ficheStatus = 'en_cours'
         }
 
         return {
-          id: `achat_${d.id}`,
-          type: 'achat_manquant' as TaskType,
+          id: `achat_${d.id}`, type: 'achat_manquant' as TaskType,
           priority: 'high' as Priority,
           title: (d.accounts as any)?.name || d.title,
           subtitle: d.title,
           detail: `PO ${d.po_number || '—'} · ${d.bu || '—'}`,
-          amount: d.amount || 0,
-          daysLate: 0,
-          ficheStatus,
-          ficheProgress,
-          linesTotal,
-          linesComplete,
-          entity_id: d.id,
-          entity: { ...d, accounts: d.accounts },
-        }
+          amount: d.amount || 0, daysLate: 0,
+          ficheStatus, ficheProgress, linesTotal, linesComplete,
+          entity_id: d.id, entity: { ...d, accounts: d.accounts },
+        } as Task
       })
   }
 
-  // ── Deals en retard closing ──────────────────────────────
   async function loadClosingRetards(): Promise<Task[]> {
     const now = new Date()
     const thisM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -225,23 +203,20 @@ export default function TasksPage() {
       const bmDate = new Date(bm + '-01')
       const daysLate = Math.max(0, Math.floor((now.getTime() - bmDate.getTime()) / 86400000))
       return {
-        id: `closing_${d.id}`,
-        type: 'closing_retard' as TaskType,
+        id: `closing_${d.id}`, type: 'closing_retard' as TaskType,
         priority: (daysLate > 60 ? 'high' : 'medium') as Priority,
         title: (d.accounts as any)?.name || d.title,
         subtitle: d.title,
         detail: `${d.stage} · ${d.bu || '—'} · Closing: ${bm}`,
-        amount: d.amount || 0,
-        daysLate,
+        amount: d.amount || 0, daysLate,
         ficheStatus: 'a_faire' as FicheStatus,
-        ficheProgress: 0,
-        linesTotal: 0, linesComplete: 0,
+        ficheProgress: 0, linesTotal: 0, linesComplete: 0,
         entity_id: d.id, entity: d,
-      }
+      } as Task
     })
   }
 
-  // ── Filtered & sorted list ────────────────────────────────
+  // ── Filtered & sorted ────────────────────────────────
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
     let res = tasks.filter(t => {
@@ -263,15 +238,18 @@ export default function TasksPage() {
     })
   }, [tasks, search, typeFilter, prioFilter, statusFilter, sortKey, sortDir])
 
-  const totalTasks     = tasks.length
-  const achatTasks     = tasks.filter(t => t.type === 'achat_manquant')
-  const enCoursTasks   = achatTasks.filter(t => t.ficheStatus === 'en_cours')
-  const aFaireTasks    = achatTasks.filter(t => t.ficheStatus === 'a_faire')
-  const totalAchatAmt  = achatTasks.reduce((s, t) => s + t.amount, 0)
-  const relances        = visible.filter(t => t.type === 'relance_retard')
-  const relancesSemaine = visible.filter(t => t.type === 'relance_semaine')
-  const achats          = visible.filter(t => t.type === 'achat_manquant')
-  const closingRetards  = visible.filter(t => t.type === 'closing_retard')
+  const relances        = useMemo(() => visible.filter(t => t.type === 'relance_retard'), [visible])
+  const relancesSemaine = useMemo(() => visible.filter(t => t.type === 'relance_semaine'), [visible])
+  const achats          = useMemo(() => visible.filter(t => t.type === 'achat_manquant'), [visible])
+  const closingRetards  = useMemo(() => visible.filter(t => t.type === 'closing_retard'), [visible])
+
+  // Global counts for KPIs (unfiltered)
+  const allRelances = useMemo(() => tasks.filter(t => t.type === 'relance_retard'), [tasks])
+  const allAchats   = useMemo(() => tasks.filter(t => t.type === 'achat_manquant'), [tasks])
+  const allClosing  = useMemo(() => tasks.filter(t => t.type === 'closing_retard'), [tasks])
+  const allSemaine  = useMemo(() => tasks.filter(t => t.type === 'relance_semaine'), [tasks])
+  const totalAchatAmt = allAchats.reduce((s, t) => s + t.amount, 0)
+  const closingAmt    = allClosing.reduce((s, t) => s + t.amount, 0)
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -284,7 +262,7 @@ export default function TasksPage() {
   function TH({ col, label, right }: { col: SortKey; label: string; right?: boolean }) {
     return (
       <th onClick={() => toggleSort(col)}
-        className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-wide cursor-pointer select-none transition-colors whitespace-nowrap
+        className={`px-4 py-2.5 text-[10px] font-bold uppercase tracking-wider cursor-pointer select-none transition-colors whitespace-nowrap
           ${right ? 'text-right' : 'text-left'}
           ${sortKey === col ? 'text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}>
         <span className="inline-flex items-center gap-1">{!right && label}<SI col={col} />{right && label}</span>
@@ -295,95 +273,156 @@ export default function TasksPage() {
   const hasActiveFilters = search || typeFilter !== 'Tous' || prioFilter !== 'Tous' || statusFilter !== 'Tous'
   function resetFilters() { setSearch(''); setTypeFilter('Tous'); setPrioFilter('Tous'); setStatusFilter('Tous') }
 
-  function exportCSV() {
-    const typeLabel: Record<string, string> = {
-      relance_retard: 'Relance retard', achat_manquant: 'Fiche achat',
-      closing_retard: 'Closing retard', relance_semaine: 'Relance semaine',
-    }
-    const header = ['Type','Priorité','Titre','Détail','Montant','Retard (j)','Statut fiche']
-    const csvRows = [header.join(';')]
-    for (const t of visible) {
-      csvRows.push([
-        typeLabel[t.type] || t.type, t.priority === 'high' ? 'Haute' : 'Moyenne',
-        t.title, t.detail, t.amount, t.daysLate,
-        STATUS_CFG[t.ficheStatus]?.label || t.ficheStatus,
-      ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(';'))
-    }
-    const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href = url
-    a.download = `tasks_${new Date().toISOString().slice(0, 10)}.csv`
-    a.click(); URL.revokeObjectURL(url)
+  const [exporting, setExporting] = useState(false)
+  async function exportExcel() {
+    setExporting(true)
+    try {
+      const spec = {
+        filename: `taches_${new Date().toISOString().slice(0,10)}.xlsx`,
+        sheets: [{
+          name: 'Tâches',
+          title: `Tâches CRM · ${visible.length} tâches · ${new Date().toLocaleDateString('fr-MA')}`,
+          headers: ['Type','Priorité','Titre','Détail','Montant (MAD)','Retard (j)','Statut fiche'],
+          rows: visible.map(t => [
+            TYPE_LABELS[t.type] || t.type,
+            t.priority === 'high' ? 'Haute' : 'Moyenne',
+            t.title, t.detail, t.amount, t.daysLate,
+            STATUS_CFG[t.ficheStatus]?.label || t.ficheStatus,
+          ]),
+          totalsRow: ['TOTAL', `${visible.length} tâches`, '', '', visible.reduce((s,t)=>s+t.amount,0), '', ''],
+          notes: `Fiches achat: ${allAchats.length} · Relances retard: ${allRelances.length} · Closing retard: ${allClosing.length} · Relances semaine: ${allSemaine.length}`,
+        }],
+        summary: {
+          title: `Résumé Tâches · ${new Date().toLocaleDateString('fr-MA')}`,
+          kpis: [
+            { label: 'Total tâches', value: tasks.length, detail: `${allAchats.length} fiches + ${allRelances.length} relances + ${allClosing.length} closing + ${allSemaine.length} semaine` },
+            { label: 'Urgentes (haute priorité)', value: tasks.filter(t => t.priority === 'high').length, detail: 'Nécessitent une action immédiate' },
+            { label: 'CA fiches achat', value: totalAchatAmt, detail: `${allAchats.length} fiches à compléter` },
+            { label: 'CA closing retard', value: closingAmt, detail: `${allClosing.length} deals en retard` },
+          ],
+          breakdownTitle: 'Répartition par type',
+          breakdownHeaders: ['Type', 'Nombre', 'Urgentes', 'Montant (MAD)'],
+          breakdown: [
+            ['Fiches achat', allAchats.length, allAchats.filter(t=>t.priority==='high').length, totalAchatAmt],
+            ['Relances retard', allRelances.length, allRelances.filter(t=>t.priority==='high').length, 0],
+            ['Closing retard', allClosing.length, allClosing.filter(t=>t.priority==='high').length, closingAmt],
+            ['Relances semaine', allSemaine.length, allSemaine.filter(t=>t.priority==='high').length, 0],
+          ],
+        },
+      }
+      const res = await fetch('/api/excel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec) })
+      if (!res.ok) throw new Error('Export échoué')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = spec.filename; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: any) { alert(e?.message || 'Erreur export') }
+    finally { setExporting(false) }
   }
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
       <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
-        {/* Header */}
-        <div className="flex items-center justify-between">
+        {/* ── HEADER ── */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md text-lg">✅</div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 text-white shadow-lg">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
             <div>
-              <h1 className="text-xl font-black text-slate-900 tracking-tight">Tasks</h1>
-              <p className="text-xs text-slate-500">{visible.length} affichées · {totalTasks} total</p>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Centre de tâches</h1>
+              <p className="text-xs text-slate-500">{visible.length} affichées · {tasks.length} total</p>
             </div>
           </div>
-          <div className="flex gap-2">
-            <button onClick={exportCSV} title="Export CSV"
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
-              <Download className="h-4 w-4" />
+          <div className="flex items-center gap-2">
+            <button onClick={exportExcel} disabled={exporting}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-60">
+              <Download className="h-4 w-4" /> {exporting ? 'Export…' : 'Excel'}
             </button>
             <button onClick={load} disabled={loading}
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
 
-        {/* KPI bar */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: 'Total tâches',    value: totalTasks,                                                             txt: 'text-slate-800',   border: 'border-slate-100' },
-            { label: 'Fiches à faire',  value: aFaireTasks.length,                                                     txt: 'text-amber-600',   border: 'border-amber-100' },
-            { label: 'Fiches en cours', value: enCoursTasks.length,                                                    txt: 'text-blue-600',    border: 'border-blue-100'  },
-            { label: 'CA à commander',  value: totalAchatAmt >= 1000 ? fmtAmt(totalAchatAmt) : `${totalAchatAmt} MAD`, txt: 'text-emerald-700', border: 'border-emerald-100' },
-          ].map((k, i) => (
-            <div key={i} className={`rounded-2xl border ${k.border} bg-white p-4 shadow-sm`}>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{k.label}</div>
-              <div className={`mt-1 text-xl font-black truncate ${k.txt}`}>{k.value}</div>
-            </div>
-          ))}
+        {/* ── KPI STRIP ── */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <KPICard
+            icon={<AlertTriangle className="h-4 w-4" />}
+            label="Total tâches"
+            value={String(tasks.length)}
+            sub={`${tasks.filter(t => t.priority === 'high').length} urgentes`}
+            color="slate"
+            active={typeFilter === 'Tous'}
+            onClick={() => setTypeFilter('Tous')}
+          />
+          <KPICard
+            icon={<FileText className="h-4 w-4" />}
+            label="Fiches achat"
+            value={String(allAchats.length)}
+            sub={totalAchatAmt > 0 ? `${fmt(totalAchatAmt)} MAD` : '0 MAD'}
+            color="amber"
+            active={typeFilter === 'achat_manquant'}
+            onClick={() => setTypeFilter(typeFilter === 'achat_manquant' ? 'Tous' : 'achat_manquant')}
+          />
+          <KPICard
+            icon={<Clock className="h-4 w-4" />}
+            label="Relances retard"
+            value={String(allRelances.length)}
+            sub={allRelances.filter(t => t.daysLate > 7).length + ' > 7 jours'}
+            color="red"
+            active={typeFilter === 'relance_retard'}
+            onClick={() => setTypeFilter(typeFilter === 'relance_retard' ? 'Tous' : 'relance_retard')}
+          />
+          <KPICard
+            icon={<CalendarClock className="h-4 w-4" />}
+            label="Relances semaine"
+            value={String(allSemaine.length)}
+            sub={allSemaine.filter(t => t.daysLate === 0).length + " aujourd'hui"}
+            color="blue"
+            active={typeFilter === 'relance_semaine'}
+            onClick={() => setTypeFilter(typeFilter === 'relance_semaine' ? 'Tous' : 'relance_semaine')}
+          />
+          <KPICard
+            icon={<TrendingUp className="h-4 w-4" />}
+            label="Closing retard"
+            value={String(allClosing.length)}
+            sub={closingAmt > 0 ? `${fmt(closingAmt)} MAD` : '0 MAD'}
+            color="orange"
+            active={typeFilter === 'closing_retard'}
+            onClick={() => setTypeFilter(typeFilter === 'closing_retard' ? 'Tous' : 'closing_retard')}
+          />
         </div>
 
-        {/* Toolbar */}
+        {/* ── TOOLBAR ── */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Search */}
-          <div className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm">
+          <div className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm min-w-[200px]">
             <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Chercher…"
-              className="w-32 bg-transparent text-sm outline-none placeholder:text-slate-400" />
-            {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-slate-300" /></button>}
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher…"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" />
+            {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-slate-300 hover:text-slate-600" /></button>}
           </div>
 
-          {/* Type filter */}
-          <div className="flex flex-wrap rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
-            {(['Tous', 'achat_manquant', 'relance_retard', 'relance_semaine', 'closing_retard'] as const).map(t => (
-              <button key={t} onClick={() => setTypeFilter(t)}
+          {/* Priority filter */}
+          <div className="flex rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
+            {(['Tous', 'high', 'medium'] as const).map(p => (
+              <button key={p} onClick={() => setPrioFilter(p)}
                 className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap
-                  ${typeFilter === t ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}>
-                {t === 'Tous' ? 'Tout' : t === 'achat_manquant' ? '📦 Fiches achat' : t === 'relance_retard' ? '⏰ Retards' : t === 'relance_semaine' ? '📆 Semaine' : '📅 Closing retard'}
+                  ${prioFilter === p ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+                {p === 'Tous' ? 'Toutes priorités' : p === 'high' ? '🔴 Urgent' : '🟡 Normal'}
               </button>
             ))}
           </div>
 
-          {/* Status filter — only relevant for achat tasks */}
+          {/* Fiche status filter (only for achat type) */}
           {(typeFilter === 'Tous' || typeFilter === 'achat_manquant') && (
             <div className="flex rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
               {([
-                { key: 'Tous',     label: 'Tout' },
-                { key: 'a_faire',  label: '⬜ À faire' },
-                { key: 'en_cours', label: '🔵 En cours' },
+                { key: 'Tous',     label: 'Tout statut' },
+                { key: 'a_faire',  label: 'À faire' },
+                { key: 'en_cours', label: 'En cours' },
               ] as const).map(({ key, label }) => (
                 <button key={key} onClick={() => setStatusFilter(key as any)}
                   className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap
@@ -394,77 +433,78 @@ export default function TasksPage() {
             </div>
           )}
 
-          {/* Priority filter */}
-          <div className="flex rounded-xl border border-slate-200 bg-white p-0.5 shadow-sm">
-            {(['Tous', 'high', 'medium'] as const).map(p => (
-              <button key={p} onClick={() => setPrioFilter(p)}
-                className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors
-                  ${prioFilter === p ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-700'}`}>
-                {p === 'Tous' ? 'Toutes priorités' : p === 'high' ? '🔴 Urgent' : '🟡 Normal'}
+          <div className="ml-auto flex items-center gap-2">
+            {hasActiveFilters && (
+              <button onClick={resetFilters}
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-xs text-slate-500 hover:text-red-500 transition-colors">
+                <X className="h-3 w-3" /> Réinitialiser
               </button>
-            ))}
+            )}
+            <span className="text-xs text-slate-400">{visible.length} tâche{visible.length > 1 ? 's' : ''}</span>
           </div>
-
-          {hasActiveFilters && (
-            <button onClick={resetFilters}
-              className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs text-slate-500 hover:text-red-500 transition-colors shadow-sm">
-              <X className="h-3.5 w-3.5" /> Réinitialiser
-            </button>
-          )}
         </div>
 
-        {err && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">⚠️ {err}</div>}
+        {err && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0" />{err}</div>}
 
         {loading ? (
           <div className="flex items-center justify-center py-20 text-slate-400">
-            <RefreshCw className="mr-2 h-5 w-5 animate-spin" /> Chargement…
+            <RefreshCw className="mr-2 h-5 w-5 animate-spin" /> Chargement des tâches…
           </div>
         ) : visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white py-20 text-center">
-            <CheckCircle2 className="mb-3 h-12 w-12 text-emerald-400" />
+            <CheckCircle2 className="mb-3 h-14 w-14 text-emerald-400" />
             <div className="text-lg font-bold text-slate-700">
-              {totalTasks === 0 ? 'Tout est à jour ! 🎉' : 'Aucun résultat'}
+              {tasks.length === 0 ? 'Tout est à jour !' : 'Aucun résultat pour ces filtres'}
             </div>
-            {totalTasks > 0 && (
-              <button onClick={resetFilters} className="mt-2 text-sm text-blue-600 hover:underline">
+            <p className="text-sm text-slate-400 mt-1">
+              {tasks.length === 0 ? 'Aucune tâche en attente' : 'Essayez de modifier vos filtres'}
+            </p>
+            {tasks.length > 0 && (
+              <button onClick={resetFilters} className="mt-3 text-sm text-blue-600 hover:underline font-semibold">
                 Réinitialiser les filtres
               </button>
             )}
           </div>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-4">
 
             {/* ── Fiches achat ── */}
             {achats.length > 0 && (typeFilter === 'Tous' || typeFilter === 'achat_manquant') && (
-              <TaskSection icon="📦" title="Fiches achat à compléter" count={achats.length} color="amber">
-                <table className="w-full min-w-[640px] text-sm">
+              <TaskSection
+                icon={<FileText className="h-4 w-4" />}
+                title="Fiches achat à compléter"
+                count={achats.length}
+                colorScheme="amber"
+                amount={achats.reduce((s,t)=>s+t.amount,0)}>
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/50">
-                      <TH col="title"       label="Compte" />
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 whitespace-nowrap">Deal</th>
-                      <TH col="amount"      label="Montant" right />
+                    <tr className="border-b border-slate-100 bg-slate-50/70">
+                      <TH col="title" label="Compte" />
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">Deal</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">Info</th>
+                      <TH col="amount" label="Montant" right />
                       <TH col="ficheStatus" label="Statut fiche" />
-                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {achats.map(t => {
                       const cfg = STATUS_CFG[t.ficheStatus]
                       return (
-                        <tr key={t.id} className={`transition-colors hover:bg-slate-50/60 ${cfg.row}`}>
+                        <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <span className={`h-2 w-2 rounded-full shrink-0 ${t.priority === 'high' ? 'bg-red-500' : 'bg-amber-400'}`} />
-                              <span className="font-bold text-slate-900">{t.title}</span>
+                              <span className="font-bold text-slate-900 text-xs">{t.title}</span>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px]">
+                          <td className="px-4 py-3 text-xs text-slate-500 max-w-[160px]">
                             <span className="truncate block">{t.subtitle}</span>
                           </td>
-                          <td className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">
+                          <td className="px-4 py-3 text-[11px] text-slate-400">{t.detail}</td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap text-xs">
                             {t.amount > 0 ? mad(t.amount) : '—'}
                           </td>
-                          {/* Statut fiche avec progression */}
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold whitespace-nowrap ${cfg.badge}`}>
@@ -473,27 +513,20 @@ export default function TasksPage() {
                               {t.ficheStatus === 'en_cours' && t.linesTotal > 0 && (
                                 <div className="flex items-center gap-1.5">
                                   <div className="h-1.5 w-16 rounded-full bg-slate-200 overflow-hidden">
-                                    <div
-                                      className="h-full rounded-full bg-blue-500 transition-all"
-                                      style={{ width: `${t.ficheProgress}%` }}
-                                    />
+                                    <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${t.ficheProgress}%` }} />
                                   </div>
-                                  <span className="text-[10px] font-semibold text-slate-500">
-                                    {t.linesComplete}/{t.linesTotal}
-                                  </span>
+                                  <span className="text-[10px] font-semibold text-slate-500">{t.linesComplete}/{t.linesTotal}</span>
                                 </div>
                               )}
                             </div>
                           </td>
                           <td className="px-4 py-3">
-                            <div className="flex items-center justify-center">
+                            <div className="flex justify-center">
                               <button onClick={() => router.push(`/opportunities/${t.entity_id}/purchase`)}
-                                className={`inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-white transition-colors
-                                  ${t.ficheStatus === 'en_cours'
-                                    ? 'bg-blue-600 hover:bg-blue-700'
-                                    : 'bg-amber-600 hover:bg-amber-700'}`}>
+                                className={`inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-white transition-colors shadow-sm
+                                  ${t.ficheStatus === 'en_cours' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'}`}>
                                 <Package className="h-3.5 w-3.5" />
-                                {t.ficheStatus === 'en_cours' ? 'Compléter' : 'Remplir fiche'}
+                                {t.ficheStatus === 'en_cours' ? 'Compléter' : 'Remplir'}
                               </button>
                             </div>
                           </td>
@@ -505,17 +538,21 @@ export default function TasksPage() {
               </TaskSection>
             )}
 
-            {/* ── Relances ── */}
+            {/* ── Relances retard ── */}
             {relances.length > 0 && (typeFilter === 'Tous' || typeFilter === 'relance_retard') && (
-              <TaskSection icon="⏰" title="Relances en retard" count={relances.length} color="red">
-                <table className="w-full min-w-[600px] text-sm">
+              <TaskSection
+                icon={<Clock className="h-4 w-4" />}
+                title="Relances en retard"
+                count={relances.length}
+                colorScheme="red">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/50">
-                      <TH col="title"    label="Prospect" />
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">Contact</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">Action prévue</th>
+                    <tr className="border-b border-slate-100 bg-slate-50/70">
+                      <TH col="title" label="Prospect" />
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Contact</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Action prévue</th>
                       <TH col="daysLate" label="Retard" right />
-                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -524,13 +561,13 @@ export default function TasksPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span className={`h-2 w-2 rounded-full shrink-0 ${t.priority === 'high' ? 'bg-red-500' : 'bg-amber-400'}`} />
-                            <span className="font-bold text-slate-900">{t.title}</span>
+                            <span className="font-bold text-slate-900 text-xs">{t.title}</span>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500">{t.subtitle || '—'}</td>
                         <td className="px-4 py-3 text-xs text-slate-600">{t.entity?.next_action || '—'}</td>
                         <td className="px-4 py-3 text-right">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full
                             ${t.daysLate > 7 ? 'bg-red-100 text-red-700' : t.daysLate > 3 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
                             {t.daysLate}j
                           </span>
@@ -544,7 +581,7 @@ export default function TasksPage() {
                               </a>
                             )}
                             <a href="/prospection"
-                              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                              className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                               Voir <ChevronRight className="h-3.5 w-3.5" />
                             </a>
                           </div>
@@ -558,15 +595,19 @@ export default function TasksPage() {
 
             {/* ── Relances cette semaine ── */}
             {relancesSemaine.length > 0 && (typeFilter === 'Tous' || typeFilter === 'relance_semaine') && (
-              <TaskSection icon="📆" title="Relances cette semaine" count={relancesSemaine.length} color="amber">
-                <table className="w-full min-w-[600px] text-sm">
+              <TaskSection
+                icon={<CalendarClock className="h-4 w-4" />}
+                title="Relances cette semaine"
+                count={relancesSemaine.length}
+                colorScheme="blue">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/50">
-                      <TH col="title"    label="Prospect" />
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">Contact</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">Action prévue</th>
-                      <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400">Quand</th>
-                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
+                    <tr className="border-b border-slate-100 bg-slate-50/70">
+                      <TH col="title" label="Prospect" />
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Contact</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Action prévue</th>
+                      <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Quand</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -577,15 +618,15 @@ export default function TasksPage() {
                         <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
-                              <span className={`h-2 w-2 rounded-full shrink-0 ${daysUntil === 0 ? 'bg-red-500' : 'bg-blue-400'}`} />
-                              <span className="font-bold text-slate-900">{t.title}</span>
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${daysUntil === 0 ? 'bg-red-500 animate-pulse' : 'bg-blue-400'}`} />
+                              <span className="font-bold text-slate-900 text-xs">{t.title}</span>
                             </div>
                           </td>
                           <td className="px-4 py-3 text-xs text-slate-500">{t.subtitle || '—'}</td>
                           <td className="px-4 py-3 text-xs text-slate-600">{t.entity?.next_action || '—'}</td>
                           <td className="px-4 py-3 text-right">
-                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full
-                              ${daysUntil === 0 ? 'bg-red-100 text-red-700' : daysUntil <= 1 ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-600'}`}>
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full
+                              ${daysUntil === 0 ? 'bg-red-100 text-red-700' : daysUntil <= 1 ? 'bg-amber-100 text-amber-700' : 'bg-blue-50 text-blue-600'}`}>
                               {dayLabel}
                             </span>
                           </td>
@@ -598,7 +639,7 @@ export default function TasksPage() {
                                 </a>
                               )}
                               <a href="/prospection"
-                                className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                                className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                                 Voir <ChevronRight className="h-3.5 w-3.5" />
                               </a>
                             </div>
@@ -613,15 +654,20 @@ export default function TasksPage() {
 
             {/* ── Closing en retard ── */}
             {closingRetards.length > 0 && (typeFilter === 'Tous' || typeFilter === 'closing_retard') && (
-              <TaskSection icon="📅" title="Deals — closing dépassé" count={closingRetards.length} color="red">
-                <table className="w-full min-w-[600px] text-sm">
+              <TaskSection
+                icon={<TrendingUp className="h-4 w-4" />}
+                title="Deals — closing dépassé"
+                count={closingRetards.length}
+                colorScheme="orange"
+                amount={closingRetards.reduce((s,t)=>s+t.amount,0)}>
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-slate-100 bg-slate-50/50">
-                      <TH col="title"    label="Compte" />
-                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">Deal</th>
-                      <TH col="amount"   label="Montant" right />
+                    <tr className="border-b border-slate-100 bg-slate-50/70">
+                      <TH col="title" label="Compte" />
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Deal · Étape</th>
+                      <TH col="amount" label="Montant" right />
                       <TH col="daysLate" label="Retard" right />
-                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
@@ -630,26 +676,26 @@ export default function TasksPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <span className={`h-2 w-2 rounded-full shrink-0 ${t.priority === 'high' ? 'bg-red-500' : 'bg-amber-400'}`} />
-                            <span className="font-bold text-slate-900">{t.title}</span>
+                            <span className="font-bold text-slate-900 text-xs">{t.title}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-xs text-slate-500 max-w-[180px]">
-                          <span className="truncate block">{t.subtitle}</span>
+                        <td className="px-4 py-3 max-w-[200px]">
+                          <span className="text-xs text-slate-700 truncate block">{t.subtitle}</span>
                           <span className="text-[10px] text-slate-400">{t.detail}</span>
                         </td>
-                        <td className="px-4 py-3 text-right font-semibold text-slate-900 whitespace-nowrap">
+                        <td className="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap text-xs">
                           {t.amount > 0 ? mad(t.amount) : '—'}
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full
                             ${t.daysLate > 60 ? 'bg-red-100 text-red-700' : t.daysLate > 30 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
                             {t.daysLate}j
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center justify-center">
+                          <div className="flex justify-center">
                             <button onClick={() => router.push(`/opportunities/${t.entity_id}`)}
-                              className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                              className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                               Voir <ChevronRight className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -667,21 +713,57 @@ export default function TasksPage() {
   )
 }
 
-// ── TaskSection ───────────────────────────────────────────────
-function TaskSection({ icon, title, count, color, children }: {
-  icon: string; title: string; count: number
-  color: 'amber' | 'red'; children: React.ReactNode
+// ── KPI Card ──────────────────────────────────────────────────
+function KPICard({ icon, label, value, sub, color, active, onClick }: {
+  icon: React.ReactNode; label: string; value: string; sub: string
+  color: 'slate' | 'amber' | 'red' | 'blue' | 'orange'
+  active: boolean; onClick: () => void
+}) {
+  const colors = {
+    slate:  { ring: active ? 'ring-slate-400'  : 'ring-slate-200', icon: 'bg-slate-100 text-slate-600',   val: 'text-slate-900' },
+    amber:  { ring: active ? 'ring-amber-400'  : 'ring-slate-200', icon: 'bg-amber-100 text-amber-600',   val: 'text-amber-700' },
+    red:    { ring: active ? 'ring-red-400'    : 'ring-slate-200', icon: 'bg-red-100 text-red-600',       val: 'text-red-700' },
+    blue:   { ring: active ? 'ring-blue-400'   : 'ring-slate-200', icon: 'bg-blue-100 text-blue-600',     val: 'text-blue-700' },
+    orange: { ring: active ? 'ring-orange-400' : 'ring-slate-200', icon: 'bg-orange-100 text-orange-600', val: 'text-orange-700' },
+  }[color]
+
+  return (
+    <button onClick={onClick}
+      className={`rounded-2xl bg-white ring-1 ${colors.ring} shadow-sm p-4 text-left transition-all hover:shadow-md ${active ? 'ring-2' : ''}`}>
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${colors.icon}`}>{icon}</div>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+      </div>
+      <div className={`text-2xl font-black ${colors.val}`}>{value}</div>
+      <div className="text-[11px] text-slate-500 mt-0.5 truncate">{sub}</div>
+    </button>
+  )
+}
+
+// ── TaskSection ────────────────────────────────────────────────
+function TaskSection({ icon, title, count, colorScheme, amount, children }: {
+  icon: React.ReactNode; title: string; count: number
+  colorScheme: 'amber' | 'red' | 'blue' | 'orange'
+  amount?: number; children: React.ReactNode
 }) {
   const cfg = {
-    amber: { border: 'border-amber-200', bg: 'bg-amber-50',  text: 'text-amber-800', badge: 'bg-amber-200 text-amber-800' },
-    red:   { border: 'border-red-200',   bg: 'bg-red-50',    text: 'text-red-800',   badge: 'bg-red-200 text-red-800'     },
-  }[color]
+    amber:  { border: 'border-amber-200',  bg: 'bg-amber-50',   text: 'text-amber-800',  badge: 'bg-amber-200 text-amber-800',   icon: 'text-amber-600'  },
+    red:    { border: 'border-red-200',    bg: 'bg-red-50',     text: 'text-red-800',    badge: 'bg-red-200 text-red-800',       icon: 'text-red-600'    },
+    blue:   { border: 'border-blue-200',   bg: 'bg-blue-50',    text: 'text-blue-800',   badge: 'bg-blue-200 text-blue-800',     icon: 'text-blue-600'   },
+    orange: { border: 'border-orange-200', bg: 'bg-orange-50',  text: 'text-orange-800', badge: 'bg-orange-200 text-orange-800', icon: 'text-orange-600' },
+  }[colorScheme]
+
   return (
     <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
-      <div className={`flex items-center gap-2 px-5 py-3 ${cfg.bg} border-b ${cfg.border}`}>
-        <span>{icon}</span>
-        <span className={`text-sm font-bold ${cfg.text}`}>{title}</span>
-        <span className={`ml-1 rounded-full px-2 py-0.5 text-xs font-bold ${cfg.badge}`}>{count}</span>
+      <div className={`flex items-center justify-between px-5 py-3 ${cfg.bg} border-b ${cfg.border}`}>
+        <div className="flex items-center gap-2">
+          <span className={cfg.icon}>{icon}</span>
+          <span className={`text-sm font-bold ${cfg.text}`}>{title}</span>
+          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${cfg.badge}`}>{count}</span>
+        </div>
+        {amount != null && amount > 0 && (
+          <span className="text-xs font-semibold text-slate-500">{mad(amount)}</span>
+        )}
       </div>
       <div className="overflow-x-auto">{children}</div>
     </div>

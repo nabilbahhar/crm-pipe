@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, GitBranch, Download } from 'lucide-react'
+import { mad } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AccountRow = { id: string; name: string; sector: string|null; segment: string|null; region: string|null; created_at: string|null }
@@ -357,6 +358,18 @@ export default function AccountsPage() {
   async function exportExcel() {
     setExporting(true)
     try {
+      const totalWon = sorted.reduce((s,a) => s + (wonAmtMap[a.id]||0), 0)
+      const totalDeals = sorted.reduce((s,a) => s + (dealCounts[a.id]||0), 0)
+      const activeAccounts = sorted.filter(a => (dealCounts[a.id]||0) > 0).length
+
+      // Segment breakdown
+      const segMap = new Map<string, { count: number; won: number }>()
+      sorted.forEach(a => {
+        const seg = a.segment || 'Non défini'
+        const prev = segMap.get(seg) || { count: 0, won: 0 }
+        segMap.set(seg, { count: prev.count + 1, won: prev.won + (wonAmtMap[a.id]||0) })
+      })
+
       const spec = {
         filename: `comptes_${new Date().toISOString().slice(0,10)}.xlsx`,
         sheets: [{
@@ -368,8 +381,22 @@ export default function AccountsPage() {
             dealCounts[a.id]||0, wonAmtMap[a.id]||0,
             lastDealMap[a.id]||'—', (a.created_at||'').slice(0,10),
           ]),
-          totalsRow: ['TOTAL', `${sorted.length} comptes`, '', '', '', sorted.reduce((s,a)=>s+(wonAmtMap[a.id]||0),0), '', ''],
+          totalsRow: ['TOTAL', `${sorted.length} comptes`, '', '', totalDeals, totalWon, '', ''],
+          notes: `Comptes actifs (avec deals): ${activeAccounts} · CA Won total: ${mad(totalWon)}`,
         }],
+        summary: {
+          title: `Résumé Comptes · ${new Date().toLocaleDateString('fr-MA')}`,
+          kpis: [
+            { label: 'Total comptes', value: sorted.length, detail: `${activeAccounts} actifs (avec deals)` },
+            { label: 'CA Won total', value: totalWon, detail: `${totalDeals} deals au total` },
+            { label: 'Ticket moyen Won', value: activeAccounts > 0 ? Math.round(totalWon / activeAccounts) : 0, detail: 'CA Won / comptes actifs' },
+          ],
+          breakdownTitle: 'Répartition par segment',
+          breakdownHeaders: ['Segment', 'CA Won (MAD)', 'Nb comptes', '% du CA'],
+          breakdown: [...segMap.entries()].sort((a,b) => b[1].won - a[1].won).map(([seg, v]) => [
+            seg, v.won, v.count, totalWon > 0 ? `${Math.round(v.won / totalWon * 100)}%` : '0%',
+          ]),
+        },
       }
       const res = await fetch('/api/excel', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')

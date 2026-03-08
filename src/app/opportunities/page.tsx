@@ -12,7 +12,7 @@ import {
 import { logActivity } from '@/lib/logActivity'
 
 // ─── Import depuis utils ──────────────────────────────────────────────────────
-import { mad, fmt, normStatus, STAGE_CFG, BU_BADGE_CLS } from '@/lib/utils'
+import { mad, fmt, normStatus, STAGE_CFG, BU_BADGE_CLS, ownerName } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SupplyStatus = 'a_commander' | 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'
@@ -356,20 +356,53 @@ function DealsPageInner() {
     setExporting(true)
     try {
       const totalAmt = sorted.reduce((s,d) => s + (d.amount||0), 0)
-      const wonAmt = sorted.filter(d => normStatus(d)==='Won').reduce((s,d) => s+(d.amount||0), 0)
+      const wonDeals = sorted.filter(d => normStatus(d)==='Won')
+      const lostDeals = sorted.filter(d => normStatus(d)==='Lost')
+      const openDeals = sorted.filter(d => normStatus(d)==='Open')
+      const wonAmt = wonDeals.reduce((s,d) => s+(d.amount||0), 0)
+      const openAmt = openDeals.reduce((s,d) => s+(d.amount||0), 0)
+      const forecastAmt = openDeals.reduce((s,d) => s+(d.amount||0)*((d.prob||0)/100), 0)
+      const winRate = wonDeals.length + lostDeals.length > 0
+        ? Math.round(wonDeals.length / (wonDeals.length + lostDeals.length) * 100) : 0
+
+      // BU breakdown
+      const buMap = new Map<string, { count: number; amount: number }>()
+      sorted.forEach(d => {
+        const bu = mainBU(d)
+        const prev = buMap.get(bu) || { count: 0, amount: 0 }
+        buMap.set(bu, { count: prev.count + 1, amount: prev.amount + (d.amount || 0) })
+      })
+
       const spec = {
         filename: `deals_${new Date().toISOString().slice(0,10)}.xlsx`,
         sheets: [{
           name: 'Deals',
           title: `Export Deals · ${sorted.length} deals · ${new Date().toLocaleDateString('fr-MA')}`,
-          headers: ['Client','Deal','Étape','Statut','BU','Vendor','Montant (MAD)','Prob %','Closing','Créé le'],
+          headers: ['Client','Deal','Étape','Statut','BU','Vendor','Montant (MAD)','Prob %','Closing','Owner','Next Step','Créé le'],
           rows: sorted.map(d => [
             d.accounts?.name || '—', d.title || '—', d.stage || 'Lead', normStatus(d),
             mainBU(d), d.vendor || '—', d.amount || 0, d.prob || 0,
-            d.booking_month || '—', (d.created_at || '').slice(0, 10),
+            d.booking_month || '—', ownerName(d.owner_email),
+            d.next_step || '—', (d.created_at || '').slice(0, 10),
           ]),
-          totalsRow: ['TOTAL', `${sorted.length} deals`, '', '', '', '', totalAmt, '', '', `Won: ${mad(wonAmt)}`],
+          totalsRow: ['TOTAL', `${sorted.length} deals`, '', '', '', '', totalAmt, '', '', '', '', ''],
+          notes: `Won: ${mad(wonAmt)} · Open: ${mad(openAmt)} · Forecast: ${mad(forecastAmt)} · Win Rate: ${winRate}%`,
         }],
+        summary: {
+          title: `Résumé Deals · ${new Date().toLocaleDateString('fr-MA')}`,
+          kpis: [
+            { label: 'Total Deals', value: sorted.length, detail: `Open: ${openDeals.length} · Won: ${wonDeals.length} · Lost: ${lostDeals.length}` },
+            { label: 'Pipeline (Open)', value: openAmt, detail: `${openDeals.length} deals en cours` },
+            { label: 'Forecast pondéré', value: Math.round(forecastAmt), detail: 'Montant × probabilité' },
+            { label: 'Won', value: wonAmt, detail: `${wonDeals.length} deals clôturés` },
+            { label: 'Win Rate', value: `${winRate}%`, detail: `${wonDeals.length} Won / ${wonDeals.length + lostDeals.length} clôturés` },
+          ],
+          breakdownTitle: 'Répartition par BU',
+          breakdownHeaders: ['BU', 'Montant (MAD)', 'Nb deals', '% du total'],
+          breakdown: [...buMap.entries()].sort((a,b) => b[1].amount - a[1].amount).map(([bu, v]) => [
+            bu, v.amount, v.count, totalAmt > 0 ? `${Math.round(v.amount / totalAmt * 100)}%` : '0%',
+          ]),
+        },
       }
       const res = await fetch('/api/excel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(spec) })
       if (!res.ok) throw new Error('Export échoué')
