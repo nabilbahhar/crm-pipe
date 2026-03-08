@@ -318,7 +318,7 @@ export default function TasksPage() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
-      <div className="mx-auto max-w-5xl px-4 py-6 space-y-5">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
         {/* Header */}
         <div className="flex items-center justify-between">

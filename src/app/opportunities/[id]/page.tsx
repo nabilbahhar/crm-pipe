@@ -167,7 +167,7 @@ function EmailModal({ deal, info, onClose }: { deal: Opp; info: PurchaseInfo; on
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center p-0 sm:p-4">
+    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center p-0 sm:p-4">
       <div className="flex w-full flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden" style={{ maxHeight: '92vh', maxWidth: 800 }}>
         <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 shrink-0">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-lg shrink-0">📧</div>

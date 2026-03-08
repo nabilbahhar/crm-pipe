@@ -64,7 +64,7 @@ function SupplierModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -244,7 +244,7 @@ export default function SuppliersPage() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
-      <div className="mx-auto max-w-6xl px-4 py-6 space-y-5">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
         {/* ── Header ── */}
         <div className="flex items-center justify-between">

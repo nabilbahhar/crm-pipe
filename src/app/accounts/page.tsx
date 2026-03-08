@@ -57,7 +57,7 @@ function Btn({ children, variant = 'ghost', size = 'md', ...props }: React.Butto
 function Modal({ open, title, onClose, children }: { open: boolean; title: string; onClose: () => void; children: React.ReactNode }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="w-full max-w-4xl max-h-[88vh] flex flex-col rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200">
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div className="text-base font-bold text-slate-900">{title}</div>
@@ -383,7 +383,7 @@ export default function AccountsPage() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc]">
-      <div className="mx-auto max-w-7xl px-4 py-6 space-y-5">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
         {/* ── HEADER ── */}
         <div className="flex flex-wrap items-center justify-between gap-3">

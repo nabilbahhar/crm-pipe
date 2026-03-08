@@ -120,9 +120,9 @@ export async function POST(req: NextRequest) {
         col.width = Math.min(Math.max(maxLen + 2, 10), 45)
       })
 
-      // Freeze header
-      const freezeRow = sheet.title ? rowOffset + 2 : 2
-      ws.views = [{ state: 'frozen', ySplit: freezeRow, showGridLines: false }]
+      // Freeze panes: title(1) + subtitle(2) + sep(3) + header(4) = freeze after row 4
+      const headerRowNum2 = sheet.title ? rowOffset + 1 : 1
+      ws.views = [{ state: 'frozen', ySplit: headerRowNum2, showGridLines: false }]
 
       // Auto filter on header row
       const headerRowNum = sheet.title ? 4 : 1

@@ -164,7 +164,7 @@ export default function KPIPage() {
   // ── SALIM VIEW ──
   if (profile?.view==='quarterly') return (
     <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-4">
         <Header/>
         {err&&<div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>}
 
@@ -249,7 +249,7 @@ export default function KPIPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-7xl px-4 py-6 space-y-4">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-4">
         <Header/>
         {err&&<div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>}
 

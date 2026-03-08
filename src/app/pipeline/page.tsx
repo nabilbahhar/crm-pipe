@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { logActivity } from '@/lib/logActivity'
-import { mad, fmt, STAGE_CFG as STAGE_STYLE, BU_BADGE_CLS as BU_COLOR } from '@/lib/utils'
+import { mad, fmt, STAGE_CFG as STAGE_STYLE, BU_BADGE_CLS as BU_COLOR, ownerName } from '@/lib/utils'
 import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2, X, AlertTriangle, Download } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -370,7 +370,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
           rows: displayRows.map(d => [
             d.accounts?.name||'—', d.title||'—', d.stage||'Lead', d.bu||'—',
             d.vendor||'—', d.amount||0, d.prob||0,
-            d.booking_month||'—', d.owner_email||'—',
+            d.booking_month||'—', ownerName(d.owner_email),
           ]),
           totalsRow: ['TOTAL', `${displayRows.length} deals`, '', '', '', totalAmt, '', '', ''],
         }],

@@ -871,7 +871,7 @@ export default function ProspectionPage() {
 
       {/* ── MODAL CREATE/EDIT ────────────────────────────────────────────── */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
+        <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
           style={{ paddingTop: 'env(safe-area-inset-top)' }}
           onClick={e => { if (e.target === e.currentTarget) { setModalOpen(false); setEditId(null) } }}>
           <div className="flex w-full max-w-2xl flex-col rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl"
@@ -1035,7 +1035,7 @@ export default function ProspectionPage() {
 
       {/* ── CONVERT MODAL ────────────────────────────────────────────────── */}
       {convertP && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
             <div className="border-b px-5 py-4">
               <div className="text-sm font-semibold text-slate-900">Convertir en compte CRM</div>

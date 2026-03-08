@@ -698,7 +698,7 @@ export default function Dashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#f8fafc]">
-      <div className="mx-auto max-w-screen-2xl px-4 py-6 space-y-6">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-6">
 
         {/* ══ HEADER ══ */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

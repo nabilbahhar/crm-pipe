@@ -183,3 +183,13 @@ export const SUPPLY_STATUS_CFG: Record<SupplyStatus, {
 export const SUPPLY_STATUS_ORDER: SupplyStatus[] = [
   'a_commander', 'place', 'commande', 'en_stock', 'livre', 'facture',
 ]
+
+// ─── Team name mapping ────────────────────────────────────────────────────────
+const TEAM_NAMES: Record<string, string> = {
+  'nabil.imdh@gmail.com': 'Nabil Bahhar',
+  's.chitachny@compucom.ma': 'Salim Chitachny',
+}
+export function ownerName(email: string | null | undefined): string {
+  if (!email) return '—'
+  return TEAM_NAMES[email] || email.split('@')[0]
+}
