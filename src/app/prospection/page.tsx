@@ -1001,25 +1001,26 @@ export default function ProspectionPage() {
 
               {/* Duplicate warning */}
               {dupWarning && (
-                <div className="flex flex-col gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="flex flex-col gap-2 rounded-2xl border border-red-200 bg-red-50 p-4">
                   <div className="flex items-start gap-2">
-                    <span className="text-base">⚠️</span>
-                    <div className="text-sm font-semibold text-amber-900">
-                      <strong>{dupWarning.company_name}</strong> existe déjà
-                      <span className="ml-1.5 font-normal text-amber-700">— statut : {dupWarning.status}</span>
-                      {dupWarning.contact_name && <span className="ml-1.5 font-normal text-amber-700">· {dupWarning.contact_name}</span>}
+                    <span className="text-base">🚫</span>
+                    <div className="text-sm font-semibold text-red-900">
+                      <strong>{dupWarning.company_name}</strong> existe déjà dans les prospects
+                      <span className="ml-1.5 font-normal text-red-700">— statut : {dupWarning.status}</span>
+                      {dupWarning.contact_name && <span className="ml-1.5 font-normal text-red-700">· Contact : {dupWarning.contact_name}</span>}
+                      <p className="mt-1 text-xs font-normal text-red-600">Impossible de créer un doublon. Modifiez le prospect existant pour mettre à jour les infos.</p>
                     </div>
                   </div>
                   <div className="flex gap-2 pl-7">
                     <button type="button"
                       onClick={() => { setModalOpen(false); setTimeout(() => openEdit(dupWarning), 50) }}
-                      className="rounded-xl border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-700 hover:bg-amber-100 transition-colors">
-                      ✏️ Modifier ce prospect
+                      className="rounded-xl border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors">
+                      ✏️ Modifier le prospect existant
                     </button>
                     <button type="button"
                       onClick={() => { setDupWarning(null); setFormErr(null) }}
                       className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-50 transition-colors">
-                      Créer quand même
+                      Changer le nom
                     </button>
                   </div>
                 </div>
