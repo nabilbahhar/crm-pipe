@@ -5,11 +5,15 @@ export const runtime = 'nodejs'
 
 /**
  * POST /api/upload
- * Server-side file upload to Supabase Storage using service role key (bypasses RLS).
+ * Server-side file upload to Supabase Storage + optional DB record insert.
+ * Uses service role key (bypasses RLS).
  * Expects multipart/form-data with fields:
  *   - file: the file blob
  *   - bucket: storage bucket name (default: 'deal-files')
  *   - path: destination path in the bucket
+ *   - opportunity_id (optional): if provided, also inserts a deal_files row
+ *   - file_type (optional): bc_client, devis_compucom, autre
+ *   - uploaded_by (optional): user email
  */
 export async function POST(req: NextRequest) {
   try {
@@ -17,6 +21,11 @@ export async function POST(req: NextRequest) {
     const file   = formData.get('file') as File | null
     const bucket = (formData.get('bucket') as string) || 'deal-files'
     const path   = formData.get('path') as string
+
+    // Optional DB record fields
+    const opportunityId = formData.get('opportunity_id') as string | null
+    const fileType      = formData.get('file_type') as string | null
+    const uploadedBy    = formData.get('uploaded_by') as string | null
 
     if (!file || !path) {
       return NextResponse.json({ error: 'Missing file or path' }, { status: 400 })
@@ -39,7 +48,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ path: data.path })
+    // If opportunity_id provided, also insert into deal_files table (bypasses RLS)
+    let dbRecord = null
+    if (opportunityId && fileType) {
+      const { data: row, error: dbErr } = await supabaseServer
+        .from('deal_files')
+        .insert({
+          opportunity_id: opportunityId,
+          file_type: fileType,
+          file_name: file.name,
+          file_url: data.path,
+          uploaded_by: uploadedBy || 'unknown',
+        })
+        .select('id, file_type, file_name, file_url')
+        .single()
+
+      if (dbErr) {
+        console.error('[upload] DB insert error:', dbErr)
+        return NextResponse.json({ error: dbErr.message, path: data.path }, { status: 500 })
+      }
+      dbRecord = row
+    }
+
+    return NextResponse.json({ path: data.path, dbRecord })
   } catch (e: any) {
     console.error('[upload] Error:', e)
     return NextResponse.json({ error: e?.message || 'Upload failed' }, { status: 500 })
@@ -48,19 +79,21 @@ export async function POST(req: NextRequest) {
 
 /**
  * DELETE /api/upload
- * Server-side file deletion from Supabase Storage.
- * Expects JSON body: { bucket, paths: string[] }
+ * Server-side file deletion from Supabase Storage + optional DB record deletion.
+ * Expects JSON body: { bucket, paths: string[], fileIds?: string[] }
  */
 export async function DELETE(req: NextRequest) {
   try {
     const body = await req.json()
-    const bucket = body.bucket || 'deal-files'
-    const paths  = body.paths as string[]
+    const bucket  = body.bucket || 'deal-files'
+    const paths   = body.paths as string[]
+    const fileIds = body.fileIds as string[] | undefined
 
     if (!paths || paths.length === 0) {
       return NextResponse.json({ error: 'Missing paths' }, { status: 400 })
     }
 
+    // Delete from storage
     const { error } = await supabaseServer.storage
       .from(bucket)
       .remove(paths)
@@ -68,6 +101,11 @@ export async function DELETE(req: NextRequest) {
     if (error) {
       console.error('[upload] Delete error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Delete DB records if fileIds provided
+    if (fileIds && fileIds.length > 0) {
+      await supabaseServer.from('deal_files').delete().in('id', fileIds)
     }
 
     return NextResponse.json({ ok: true })

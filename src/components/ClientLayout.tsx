@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import NavBar from './NavBar'
+import PipouChatbot from './PipouChatbot'
 
 const PUBLIC_ROUTES = ['/login', '/reset-password']
 
@@ -71,11 +72,12 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   // Non authentifié sur route protégée → rien (redirect déjà déclenché)
   if (!authenticated) return null
 
-  // Authentifié → navbar + contenu
+  // Authentifié → navbar + contenu + Pipou chatbot global
   return (
     <>
       <NavBar />
       {children}
+      <PipouChatbot />
     </>
   )
 }

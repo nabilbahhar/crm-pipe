@@ -2,12 +2,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
-import { mad, fmt } from '@/lib/utils'
+import { mad, fmt, getAnnualTarget } from '@/lib/utils'
 import {
   CheckCircle2, RefreshCw, ChevronRight, Package, Phone,
   Search, ArrowUp, ArrowDown, ChevronsUpDown, X, Download,
   Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
-  FileText, AlertTriangle, TrendingUp, Users,
+  FileText, AlertTriangle, TrendingUp, Users, Target, Zap, Sun,
 } from 'lucide-react'
 
 type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard'
@@ -72,14 +72,23 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState<'Tous' | FicheStatus>('Tous')
   const [sortKey, setSortKey]           = useState<SortKey>('priority')
   const [sortDir, setSortDir]           = useState<'asc' | 'desc'>('desc')
+  const [wonYTD, setWonYTD]             = useState(0)
+  const [openPipeline, setOpenPipeline] = useState(0)
 
   useEffect(() => { document.title = 'Tâches · CRM-PIPE'; load() }, [])
 
   async function load() {
     setLoading(true); setErr(null)
     try {
-      const [a, b, c, d] = await Promise.all([loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine()])
+      const year = new Date().getFullYear()
+      const [a, b, c, d, wonRes, openRes] = await Promise.all([
+        loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(),
+        supabase.from('opportunities').select('amount').eq('status', 'Won').gte('booking_month', `${year}-01`),
+        supabase.from('opportunities').select('amount').eq('status', 'Open'),
+      ])
       setTasks([...a, ...b, ...c, ...d])
+      setWonYTD((wonRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
+      setOpenPipeline((openRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
     } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
     finally { setLoading(false) }
   }
@@ -395,6 +404,86 @@ export default function TasksPage() {
             onClick={() => setTypeFilter(typeFilter === 'closing_retard' ? 'Tous' : 'closing_retard')}
           />
         </div>
+
+        {/* ── PLAN DU JOUR ── */}
+        {!loading && tasks.length > 0 && (() => {
+          const annualTarget = getAnnualTarget()
+          const now = new Date()
+          const dayOfYear = Math.floor((now.getTime() - new Date(now.getFullYear(), 0, 0).getTime()) / 86400000)
+          const pctYear = dayOfYear / 365
+          const expectedWon = annualTarget * pctYear
+          const gap = expectedWon - wonYTD
+          const todayRelances = allSemaine.filter(t => t.daysLate === 0).length
+          const urgentCount = tasks.filter(t => t.priority === 'high').length
+          const monthlyTarget = annualTarget / 12
+          const monthProgress = wonYTD > 0 ? Math.min(100, Math.round((wonYTD / annualTarget) * 100)) : 0
+
+          // Smart recommendations
+          const tips: string[] = []
+          if (allRelances.length > 5) tips.push(`🔴 ${allRelances.length} relances en retard — priorise les plus anciennes`)
+          if (allAchats.length > 0) tips.push(`📋 ${allAchats.length} fiches achat à compléter (${fmt(totalAchatAmt)} MAD)`)
+          if (allClosing.length > 3) tips.push(`⏰ ${allClosing.length} deals avec closing dépassé — requalifie ou relance`)
+          if (gap > 0) tips.push(`📈 Retard vs objectif annuel : ${fmt(gap)} MAD — accélère le closing`)
+          if (gap <= 0) tips.push(`🏆 En avance sur l'objectif annuel de ${fmt(Math.abs(gap))} MAD — continue !`)
+          if (todayRelances > 0) tips.push(`📞 ${todayRelances} prospect${todayRelances > 1 ? 's' : ''} à appeler aujourd'hui`)
+          if (openPipeline > monthlyTarget * 3) tips.push(`💰 Pipeline solide (${fmt(openPipeline)} MAD) — focus sur le taux de conversion`)
+
+          return (
+            <div className="rounded-2xl border border-indigo-100 bg-gradient-to-br from-indigo-50/80 to-violet-50/50 p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <Sun className="h-5 w-5 text-amber-500" />
+                <span className="text-sm font-black text-slate-900">Plan du jour</span>
+                <span className="text-xs text-slate-500">· {now.toLocaleDateString('fr-MA', { weekday: 'long', day: 'numeric', month: 'long' })}</span>
+              </div>
+
+              {/* Target progress */}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 mb-4">
+                <div className="rounded-xl bg-white/80 border border-slate-100 p-3">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Target className="h-3.5 w-3.5 text-indigo-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Objectif annuel</span>
+                  </div>
+                  <div className="text-lg font-black text-slate-900 tabular-nums">{fmt(wonYTD)} <span className="text-xs font-medium text-slate-400">/ {fmt(annualTarget)} MAD</span></div>
+                  <div className="mt-1.5 h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${monthProgress >= 80 ? 'bg-emerald-500' : monthProgress >= 50 ? 'bg-amber-400' : 'bg-red-400'}`} style={{ width: `${monthProgress}%` }} />
+                  </div>
+                  <div className="mt-1 text-[10px] text-slate-400">{monthProgress}% atteint · Attendu : {Math.round(pctYear * 100)}%</div>
+                </div>
+                <div className="rounded-xl bg-white/80 border border-slate-100 p-3">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Zap className="h-3.5 w-3.5 text-amber-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Actions du jour</span>
+                  </div>
+                  <div className="flex items-baseline gap-3">
+                    <div>
+                      <span className="text-2xl font-black text-slate-900">{todayRelances + urgentCount}</span>
+                      <span className="text-xs text-slate-400 ml-1">actions</span>
+                    </div>
+                  </div>
+                  <div className="mt-1 text-[10px] text-slate-500">{todayRelances} appels · {urgentCount} urgentes</div>
+                </div>
+                <div className="rounded-xl bg-white/80 border border-slate-100 p-3">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Pipeline Open</span>
+                  </div>
+                  <div className="text-lg font-black text-slate-900 tabular-nums">{fmt(openPipeline)} <span className="text-xs font-medium text-slate-400">MAD</span></div>
+                  <div className="mt-1 text-[10px] text-slate-500">{tasks.length} tâches en attente</div>
+                </div>
+              </div>
+
+              {/* Smart tips */}
+              {tips.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-400">Recommandations</div>
+                  {tips.slice(0, 4).map((tip, i) => (
+                    <div key={i} className="text-xs text-slate-600 leading-relaxed">{tip}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ── TOOLBAR ── */}
         <div className="flex flex-wrap items-center gap-2">

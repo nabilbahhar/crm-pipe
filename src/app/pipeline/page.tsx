@@ -1,7 +1,7 @@
 'use client'
 import DealFormModal from '@/components/DealFormModal'
 
-import { useEffect, useMemo, useState, Suspense } from 'react'
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
@@ -69,22 +69,24 @@ function StageBadge({ stage }: { stage: string }) {
 
 function BuBadge({ bu, buLines }: { bu: string | null; buLines?: any }) {
   if (!bu) return <span className="text-slate-400">—</span>
-  const cls = BU_COLOR[bu] || 'bg-slate-100 text-slate-600'
   if (bu === 'MULTI' && Array.isArray(buLines) && buLines.length > 0) {
+    const cartes = [...new Set(buLines.map((l: any) => l.card || l.bu).filter(Boolean))]
+    const label = cartes.join(' + ')
     const tip = buLines.map((l: any) => {
       const amt = Number(l.amount || 0)
       const k = amt >= 1_000_000 ? `${(amt/1_000_000).toFixed(1)}M` : amt >= 1000 ? `${Math.round(amt/1000)}K` : String(Math.round(amt))
-      return `${l.bu || '?'} ${k}`
-    }).join(' · ')
+      return `${l.card || l.bu || '?'} — ${k} MAD`
+    }).join('\n')
     return (
-      <span className={`group relative inline-flex rounded-md px-2 py-0.5 text-xs font-semibold cursor-default ${cls}`}>
-        MULTI
-        <span className="pointer-events-none absolute bottom-full left-0 mb-1 z-50 hidden group-hover:block w-max max-w-[220px] rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-medium text-white shadow-lg whitespace-pre-wrap">
+      <span className="group relative inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold bg-gradient-to-r from-indigo-50 to-violet-50 text-indigo-700 cursor-default">
+        {label}
+        <span className="pointer-events-none absolute bottom-full left-0 mb-1 z-50 hidden group-hover:block w-max max-w-[260px] rounded-lg bg-slate-900 px-2.5 py-1.5 text-[11px] font-medium text-white shadow-lg whitespace-pre-wrap">
           {tip}
         </span>
       </span>
     )
   }
+  const cls = BU_COLOR[bu] || 'bg-slate-100 text-slate-600'
   return <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-semibold ${cls}`}>{bu}</span>
 }
 
@@ -186,27 +188,40 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
     toast(`${deal.title} → ${next}`); load()
   }
 
-  async function deleteDeal(deal: DealRow) {
-    if (!confirm(`Supprimer "${deal.title}" ? Cette action est irréversible.`)) return
-    // Cascade: supprimer les données liées avant l'opportunité
-    const { data: piRows } = await supabase.from('purchase_info').select('id').eq('opportunity_id', deal.id)
-    const piIds = (piRows || []).map((r: any) => r.id)
-    await Promise.all([
-      supabase.from('deal_files').delete().eq('opportunity_id', deal.id),
-      supabase.from('supply_orders').delete().eq('opportunity_id', deal.id),
-      ...(piIds.length ? [supabase.from('purchase_lines').delete().in('purchase_info_id', piIds)] : []),
-    ])
-    if (piIds.length) await supabase.from('purchase_info').delete().eq('opportunity_id', deal.id)
-    const { error } = await supabase.from('opportunities').delete().eq('id', deal.id)
-    if (error) { setErr(error.message); return }
-    await logActivity({
-      action_type: 'delete',
-      entity_type: 'deal',
-      entity_id: deal.id,
-      entity_name: deal.title,
-      detail: `${deal.stage} · ${deal.bu || ''} · ${deal.amount ? deal.amount + ' MAD' : ''}`.trim(),
-    })
-    toast(`${deal.title} supprimé.`); load()
+  // Undo delete state
+  const [undoToast, setUndoToast] = useState<{ deal: DealRow; timer: ReturnType<typeof setTimeout> } | null>(null)
+  const undoCancelled = useRef(false)
+
+  function deleteDeal(deal: DealRow) {
+    if (!confirm(`Supprimer "${deal.title}" ? Tu pourras annuler pendant 8 secondes.`)) return
+    setRows(prev => prev.filter(r => r.id !== deal.id))
+    undoCancelled.current = false
+    const timer = setTimeout(async () => {
+      if (undoCancelled.current) return
+      // Cascade: supprimer les données liées avant l'opportunité
+      const { data: piRows } = await supabase.from('purchase_info').select('id').eq('opportunity_id', deal.id)
+      const piIds = (piRows || []).map((r: any) => r.id)
+      await Promise.all([
+        supabase.from('deal_files').delete().eq('opportunity_id', deal.id),
+        supabase.from('supply_orders').delete().eq('opportunity_id', deal.id),
+        ...(piIds.length ? [supabase.from('purchase_lines').delete().in('purchase_info_id', piIds)] : []),
+      ])
+      if (piIds.length) await supabase.from('purchase_info').delete().eq('opportunity_id', deal.id)
+      const { error } = await supabase.from('opportunities').delete().eq('id', deal.id)
+      if (error) { setRows(prev => [deal, ...prev]); setErr(error.message); setUndoToast(null); return }
+      await logActivity({ action_type: 'delete', entity_type: 'deal', entity_id: deal.id, entity_name: deal.title,
+        detail: `${deal.stage} · ${deal.bu || ''} · ${deal.amount ? deal.amount + ' MAD' : ''}`.trim() })
+      setUndoToast(null)
+    }, 8000)
+    setUndoToast({ deal, timer })
+  }
+
+  function undoDelete() {
+    if (!undoToast) return
+    undoCancelled.current = true
+    clearTimeout(undoToast.timer)
+    setRows(prev => [undoToast.deal, ...prev])
+    setUndoToast(null)
   }
 
   async function handleDrop(targetStage: string) {
@@ -284,7 +299,8 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
 
   const vendorOptions = useMemo(() => {
     const vendors = [...new Set(rows.map(r => r.vendor||'').filter(v => v && v !== 'MULTI'))].sort()
-    return ['Tous', ...vendors, 'MULTI']
+    const hasMulti = rows.some(r => r.multi_bu)
+    return ['Tous', ...vendors, ...(hasMulti ? ['Multi-BU'] : [])]
   }, [rows])
 
   const ownerOptions = useMemo(() => {
@@ -309,7 +325,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
     // Account filter
     if (accountFilter!=='Tous') r = r.filter(x => (x.accounts?.name||'')=== accountFilter)
     // Vendor filter
-    if (vendorFilter!=='Tous') r = r.filter(x => vendorFilter==='MULTI' ? (x.multi_bu===true) : (x.vendor||'')=== vendorFilter)
+    if (vendorFilter!=='Tous') r = r.filter(x => vendorFilter==='Multi-BU' ? (x.multi_bu===true) : (x.vendor||'')=== vendorFilter)
     // Owner filter
     if (ownerFilter!=='Tous') r = r.filter(x => (x.owner_email||'') === ownerFilter)
     // Period filter on booking_month
@@ -922,6 +938,22 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
         />
       )}
 
+      {/* ── Undo toast ── */}
+      {undoToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 rounded-xl bg-slate-900 px-4 py-3 shadow-2xl">
+          <span className="text-sm text-white">
+            <span className="font-bold">{undoToast.deal.title}</span> supprimé
+          </span>
+          <button onClick={undoDelete}
+            className="rounded-lg bg-amber-500 px-3 py-1 text-xs font-bold text-white hover:bg-amber-400 transition-colors">
+            Annuler
+          </button>
+          <div className="h-1 w-20 rounded-full bg-white/20 overflow-hidden">
+            <div className="h-full bg-amber-400 rounded-full" style={{ animation: 'shrink 8s linear forwards' }} />
+          </div>
+        </div>
+      )}
+      <style>{`@keyframes shrink { from { width: 100% } to { width: 0% } }`}</style>
     </div>
   )
 }

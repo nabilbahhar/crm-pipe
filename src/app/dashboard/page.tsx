@@ -14,7 +14,6 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line,
   LabelList, FunnelChart, Funnel, ComposedChart, Area,
 } from 'recharts'
-import CRMChatbot from './CRMChatbot'
 import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget, ownerName } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -235,7 +234,6 @@ export default function Dashboard() {
   const [purchaseLines, setPurchaseLines] = useState<any[]>([])
   const [supplyOrders,  setSupplyOrders]  = useState<any[]>([])
   const [prospects, setProspects] = useState<any[]>([])
-  const [activities, setActivities] = useState<any[]>([])
 
   // ── Filtres avancés ──────────────────────────────────────────────────────
   const [showFilters, setShowFilters]   = useState(false)
@@ -290,18 +288,17 @@ export default function Dashboard() {
   const load = async () => {
     setLoading(true); setErr(null)
     try {
-      const [{ data: opps, error: e1 }, { data: accs, error: e2 }, { data: pLines }, { data: sOrders }, { data: prosp }, { data: acts }] = await Promise.all([
+      const [{ data: opps, error: e1 }, { data: accs, error: e2 }, { data: pLines }, { data: sOrders }, { data: prosp }] = await Promise.all([
         supabase.from('opportunities').select('*, accounts(name,sector,segment,region)').order('created_at',{ascending:false}).limit(5000),
         supabase.from('accounts').select('id,name,sector,segment,region'),
         supabase.from('purchase_lines').select('*, purchase_info(opportunity_id)'),
         supabase.from('supply_orders').select('id, opportunity_id, status, placed_at, updated_at'),
         supabase.from('prospects').select('id,status,heat,converted_at,created_at').is('converted_at', null),
-        supabase.from('activity_log').select('id,user_email,action_type,entity_type,entity_id,entity_name,detail,created_at').order('created_at',{ascending:false}).limit(8),
       ])
       if (e1) throw e1; if (e2) throw e2
       setRows(opps||[]); setAccounts(accs||[])
       setPurchaseLines(pLines||[]); setSupplyOrders(sOrders||[])
-      setProspects(prosp||[]); setActivities(acts||[])
+      setProspects(prosp||[])
     } catch(e:any) { setErr(e?.message||'Erreur') }
     finally { setLoading(false) }
   }
@@ -1055,6 +1052,13 @@ export default function Dashboard() {
           </Link>
         )}
 
+        {/* ─── SECTION: Supply & Opérations ─── */}
+        <div className="flex items-center gap-3 mt-2">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Supply & Opérations</span>
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
+
         {/* ══ SUPPLY STATUTS + MARGE PAR BU ══ */}
         {(supplyOrders.length > 0 || margeStats.buArr.length > 0) && (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -1150,6 +1154,13 @@ export default function Dashboard() {
             )}
           </div>
         )}
+
+        {/* ─── SECTION: Pipeline & Performance ─── */}
+        <div className="flex items-center gap-3 mt-2">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pipeline & Performance</span>
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
 
         {/* ══ ROW : 3 donuts / summary ══ */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -1347,6 +1358,13 @@ export default function Dashboard() {
           </Panel>
         </div>
 
+        {/* ─── SECTION: Comptes & Marché ─── */}
+        <div className="flex items-center gap-3 mt-2">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Comptes & Marché</span>
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
+
         {/* ══ ROW : Top Clients + Top Vendors ══ */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           <Panel title="Top 5 Clients" sub={`${scope==='open_only'?'Open':'Open+Won'} · CSG vs CIRS`}>
@@ -1515,6 +1533,13 @@ export default function Dashboard() {
           </Panel>
         </div>
 
+        {/* ─── SECTION: Alertes & Qualité ─── */}
+        <div className="flex items-center gap-3 mt-2">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Alertes & Qualité</span>
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
+
         {/* ══ RETARDS + STALE ══ */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {late.length>0&&(
@@ -1578,47 +1603,6 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* ══ ACTIVITÉ RÉCENTE ══ */}
-        {activities.length > 0 && (
-          <Panel title="🕘 Activité récente" sub="Dernières actions de l'équipe"
-            action={<Link href="/activity" className="text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">Voir tout →</Link>}>
-            <div className="divide-y divide-slate-100 -mx-5">
-              {activities.map(a => {
-                const actionColors: Record<string,string> = { create:'#10b981', update:'#3b82f6', delete:'#ef4444', stage:'#f59e0b', won:'#16a34a', lost:'#dc2626', convert:'#8b5cf6' }
-                const actionLabels: Record<string,string> = { create:'Ajouté', update:'Modifié', delete:'Supprimé', stage:'Stage →', won:'Won ✓', lost:'Lost ✗', convert:'Converti' }
-                const entityIcons: Record<string,string> = { deal:'💼', account:'🏢', prospect:'🎯', contact:'👤', card:'🃏' }
-                const userName = (e: string) => ownerName(e)
-                const ago = (iso: string) => {
-                  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
-                  if (s < 60) return 'à l\'instant'
-                  if (s < 3600) return `il y a ${Math.floor(s/60)}min`
-                  if (s < 86400) return `il y a ${Math.floor(s/3600)}h`
-                  return `il y a ${Math.floor(s/86400)}j`
-                }
-                const href = a.entity_type === 'deal' && a.entity_id ? `/opportunities/${a.entity_id}` :
-                             a.entity_type === 'account' && a.entity_id ? `/accounts` :
-                             a.entity_type === 'prospect' ? `/prospection` : null
-                const inner = (
-                  <div className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 transition-colors">
-                    <span className="text-lg shrink-0">{entityIcons[a.entity_type] || '📝'}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-slate-700">{userName(a.user_email)}</span>
-                        <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold text-white" style={{background: actionColors[a.action_type] || '#64748b'}}>
-                          {actionLabels[a.action_type] || a.action_type}
-                        </span>
-                        <span className="text-xs text-slate-600 font-medium truncate max-w-[200px]">{a.entity_name}</span>
-                      </div>
-                      {a.detail && <div className="text-[11px] text-slate-400 mt-0.5 truncate">{a.detail}</div>}
-                    </div>
-                    <span className="text-[10px] text-slate-400 font-medium shrink-0 whitespace-nowrap">{ago(a.created_at)}</span>
-                  </div>
-                )
-                return href ? <Link key={a.id} href={href} className="block">{inner}</Link> : <div key={a.id}>{inner}</div>
-              })}
-            </div>
-          </Panel>
-        )}
 
         {/* ══ LISTE COMPLÈTE DEALS ══ */}
         <Panel title="📋 Tous les deals — période" sub={`${periodLabel} · ${sortedDeals.length} deals · Clic sur en-tête pour trier`}>
@@ -1692,8 +1676,6 @@ export default function Dashboard() {
 
       </div>
 
-      {/* ══ AI CHATBOT ══ */}
-      <CRMChatbot deals={deals} accounts={accounts} periodLabel={periodLabel} />
 
     </div>
   )

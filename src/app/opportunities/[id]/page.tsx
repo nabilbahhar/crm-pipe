@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { madFull, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, ownerName } from '@/lib/utils'
+import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, ownerName } from '@/lib/utils'
 import {
   ArrowLeft, Package, Mail, Edit2, Loader2, X,
   Copy, Check, ExternalLink, FileText, Building2,
@@ -21,7 +21,7 @@ type Opp = {
   closing_date?: string; booking_month?: string
   created_at?: string; updated_at?: string
   owner_email?: string; notes?: string; description?: string
-  multi_bu?: boolean; forecast?: string
+  multi_bu?: boolean; forecast?: string; bu_lines?: any[]
   accounts?: { id?: string; name?: string; sector?: string; segment?: string; region?: string } | null
 }
 type PurchaseLine = {
@@ -48,8 +48,6 @@ type Activity = {
 }
 
 // ─── Formatters ───────────────────────────────────────────────
-// mad (as madFull), pct, fmtDate, fmtDateTime imported from @/lib/utils
-const mad = madFull
 
 /** booking_month est le champ canonique. Fallbacks pour données legacy. */
 const closingDate = (o: Opp) =>
@@ -127,7 +125,7 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo): string {
   <tr><td style="background:linear-gradient(135deg,#0f172a,#1e3a5f);border-radius:16px 16px 0 0;padding:24px 28px">
     <div style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Commande Supply Chain · ${today}</div>
     <div style="color:#fff;font-size:20px;font-weight:900;line-height:1.2">📦 ${deal.title}</div>
-    <div style="color:#cbd5e1;font-size:13px;margin-top:6px">🏢 <strong style="color:#e2e8f0">${client}</strong>${deal.po_number?` · PO <strong style="color:#e2e8f0">${deal.po_number}</strong>`:''}${deal.bu?` · ${deal.bu}`:''}</div>
+    <div style="color:#cbd5e1;font-size:13px;margin-top:6px">🏢 <strong style="color:#e2e8f0">${client}</strong>${deal.po_number?` · PO <strong style="color:#e2e8f0">${deal.po_number}</strong>`:''}${deal.multi_bu && Array.isArray(deal.bu_lines) && deal.bu_lines.length > 0 ? ` · ${[...new Set(deal.bu_lines.map((l: any) => l.card || l.bu).filter(Boolean))].join(' + ')}` : deal.bu ? ` · ${deal.bu}` : ''}</div>
   </td></tr>
   <tr><td style="background:#fff;padding:24px 28px">
     <p style="margin:0 0 20px;color:#475569;font-size:14px;line-height:1.7">Bonjour,<br><br>Merci de traiter la commande ci-dessous pour le client <strong>${client}</strong>. Merci de confirmer la prise en charge et le délai prévisionnel.</p>
@@ -329,8 +327,8 @@ export default function OpportunityDetailPage() {
                   <Building2 className="h-3.5 w-3.5 shrink-0" /> {opp.accounts.name}
                 </span>
               )}
-              {opp.bu   && <><span className="text-slate-300">·</span><span>{opp.bu}</span></>}
-              {opp.vendor && <><span className="text-slate-300">·</span><span>{opp.vendor}</span></>}
+              {opp.bu && <><span className="text-slate-300">·</span><span>{opp.multi_bu && Array.isArray(opp.bu_lines) && opp.bu_lines.length > 0 ? [...new Set(opp.bu_lines.map((l: any) => l.card || l.bu).filter(Boolean))].join(' + ') : opp.bu}</span></>}
+              {opp.vendor && !opp.multi_bu && <><span className="text-slate-300">·</span><span>{opp.vendor}</span></>}
               {opp.po_number && <><span className="text-slate-300">·</span><span className="font-medium">PO {opp.po_number}</span></>}
             </p>
           </div>
@@ -381,13 +379,52 @@ export default function OpportunityDetailPage() {
               {opp.accounts?.region && <DetailRow icon={<MapPin className="h-3.5 w-3.5"/>} label="Région" value={opp.accounts.region} />}
               {opp.contact_name && <DetailRow icon={<User className="h-3.5 w-3.5"/>} label="Contact" value={opp.contact_name} />}
               {opp.contact_email && <DetailRow icon={<Mail className="h-3.5 w-3.5"/>} label="Email contact" value={opp.contact_email} />}
-              {opp.vendor && <DetailRow icon={<Building2 className="h-3.5 w-3.5"/>} label="Vendor / Constructeur" value={opp.vendor} />}
+              {opp.vendor && !opp.multi_bu && <DetailRow icon={<Building2 className="h-3.5 w-3.5"/>} label="Vendor / Constructeur" value={opp.vendor} />}
               {opp.po_number && <DetailRow icon={<Tag className="h-3.5 w-3.5"/>} label="N° PO" value={opp.po_number} />}
               {opp.forecast && <DetailRow icon={<TrendingUp className="h-3.5 w-3.5"/>} label="Forecast" value={opp.forecast} />}
               {opp.owner_email && <DetailRow icon={<User className="h-3.5 w-3.5"/>} label="Owner" value={ownerName(opp.owner_email)} />}
               <DetailRow icon={<Calendar className="h-3.5 w-3.5"/>} label="Créé le" value={fmtDate(opp.created_at)} />
               {opp.updated_at && <DetailRow icon={<Clock className="h-3.5 w-3.5"/>} label="Mis à jour" value={fmtDate(opp.updated_at)} />}
             </div>
+
+            {/* BU breakdown (multi-BU deals) */}
+            {opp.multi_bu && Array.isArray(opp.bu_lines) && opp.bu_lines.length > 0 && (() => {
+              const total = opp.bu_lines.reduce((s: number, l: any) => s + Number(l.amount || 0), 0)
+              const COLORS = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-cyan-500', 'bg-purple-500']
+              const TEXT_COLORS = ['text-indigo-700', 'text-emerald-700', 'text-amber-700', 'text-rose-700', 'text-cyan-700', 'text-purple-700']
+              const BG_COLORS = ['bg-indigo-50', 'bg-emerald-50', 'bg-amber-50', 'bg-rose-50', 'bg-cyan-50', 'bg-purple-50']
+              return (
+                <div className="mt-4 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/50 to-violet-50/50 px-4 py-3">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-500 mb-3">🏢 Répartition par Business Unit</div>
+                  {/* Progress bar */}
+                  <div className="h-3 rounded-full overflow-hidden flex mb-3">
+                    {opp.bu_lines.map((l: any, i: number) => {
+                      const pctVal = total > 0 ? (Number(l.amount || 0) / total) * 100 : 0
+                      return <div key={i} className={`${COLORS[i % COLORS.length]} first:rounded-l-full last:rounded-r-full`} style={{ width: `${pctVal}%` }} />
+                    })}
+                  </div>
+                  {/* Lines */}
+                  <div className="space-y-2">
+                    {opp.bu_lines.map((l: any, i: number) => {
+                      const amt = Number(l.amount || 0)
+                      const pctVal = total > 0 ? (amt / total) * 100 : 0
+                      return (
+                        <div key={i} className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${BG_COLORS[i % BG_COLORS.length]} ${TEXT_COLORS[i % TEXT_COLORS.length]}`}>{l.card || l.bu}</span>
+                            {l.bu && l.card && l.bu !== l.card && <span className="text-xs text-slate-400">{l.bu}</span>}
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="text-xs font-bold text-slate-700 tabular-nums">{mad(amt)}</span>
+                            <span className="text-xs text-slate-400 tabular-nums w-10 text-right">{pctVal.toFixed(0)}%</span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* Next step */}
             {opp.next_step && (

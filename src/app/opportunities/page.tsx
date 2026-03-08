@@ -1,6 +1,6 @@
 'use client'
 import DealFormModal from '@/components/DealFormModal'
-import { useEffect, useMemo, useState, Suspense } from 'react'
+import { useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
@@ -93,7 +93,10 @@ function FicheBadge({ d }: { d: Deal }) {
 
 // ─── Helpers locaux ─────────────────────────────────────────────────────────────
 const mainBU = (d: Deal): string => {
-  if (d.multi_bu || (Array.isArray(d.bu_lines) && d.bu_lines.length > 0)) return 'MULTI'
+  if (Array.isArray(d.bu_lines) && d.bu_lines.length > 0) {
+    const cartes = [...new Set(d.bu_lines.map((l: any) => l.card || l.bu).filter(Boolean))]
+    return cartes.join(' + ')
+  }
   return d.bu || '—'
 }
 
@@ -185,20 +188,40 @@ function DealsPageInner() {
   const [editRow, setEditRow]         = useState<any>(null)
   const [confirmDel, setConfirmDel]   = useState<{ open: boolean; deal: Deal | null }>({ open: false, deal: null })
   const [deleting, setDeleting]       = useState(false)
+  const [undoToast, setUndoToast]     = useState<{ deal: Deal; timer: ReturnType<typeof setTimeout> } | null>(null)
+  const undoCancelled = useRef(false)
 
   useEffect(() => { document.title = 'Deals \u00b7 CRM-PIPE' }, [])
 
+  const undoDelete = () => {
+    if (!undoToast) return
+    undoCancelled.current = true
+    clearTimeout(undoToast.timer)
+    setRows(prev => [undoToast.deal, ...prev])
+    setUndoToast(null)
+  }
+
   const deleteDeal = async () => {
     if (!confirmDel.deal) return
-    setDeleting(true)
-    try {
-      const { error } = await supabase.from('opportunities').delete().eq('id', confirmDel.deal.id)
-      if (error) throw error
-      await logActivity({ action_type: 'delete', entity_type: 'deal', entity_id: confirmDel.deal.id, entity_name: confirmDel.deal.title || '—', detail: `${confirmDel.deal.accounts?.name || ''} · ${mad(confirmDel.deal.amount || 0)}` })
-      setConfirmDel({ open: false, deal: null })
-      load()
-    } catch (e: any) { alert(e?.message?.includes('foreign') ? 'Impossible de supprimer : ce deal a des données liées (supply, fiche achat…). Supprimez-les d\'abord.' : e?.message || 'Erreur suppression') }
-    finally { setDeleting(false) }
+    const deal = confirmDel.deal
+    setConfirmDel({ open: false, deal: null })
+    // Optimistic remove from UI
+    setRows(prev => prev.filter(r => r.id !== deal.id))
+    undoCancelled.current = false
+    // Delayed actual delete (8s undo window)
+    const timer = setTimeout(async () => {
+      if (undoCancelled.current) return
+      try {
+        const { error } = await supabase.from('opportunities').delete().eq('id', deal.id)
+        if (error) throw error
+        await logActivity({ action_type: 'delete', entity_type: 'deal', entity_id: deal.id, entity_name: deal.title || '—', detail: `${deal.accounts?.name || ''} · ${mad(deal.amount || 0)}` })
+      } catch (e: any) {
+        setRows(prev => [deal, ...prev]) // restore on error
+        alert(e?.message?.includes('foreign') ? 'Impossible : données liées.' : e?.message || 'Erreur')
+      }
+      setUndoToast(null)
+    }, 8000)
+    setUndoToast({ deal, timer })
   }
 
   // Open modal from ?edit= param after data loads
@@ -725,7 +748,7 @@ function DealsPageInner() {
                 </div>
                 <div>
                   <div className="text-sm font-bold text-slate-900">Supprimer ce deal ?</div>
-                  <div className="text-xs text-slate-500">Cette action est irréversible</div>
+                  <div className="text-xs text-slate-500">Tu pourras annuler pendant 8 secondes</div>
                 </div>
               </div>
               <div className="rounded-xl bg-slate-50 p-3 mb-4">
@@ -746,6 +769,23 @@ function DealsPageInner() {
           </div>
         </div>
       )}
+
+      {/* ── Undo toast ── */}
+      {undoToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 rounded-xl bg-slate-900 px-4 py-3 shadow-2xl animate-in slide-in-from-bottom-4">
+          <span className="text-sm text-white">
+            <span className="font-bold">{undoToast.deal.title}</span> supprimé
+          </span>
+          <button onClick={undoDelete}
+            className="rounded-lg bg-amber-500 px-3 py-1 text-xs font-bold text-white hover:bg-amber-400 transition-colors">
+            Annuler
+          </button>
+          <div className="h-1 w-20 rounded-full bg-white/20 overflow-hidden">
+            <div className="h-full bg-amber-400 rounded-full animate-shrink" style={{ animation: 'shrink 8s linear forwards' }} />
+          </div>
+        </div>
+      )}
+      <style>{`@keyframes shrink { from { width: 100% } to { width: 0% } }`}</style>
     </div>
   )
 }

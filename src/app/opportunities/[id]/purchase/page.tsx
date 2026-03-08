@@ -388,39 +388,30 @@ export default function PurchasePage() {
       if (type !== 'autre') {
         const old = dbFiles.find(f => f.file_type === type)
         if (old?.file_url) {
-          await fetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [old.file_url] }) })
-          await supabase.from('deal_files').delete().eq('opportunity_id', id).eq('file_type', type)
+          await fetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [old.file_url], fileIds: [old.id] }) })
           setDbFiles(p => p.filter(f => f.file_type !== type))
         }
       }
 
-      // Upload via server route (service role key → no RLS issues)
+      // Upload via server route (service role key → no RLS issues on storage + deal_files)
       const formData = new FormData()
       formData.append('file', file)
       formData.append('path', path)
       formData.append('bucket', 'deal-files')
+      formData.append('opportunity_id', id as string)
+      formData.append('file_type', type)
+      formData.append('uploaded_by', email)
 
       const res = await fetch('/api/upload', { method: 'POST', body: formData })
       const result = await res.json()
 
       if (!res.ok || result.error) {
-        setUploadError(`Erreur stockage : ${result.error || 'Upload échoué'}`)
+        setUploadError(`Erreur upload : ${result.error || 'Upload échoué'}`)
         setUploadingFile(null)
         return
       }
 
-      // Sauvegarder métadonnées en DB
-      const { error: dbErr } = await supabase.from('deal_files').insert({
-        opportunity_id: id, file_type: type,
-        file_name: file.name, file_url: result.path,
-        uploaded_by: email,
-      })
-      if (dbErr) {
-        setUploadError(`Erreur DB : ${dbErr.message}`)
-        setUploadingFile(null)
-        return
-      }
-      // Recharger depuis DB pour avoir l'id exact
+      // Recharger depuis DB pour avoir tous les fichiers
       const { data: fresh } = await supabase.from('deal_files')
         .select('id, file_type, file_name, file_url').eq('opportunity_id', id)
       if (fresh) setDbFiles(fresh)
@@ -432,8 +423,7 @@ export default function PurchasePage() {
 
   async function deleteDbFile(fileId: string, fileUrl: string) {
     try {
-      await fetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [fileUrl] }) })
-      await supabase.from('deal_files').delete().eq('id', fileId)
+      await fetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [fileUrl], fileIds: [fileId] }) })
       setDbFiles(p => p.filter(f => f.id !== fileId))
     } catch (e: any) {
       setErr(`Erreur suppression : ${e?.message}`)

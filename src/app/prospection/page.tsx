@@ -228,6 +228,57 @@ function CompanyInput({
   )
 }
 
+// ─── AutocompleteInput — suggestions depuis valeurs existantes ──────────────
+function AutocompleteInput({ label, value, onChange, suggestions, placeholder }: {
+  label: string; value: string; onChange: (v: string) => void
+  suggestions: string[]; placeholder?: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [cursor, setCursor] = useState(-1)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  const matches = useMemo(() => {
+    const q = value.trim().toLowerCase()
+    if (!q) return suggestions.slice(0, 10)
+    return suggestions.filter(s => s.toLowerCase().includes(q)).slice(0, 10)
+  }, [value, suggestions])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div className="mb-1 text-xs font-medium text-slate-600">{label}</div>
+      <input type="text" value={value} placeholder={placeholder}
+        onChange={e => { onChange(e.target.value); setOpen(true); setCursor(-1) }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={e => {
+          if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(c + 1, matches.length - 1)) }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(c => Math.max(c - 1, 0)) }
+          else if (e.key === 'Enter' && cursor >= 0 && matches[cursor]) { e.preventDefault(); onChange(matches[cursor]); setOpen(false) }
+          else if (e.key === 'Escape') setOpen(false)
+        }}
+        className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400" />
+      {open && matches.length > 0 && (
+        <div className="absolute z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white py-1 shadow-lg max-h-40 overflow-y-auto">
+          {matches.map((s, i) => (
+            <button key={s} type="button"
+              onClick={() => { onChange(s); setOpen(false) }}
+              className={`w-full px-3 py-1.5 text-left text-sm transition-colors ${cursor === i ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50'}`}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ProspectionPage() {
   const [rows, setRows]     = useState<Prospect[]>([])
@@ -255,6 +306,8 @@ export default function ProspectionPage() {
   const [saving, setSaving]       = useState(false)
   const [formErr, setFormErr]     = useState<string | null>(null)
   const [dupWarning, setDupWarning] = useState<Prospect | null>(null)
+  const [undoToast, setUndoToast] = useState<{ item: Prospect; timer: ReturnType<typeof setTimeout> } | null>(null)
+  const undoCancelled = useRef(false)
 
   // Convert modal
   const [convertP, setConvertP]   = useState<Prospect | null>(null)
@@ -275,6 +328,10 @@ export default function ProspectionPage() {
   useEffect(() => { load() }, [])
 
   function toast(msg: string) { setInfo(msg); setTimeout(() => setInfo(null), 3500) }
+
+  // Distinct sectors & regions for autocomplete
+  const sectorSuggestions = useMemo(() => [...new Set(rows.map(r => r.sector).filter(Boolean) as string[])].sort(), [rows])
+  const regionSuggestions = useMemo(() => [...new Set(rows.map(r => r.region).filter(Boolean) as string[])].sort(), [rows])
 
   const filtered = useMemo(() => {
     let r = rows.filter(x => !x.converted_at)
@@ -437,10 +494,24 @@ export default function ProspectionPage() {
     setModalOpen(false); setEditId(null); load()
   }
 
-  async function del(p: Prospect) {
+  function del(p: Prospect) {
     if (!confirm(`Supprimer ${p.company_name} ?`)) return
-    await supabase.from('prospects').delete().eq('id', p.id)
-    toast(`${p.company_name} supprimé`); load()
+    setRows(prev => prev.filter(r => r.id !== p.id))
+    undoCancelled.current = false
+    const timer = setTimeout(async () => {
+      if (undoCancelled.current) return
+      await supabase.from('prospects').delete().eq('id', p.id)
+      setUndoToast(null)
+    }, 8000)
+    setUndoToast({ item: p, timer })
+  }
+
+  function undoDelete() {
+    if (!undoToast) return
+    undoCancelled.current = true
+    clearTimeout(undoToast.timer)
+    setRows(prev => [undoToast.item, ...prev])
+    setUndoToast(null)
   }
 
   async function openConvert(p: Prospect) {
@@ -975,8 +1046,8 @@ export default function ProspectionPage() {
                       }}
                     />
                   </div>
-                  <Inp label="Secteur" value={form.sector} onChange={fld('sector')} placeholder="IT, Banque, BTP…" />
-                  <Inp label="Région" value={form.region} onChange={fld('region')} placeholder="Casablanca, Rabat…" />
+                  <AutocompleteInput label="Secteur" value={form.sector} onChange={v => setForm((p: any) => ({ ...p, sector: v }))} suggestions={sectorSuggestions} placeholder="IT, Banque, BTP…" />
+                  <AutocompleteInput label="Région" value={form.region} onChange={v => setForm((p: any) => ({ ...p, region: v }))} suggestions={regionSuggestions} placeholder="Casablanca, Rabat…" />
                 </div>
               </div>
 
@@ -1012,8 +1083,6 @@ export default function ProspectionPage() {
                       ))}
                     </div>
                   </div>
-                  <Sel label="Type de cible" value={form.type} onChange={fld('type')} options={TYPES} />
-                  <Sel label="Source" value={form.source} onChange={fld('source')} options={['', ...SOURCES]} />
                   {editId && <Sel label="Statut" value={form.status} onChange={fld('status')} options={STATUSES} />}
                 </div>
               </div>
@@ -1095,6 +1164,23 @@ export default function ProspectionPage() {
           </div>
         </div>
       )}
+
+      {/* ── Undo toast ── */}
+      {undoToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 rounded-xl bg-slate-900 px-4 py-3 shadow-2xl">
+          <span className="text-sm text-white">
+            <span className="font-bold">{undoToast.item.company_name}</span> supprimé
+          </span>
+          <button onClick={undoDelete}
+            className="rounded-lg bg-amber-500 px-3 py-1 text-xs font-bold text-white hover:bg-amber-400 transition-colors">
+            Annuler
+          </button>
+          <div className="h-1 w-20 rounded-full bg-white/20 overflow-hidden">
+            <div className="h-full bg-amber-400 rounded-full" style={{ animation: 'shrink 8s linear forwards' }} />
+          </div>
+        </div>
+      )}
+      <style>{`@keyframes shrink { from { width: 100% } to { width: 0% } }`}</style>
     </div>
   )
 }
