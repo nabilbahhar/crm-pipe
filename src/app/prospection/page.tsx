@@ -314,9 +314,20 @@ export default function ProspectionPage() {
   const [convertP, setConvertP]   = useState<Prospect | null>(null)
   const [accounts, setAccounts]   = useState<{ id: string; name: string }[]>([])
 
+  // All accounts for duplicate check + Grand Compte
+  const [allAccounts, setAllAccounts] = useState<{ id: string; name: string; sector?: string; segment?: string }[]>([])
+  // Grand Compte mode
+  const [grandCompteMode, setGrandCompteMode] = useState(false)
+  const [targetBu, setTargetBu] = useState('')
+  const [accountMatch, setAccountMatch] = useState<{ id: string; name: string } | null>(null)
+
   useEffect(() => {
     document.title = 'Prospection \u00b7 CRM-PIPE'
     supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null))
+    // Load all accounts for duplicate check
+    supabase.from('accounts').select('id,name,sector,segment').then(({ data }) => {
+      if (data) setAllAccounts(data)
+    })
   }, [])
 
   async function load() {
@@ -466,7 +477,7 @@ export default function ProspectionPage() {
     if (!form.company_name.trim()) { setFormErr('Société obligatoire.'); return }
     if (!form.contact_name.trim()) { setFormErr('Contact obligatoire.'); return }
 
-    // Vérification doublon stricte (case-insensitive)
+    // Vérification doublon stricte (case-insensitive) — prospects
     const dup = rows.find(p =>
       p.id !== editId &&
       p.company_name.trim().toLowerCase() === form.company_name.trim().toLowerCase()
@@ -476,14 +487,36 @@ export default function ProspectionPage() {
       setDupWarning(dup)
       return
     }
+
+    // Vérification vs comptes existants (block sauf Grand Compte)
+    if (!editId && !grandCompteMode) {
+      const accDup = allAccounts.find(a =>
+        a.name.trim().toLowerCase() === form.company_name.trim().toLowerCase()
+      )
+      if (accDup) {
+        setAccountMatch(accDup)
+        setFormErr(`"${accDup.name}" existe déjà dans les comptes clients. Activer le mode Grand Compte pour prospecter une BU spécifique.`)
+        return
+      }
+    }
+
+    // Grand Compte : BU cible obligatoire
+    if (grandCompteMode && !targetBu.trim()) {
+      setFormErr('En mode Grand Compte, la BU cible est obligatoire.')
+      return
+    }
+
     setSaving(true)
-    const payload = {
+    const payload: any = {
       company_name: form.company_name.trim(), sector: form.sector || null,
       region: form.region || null, contact_name: form.contact_name.trim(),
       contact_role: form.contact_role || null, contact_phone: form.contact_phone || null,
       contact_email: form.contact_email || null, type: form.type, heat: form.heat,
       status: form.status, next_action: form.next_action || null,
-      next_date: form.next_date || null, notes: form.notes || null,
+      next_date: form.next_date || null,
+      notes: grandCompteMode
+        ? `[GRAND COMPTE · BU: ${targetBu}]${form.notes ? `\n${form.notes}` : ''}`
+        : form.notes || null,
       source: form.source || null, created_by: userEmail,
     }
     const res = editId
@@ -540,20 +573,28 @@ export default function ProspectionPage() {
     setEditId(null)
     const d = new Date(); d.setDate(d.getDate() + 3)
     setForm({ ...EMPTY, next_date: d.toISOString().split('T')[0] })
-    setFormErr(null); setDupWarning(null); setModalOpen(true)
+    setFormErr(null); setDupWarning(null); setAccountMatch(null)
+    setGrandCompteMode(false); setTargetBu('')
+    setModalOpen(true)
   }
 
   function openEdit(p: Prospect) {
     setEditId(p.id)
+    // Detect if it's a Grand Compte prospect
+    const isGC = p.notes?.startsWith('[GRAND COMPTE')
+    const buMatch = p.notes?.match(/\[GRAND COMPTE · BU: (.+?)\]/)
+    setGrandCompteMode(!!isGC)
+    setTargetBu(buMatch?.[1] || '')
     setForm({
       company_name: p.company_name, sector: p.sector || '', region: p.region || '',
       contact_name: p.contact_name, contact_role: p.contact_role || '',
       contact_phone: p.contact_phone || '', contact_email: p.contact_email || '',
       type: p.type, heat: p.heat, status: p.status,
       next_action: p.next_action || '', next_date: p.next_date || '',
-      notes: p.notes || '', source: p.source || '',
+      notes: isGC ? (p.notes?.replace(/\[GRAND COMPTE · BU: .+?\]\n?/, '') || '') : (p.notes || ''),
+      source: p.source || '',
     })
-    setFormErr(null); setDupWarning(null); setModalOpen(true)
+    setFormErr(null); setDupWarning(null); setAccountMatch(null); setModalOpen(true)
   }
 
   const fld = (k: string) => (e: React.ChangeEvent<any>) => setForm((p: any) => ({ ...p, [k]: e.target.value }))
@@ -1021,9 +1062,64 @@ export default function ProspectionPage() {
                 </div>
               )}
 
-              {formErr && !dupWarning && (
+              {/* Account match warning — Grand Compte option */}
+              {accountMatch && !grandCompteMode && (
+                <div className="flex flex-col gap-2 rounded-2xl border-2 border-amber-300 bg-amber-50 p-4">
+                  <div className="flex items-start gap-2">
+                    <span className="text-base">🏦</span>
+                    <div className="text-sm font-semibold text-amber-900">
+                      <strong>{accountMatch.name}</strong> existe déjà dans les comptes clients
+                      <p className="mt-1 text-xs font-normal text-amber-700">
+                        Tu ne peux pas créer un prospect classique pour un client existant.
+                        Mais tu peux activer le <strong>mode Grand Compte</strong> pour prospecter une BU spécifique (ex: Infra, Cyber, Network…)
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pl-7">
+                    <button type="button"
+                      onClick={() => { setGrandCompteMode(true); setAccountMatch(null); setFormErr(null) }}
+                      className="rounded-xl border border-amber-400 bg-amber-500 px-4 py-2 text-xs font-bold text-white hover:bg-amber-600 transition-colors">
+                      🏢 Activer Prospection Grand Compte
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {formErr && !dupWarning && !accountMatch && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                   ⚠️ {formErr}
+                </div>
+              )}
+
+              {/* Grand Compte banner */}
+              {grandCompteMode && (
+                <div className="rounded-2xl border-2 border-violet-300 bg-violet-50 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🏢</span>
+                      <div>
+                        <div className="text-sm font-bold text-violet-800">Mode Grand Compte</div>
+                        <div className="text-xs text-violet-600">Prospection d'une BU spécifique sur un compte existant</div>
+                      </div>
+                    </div>
+                    <button onClick={() => { setGrandCompteMode(false); setTargetBu('') }}
+                      className="text-xs text-violet-500 hover:text-violet-700 underline transition-colors">
+                      Désactiver
+                    </button>
+                  </div>
+                  <div className="mt-3">
+                    <div className="mb-1 text-xs font-medium text-violet-700">BU cible *</div>
+                    <select value={targetBu} onChange={e => setTargetBu(e.target.value)}
+                      className="h-10 w-full rounded-xl border border-violet-200 bg-white px-3 text-sm outline-none focus:border-violet-400">
+                      <option value="">Choisir la BU…</option>
+                      <option value="HCI / Infra">HCI / Infra</option>
+                      <option value="Network">Network</option>
+                      <option value="Storage">Storage</option>
+                      <option value="Cyber">Cyber</option>
+                      <option value="Service">Service</option>
+                      <option value="CSG">CSG</option>
+                    </select>
+                  </div>
                 </div>
               )}
 
@@ -1034,7 +1130,7 @@ export default function ProspectionPage() {
                   <div className="sm:col-span-2">
                     <CompanyInput
                       value={form.company_name}
-                      onChange={v => { setForm((p: any) => ({ ...p, company_name: v })); setDupWarning(null); setFormErr(null) }}
+                      onChange={v => { setForm((p: any) => ({ ...p, company_name: v })); setDupWarning(null); setFormErr(null); setAccountMatch(null) }}
                       existingProspects={rows}
                       editId={editId}
                       onDupSelect={p => {
@@ -1042,6 +1138,20 @@ export default function ProspectionPage() {
                         setDupWarning(p)
                       }}
                     />
+                    {/* Show if company exists in accounts (real-time check) */}
+                    {!editId && !grandCompteMode && form.company_name.trim().length > 2 && (() => {
+                      const q = form.company_name.trim().toLowerCase()
+                      const match = allAccounts.find(a => a.name.toLowerCase().includes(q))
+                      if (match && !dupWarning) {
+                        return (
+                          <div className="mt-1.5 flex items-center gap-1.5 text-xs text-amber-700">
+                            <span>🏦</span>
+                            <span><strong>{match.name}</strong> existe dans les comptes clients</span>
+                          </div>
+                        )
+                      }
+                      return null
+                    })()}
                   </div>
                   <AutocompleteInput label="Secteur" value={form.sector} onChange={v => setForm((p: any) => ({ ...p, sector: v }))} suggestions={sectorSuggestions} placeholder="IT, Banque, BTP…" />
                   <AutocompleteInput label="Région" value={form.region} onChange={v => setForm((p: any) => ({ ...p, region: v }))} suggestions={regionSuggestions} placeholder="Casablanca, Rabat…" />
