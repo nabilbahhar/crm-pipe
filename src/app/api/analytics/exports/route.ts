@@ -15,7 +15,9 @@ function pad2(n: number) {
 }
 
 function csvEscape(v: any) {
-  const s = v === null || v === undefined ? "" : String(v);
+  let s = v === null || v === undefined ? "" : String(v);
+  // ─── Security: Prevent CSV formula injection ───────────────
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   if (/[",\n;]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
@@ -108,8 +110,10 @@ export async function GET(req: NextRequest) {
       .select("id,name")
       .limit(5000);
 
-    if (accErr)
-      return NextResponse.json({ error: accErr.message }, { status: 500 });
+    if (accErr) {
+      console.error('[analytics/exports] DB error:', accErr);
+      return NextResponse.json({ error: 'Erreur de lecture des données' }, { status: 500 });
+    }
 
     const accMap = new Map<string, string>();
     for (const a of accs || []) accMap.set(a.id, a.name);
@@ -120,8 +124,10 @@ export async function GET(req: NextRequest) {
       .select("*")
       .limit(5000);
 
-    if (oppErr)
-      return NextResponse.json({ error: oppErr.message }, { status: 500 });
+    if (oppErr) {
+      console.error('[analytics/exports] DB error:', oppErr);
+      return NextResponse.json({ error: 'Erreur de lecture des données' }, { status: 500 });
+    }
 
     function getPilotMonth(o: any) {
       const v =
@@ -271,6 +277,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Unknown error" }, { status: 500 });
+    console.error('[analytics/exports] Error:', e);
+    return NextResponse.json({ error: 'Erreur interne export analytique' }, { status: 500 });
   }
 }

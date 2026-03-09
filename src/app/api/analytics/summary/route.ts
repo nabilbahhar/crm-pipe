@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { supabaseServer } from '@/lib/supabaseServer'
 import { requireAuth } from '@/lib/apiAuth'
 
 export const dynamic = 'force-dynamic'
@@ -104,22 +104,6 @@ type DbOpp = {
 }
 
 type Line = { bu: string; vendor: string; amount: number }
-
-function env(name: string) {
-  const v = process.env[name]
-  return v && v.trim().length ? v : null
-}
-
-function getSupabase() {
-  const url = env('NEXT_PUBLIC_SUPABASE_URL') || env('SUPABASE_URL')
-  const key =
-    env('SUPABASE_SERVICE_ROLE_KEY') ||
-    env('SUPABASE_SERVICE_KEY') ||
-    env('SUPABASE_SERVICE_ROLE') ||
-    env('NEXT_PUBLIC_SUPABASE_ANON_KEY') // fallback (moins bien si RLS)
-  if (!url || !key) throw new Error('Supabase env manquant (URL / SERVICE_ROLE_KEY).')
-  return createClient(url, key, { auth: { persistSession: false } })
-}
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
@@ -231,10 +215,8 @@ export async function GET(req: NextRequest) {
 
     const { start, end, label } = periodRangeKeys(year, mode, month, q)
 
-    const supabase = getSupabase()
-
     // On charge les opportunités (on agrège en JS => robuste aux changements)
-    const r = await supabase
+    const r = await supabaseServer
       .from('opportunities')
       .select(
         'id,account_id,title,stage,status,bu,vendor,amount,prob,booking_month,next_step,multi_bu,bu_lines,deal_type,accounts(name)'
@@ -495,6 +477,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(resp, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Erreur summary' }, { status: 500 })
+    console.error('[analytics/summary] Error:', e)
+    return NextResponse.json({ error: 'Erreur interne résumé analytique' }, { status: 500 })
   }
 }

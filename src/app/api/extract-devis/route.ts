@@ -10,10 +10,18 @@ export async function POST(request: NextRequest) {
     if (auth instanceof NextResponse) return auth
 
     const { pdfBase64 } = await request.json()
-    if (!pdfBase64) return NextResponse.json({ error: 'No PDF' }, { status: 400 })
+    if (!pdfBase64 || typeof pdfBase64 !== 'string') {
+      return NextResponse.json({ error: 'PDF manquant' }, { status: 400 })
+    }
+
+    // ─── Security: Limit PDF size (max ~15 MB base64 ≈ ~11 MB file) ───
+    const MAX_PDF_BASE64_SIZE = 15 * 1024 * 1024
+    if (pdfBase64.length > MAX_PDF_BASE64_SIZE) {
+      return NextResponse.json({ error: 'PDF trop volumineux (max 11 MB)' }, { status: 400 })
+    }
 
     const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) return NextResponse.json({ error: 'ANTHROPIC_API_KEY manquant' }, { status: 500 })
+    if (!apiKey) return NextResponse.json({ error: 'Configuration serveur manquante' }, { status: 500 })
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -66,8 +74,8 @@ Notes:
     })
 
     if (!response.ok) {
-      const err = await response.text()
-      return NextResponse.json({ error: `Claude API error: ${err}` }, { status: 500 })
+      console.error('[extract-devis] Claude API error:', response.status)
+      return NextResponse.json({ error: 'Erreur du service IA' }, { status: 500 })
     }
 
     const data = await response.json()
@@ -79,7 +87,7 @@ Notes:
 
     return NextResponse.json(parsed)
   } catch (err: any) {
-    console.error('extract-devis error:', err)
-    return NextResponse.json({ error: err?.message || 'Erreur extraction' }, { status: 500 })
+    console.error('[extract-devis] Error:', err)
+    return NextResponse.json({ error: 'Erreur interne extraction devis' }, { status: 500 })
   }
 }

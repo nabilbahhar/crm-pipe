@@ -5,7 +5,9 @@ import { requireAuth } from "@/lib/apiAuth";
 export const runtime = "nodejs";
 
 function csvEscape(v: any) {
-  const s = (v ?? "").toString();
+  let s = (v ?? "").toString();
+  // ─── Security: Prevent CSV formula injection ───────────────
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
   return s;
 }
@@ -82,10 +84,16 @@ export async function GET(req: NextRequest) {
 
     // Data
     const { data: opps, error: oppErr } = await supabaseServer.from("opportunities").select("*").limit(5000);
-    if (oppErr) return NextResponse.json({ error: oppErr.message }, { status: 500 });
+    if (oppErr) {
+      console.error('[exports] DB error:', oppErr);
+      return NextResponse.json({ error: 'Erreur de lecture des données' }, { status: 500 });
+    }
 
     const { data: accs, error: accErr } = await supabaseServer.from("accounts").select("id,name").limit(5000);
-    if (accErr) return NextResponse.json({ error: accErr.message }, { status: 500 });
+    if (accErr) {
+      console.error('[exports] DB error:', accErr);
+      return NextResponse.json({ error: 'Erreur de lecture des données' }, { status: 500 });
+    }
 
     const accMap = new Map<string, string>();
     for (const a of accs || []) accMap.set(a.id, a.name);
@@ -201,6 +209,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Unknown error" }, { status: 500 });
+    console.error('[exports] Error:', e);
+    return NextResponse.json({ error: 'Erreur interne export' }, { status: 500 });
   }
 }

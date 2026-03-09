@@ -269,14 +269,22 @@ export async function POST(req: NextRequest) {
 
     const buffer = await wb.xlsx.writeBuffer()
 
+    // ─── Security: Sanitize filename (no path traversal, no special chars) ───
+    const rawFilename = spec.filename || 'export.xlsx'
+    const safeFilename = rawFilename
+      .replace(/[^a-zA-Z0-9_\-. àâäéèêëïîôùûüÿçÀÂÄÉÈÊËÏÎÔÙÛÜŸÇ]/g, '_')
+      .replace(/\.{2,}/g, '_')
+      .slice(0, 200)
+
     return new NextResponse(buffer, {
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        'Content-Disposition': `attachment; filename="${spec.filename || 'export.xlsx'}"`,
+        'Content-Disposition': `attachment; filename="${safeFilename}"`,
       }
     })
   } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 })
+    console.error('[excel] Error:', err)
+    return NextResponse.json({ error: 'Erreur interne génération Excel' }, { status: 500 })
   }
 }

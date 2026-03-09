@@ -5,6 +5,8 @@ import { requireAuth } from '@/lib/apiAuth'
 export const runtime = 'nodejs'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10 MB
+
+// ─── Security: Strict file type whitelist (no octet-stream) ────
 const ALLOWED_TYPES = [
   'application/pdf',
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
@@ -13,13 +15,28 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/msword',
   'text/csv',
-  'application/octet-stream',
 ]
+
+// ─── Security: Whitelist allowed buckets ───────────────────────
+const ALLOWED_BUCKETS = ['deal-files']
+
+// ─── Security: Validate path (no traversal) ───────────────────
+function isPathSafe(path: string): boolean {
+  if (!path || typeof path !== 'string') return false
+  // Block path traversal
+  if (path.includes('..') || path.includes('//')) return false
+  // Block null bytes
+  if (path.includes('\0')) return false
+  // Must be a reasonable filename/path
+  if (path.length > 500) return false
+  // Block absolute paths
+  if (path.startsWith('/')) return false
+  return true
+}
 
 /**
  * POST /api/upload
  * Server-side file upload to Supabase Storage + optional DB record insert.
- * Uses service role key (bypasses RLS).
  */
 export async function POST(req: NextRequest) {
   try {
@@ -37,7 +54,17 @@ export async function POST(req: NextRequest) {
     const uploadedBy    = formData.get('uploaded_by') as string | null
 
     if (!file || !path) {
-      return NextResponse.json({ error: 'Missing file or path' }, { status: 400 })
+      return NextResponse.json({ error: 'Fichier ou chemin manquant' }, { status: 400 })
+    }
+
+    // ─── Security: Validate bucket ─────────────────────────────
+    if (!ALLOWED_BUCKETS.includes(bucket)) {
+      return NextResponse.json({ error: 'Bucket non autorisé' }, { status: 400 })
+    }
+
+    // ─── Security: Validate path (no traversal) ────────────────
+    if (!isPathSafe(path)) {
+      return NextResponse.json({ error: 'Chemin de fichier invalide' }, { status: 400 })
     }
 
     // Validate file size
@@ -45,9 +72,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Fichier trop volumineux (max ${MAX_FILE_SIZE / 1024 / 1024} MB)` }, { status: 400 })
     }
 
-    // Validate file type
+    // ─── Security: Validate file type (MIME + extension) ───────
     if (!ALLOWED_TYPES.includes(file.type)) {
-      return NextResponse.json({ error: `Type de fichier non autorisé: ${file.type}` }, { status: 400 })
+      return NextResponse.json({ error: 'Type de fichier non autorisé' }, { status: 400 })
+    }
+
+    // Also validate file extension
+    const ext = file.name.split('.').pop()?.toLowerCase()
+    const SAFE_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'xlsx', 'xls', 'docx', 'doc', 'csv']
+    if (!ext || !SAFE_EXTENSIONS.includes(ext)) {
+      return NextResponse.json({ error: 'Extension de fichier non autorisée' }, { status: 400 })
     }
 
     // Convert File to ArrayBuffer then Buffer for upload
@@ -58,16 +92,16 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabaseServer.storage
       .from(bucket)
       .upload(path, buffer, {
-        contentType: file.type || 'application/octet-stream',
+        contentType: file.type,
         upsert: true,
       })
 
     if (error) {
       console.error('[upload] Storage error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Erreur lors de l\'upload' }, { status: 500 })
     }
 
-    // If opportunity_id provided, also insert into deal_files table (bypasses RLS)
+    // If opportunity_id provided, also insert into deal_files table
     let dbRecord = null
     if (opportunityId && fileType) {
       const { data: row, error: dbErr } = await supabaseServer
@@ -84,7 +118,7 @@ export async function POST(req: NextRequest) {
 
       if (dbErr) {
         console.error('[upload] DB insert error:', dbErr)
-        return NextResponse.json({ error: dbErr.message, path: data.path }, { status: 500 })
+        return NextResponse.json({ error: 'Erreur d\'enregistrement en base' }, { status: 500 })
       }
       dbRecord = row
     }
@@ -92,14 +126,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ path: data.path, dbRecord })
   } catch (e: any) {
     console.error('[upload] Error:', e)
-    return NextResponse.json({ error: e?.message || 'Upload failed' }, { status: 500 })
+    return NextResponse.json({ error: 'Erreur interne upload' }, { status: 500 })
   }
 }
 
 /**
  * DELETE /api/upload
  * Server-side file deletion from Supabase Storage + optional DB record deletion.
- * Expects JSON body: { bucket, paths: string[], fileIds?: string[] }
  */
 export async function DELETE(req: NextRequest) {
   try {
@@ -111,8 +144,30 @@ export async function DELETE(req: NextRequest) {
     const paths   = body.paths as string[]
     const fileIds = body.fileIds as string[] | undefined
 
-    if (!paths || paths.length === 0) {
-      return NextResponse.json({ error: 'Missing paths' }, { status: 400 })
+    // ─── Security: Validate bucket ─────────────────────────────
+    if (!ALLOWED_BUCKETS.includes(bucket)) {
+      return NextResponse.json({ error: 'Bucket non autorisé' }, { status: 400 })
+    }
+
+    if (!paths || !Array.isArray(paths) || paths.length === 0) {
+      return NextResponse.json({ error: 'Chemins manquants' }, { status: 400 })
+    }
+
+    // ─── Security: Validate all paths ──────────────────────────
+    for (const p of paths) {
+      if (!isPathSafe(p)) {
+        return NextResponse.json({ error: 'Chemin de fichier invalide' }, { status: 400 })
+      }
+    }
+
+    // ─── Security: Validate fileIds format (UUID only) ─────────
+    if (fileIds && Array.isArray(fileIds)) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      for (const id of fileIds) {
+        if (!uuidRegex.test(id)) {
+          return NextResponse.json({ error: 'ID de fichier invalide' }, { status: 400 })
+        }
+      }
     }
 
     // Delete from storage
@@ -122,7 +177,7 @@ export async function DELETE(req: NextRequest) {
 
     if (error) {
       console.error('[upload] Delete error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Erreur de suppression' }, { status: 500 })
     }
 
     // Delete DB records if fileIds provided
@@ -133,6 +188,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     console.error('[upload] Delete error:', e)
-    return NextResponse.json({ error: e?.message || 'Delete failed' }, { status: 500 })
+    return NextResponse.json({ error: 'Erreur interne suppression' }, { status: 500 })
   }
 }

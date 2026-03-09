@@ -319,6 +319,7 @@ export async function GET(req: NextRequest) {
       },
     })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Unknown error' }, { status: 500 })
+    console.error('[analytics/review] Error:', e)
+    return NextResponse.json({ error: 'Erreur interne review' }, { status: 500 })
   }
 }
