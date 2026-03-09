@@ -117,6 +117,7 @@ export default function PurchasePage() {
   const [showFournModal, setShowFournModal] = useState(false)
   const [newFourn, setNewFourn] = useState({ name:'', contact:'', email:'', tel:'' })
   const [addingFourn, setAddingFourn] = useState(false)
+  const [fournErr, setFournErr] = useState<string | null>(null)
 
   const bcRef    = useRef<HTMLInputElement>(null!)
   const devisRef = useRef<HTMLInputElement>(null!)
@@ -237,11 +238,17 @@ export default function PurchasePage() {
   async function addFournisseur() {
     if (!newFourn.name.trim()) return
     setAddingFourn(true)
+    setFournErr(null)
     const tel = newFourn.tel ? normalizePhone(newFourn.tel) : ''
     const { data, error } = await supabase.from('suppliers')
-      .insert({ ...newFourn, tel, is_active: true })
+      .insert({ ...newFourn, tel, created_by: userEmail })
       .select('id, name, contact, email, tel').single()
-    if (!error && data) {
+    if (error) {
+      setFournErr(error.message || 'Erreur lors de la création')
+      setAddingFourn(false)
+      return
+    }
+    if (data) {
       setFourns(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
       setNewFourn({ name:'', contact:'', email:'', tel:'' })
       setShowFournModal(false)
@@ -751,7 +758,7 @@ export default function PurchasePage() {
                             const options: { label: string; contact: string; email: string; tel: string }[] = []
                             if (fourn?.contact) options.push({ label: `${fourn.contact} (principal)`, contact: fourn.contact, email: fourn.email || '', tel: fourn.tel || '' })
                             contacts.forEach(c => options.push({ label: `${c.contact_name}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
-                            if (options.length > 1) {
+                            if (options.length >= 1) {
                               return (
                                 <select value={l.contact_fournisseur || ''} onChange={e => {
                                   const opt = options.find(o => o.contact === e.target.value)
@@ -759,6 +766,10 @@ export default function PurchasePage() {
                                     updateLine(i, 'contact_fournisseur', opt.contact)
                                     updateLine(i, 'email_fournisseur', opt.email)
                                     updateLine(i, 'tel_fournisseur', opt.tel)
+                                  } else {
+                                    updateLine(i, 'contact_fournisseur', '')
+                                    updateLine(i, 'email_fournisseur', '')
+                                    updateLine(i, 'tel_fournisseur', '')
                                   }
                                 }}
                                   className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs outline-none focus:border-slate-400 transition">
@@ -766,10 +777,6 @@ export default function PurchasePage() {
                                   {options.map((o, j) => <option key={j} value={o.contact}>{o.label}</option>)}
                                 </select>
                               )
-                            }
-                            // Show current contact name if only one
-                            if (l.contact_fournisseur) {
-                              return <span className="text-[11px] text-slate-500 pl-1">{l.contact_fournisseur}</span>
                             }
                             return null
                           })()}
@@ -947,9 +954,10 @@ export default function PurchasePage() {
                 </div>
               ))}
               <p className="text-xs text-slate-400">Tous les champs sont obligatoires. Détails complets dans <strong>Supply → Fournisseurs</strong>.</p>
+              {fournErr && <p className="text-xs font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">⚠️ {fournErr}</p>}
             </div>
             <div className="flex gap-3 border-t border-slate-100 px-6 py-4">
-              <button onClick={() => setShowFournModal(false)} className="flex-1 h-10 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Annuler</button>
+              <button onClick={() => { setShowFournModal(false); setFournErr(null) }} className="flex-1 h-10 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Annuler</button>
               <button onClick={addFournisseur} disabled={addingFourn || !newFourn.name.trim() || !newFourn.contact.trim() || !newFourn.email.trim() || !newFourn.tel.trim()}
                 className="flex-1 h-10 rounded-xl bg-slate-900 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60 transition">
                 {addingFourn ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'Créer le fournisseur'}
