@@ -7,7 +7,7 @@ import {
   Plus, Search, Edit2, Trash2, X, Save, Loader2, Download,
   Building2, Phone, Mail, MapPin, Tag, TrendingUp,
   Package, Users, ChevronUp, ChevronDown, ChevronsUpDown,
-  BarChart2, ShoppingCart, FileText, RefreshCw, ChevronRight, ExternalLink,
+  BarChart2, ShoppingCart, FileText, RefreshCw, ChevronRight, ExternalLink, Star,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -20,6 +20,11 @@ type SupplierStats = {
   supplier_name: string; total_orders: number; total_lines: number
   total_achat_ht: number; total_vente_ht: number
   last_order_date: string | null; nb_clients: number; avg_marge_pct: number | null
+}
+type SupplierContact = {
+  id: string; supplier_id: string; contact_name: string
+  email: string | null; tel: string | null; role: string | null
+  brands: string | null; is_primary: boolean
 }
 type SupplierRow = Supplier & Partial<SupplierStats>
 
@@ -133,6 +138,204 @@ function SupplierModal({
   )
 }
 
+// ─── Contacts Modal ──────────────────────────────────────────
+function SupplierContactsModal({
+  supplier, onClose, onCountChange,
+}: {
+  supplier: Supplier
+  onClose: () => void
+  onCountChange: () => void
+}) {
+  const [contacts, setContacts]  = useState<SupplierContact[]>([])
+  const [loading, setLoading]    = useState(true)
+  const [err, setErr]            = useState<string | null>(null)
+  const [form, setForm]          = useState({ contact_name: '', email: '', tel: '', role: '', brands: '', is_primary: false })
+  const inp = 'h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-400 transition-colors'
+
+  async function loadContacts() {
+    setLoading(true)
+    const { data, error } = await supabase.from('supplier_contacts')
+      .select('*').eq('supplier_id', supplier.id)
+      .order('is_primary', { ascending: false }).order('contact_name')
+    if (error) setErr(error.message)
+    else setContacts((data || []) as SupplierContact[])
+    setLoading(false)
+  }
+  useEffect(() => { loadContacts() }, [supplier.id])
+
+  async function addContact(e: React.FormEvent) {
+    e.preventDefault()
+    if (!form.contact_name.trim()) return
+    setLoading(true); setErr(null)
+    try {
+      if (form.is_primary) {
+        await supabase.from('supplier_contacts').update({ is_primary: false }).eq('supplier_id', supplier.id)
+      }
+      const { error } = await supabase.from('supplier_contacts').insert({
+        supplier_id: supplier.id,
+        contact_name: form.contact_name.trim(),
+        email: form.email.trim() || null,
+        tel: form.tel.trim() || null,
+        role: form.role.trim() || null,
+        brands: form.brands.trim() || null,
+        is_primary: form.is_primary,
+      })
+      if (error) throw error
+      setForm({ contact_name: '', email: '', tel: '', role: '', brands: '', is_primary: false })
+      await loadContacts()
+      onCountChange()
+    } catch (e: any) { setErr(e?.message || 'Erreur') }
+    finally { setLoading(false) }
+  }
+
+  async function setPrimary(id: string) {
+    setLoading(true)
+    await supabase.from('supplier_contacts').update({ is_primary: false }).eq('supplier_id', supplier.id)
+    await supabase.from('supplier_contacts').update({ is_primary: true }).eq('id', id)
+    await loadContacts()
+    setLoading(false)
+  }
+
+  async function deleteContact(id: string) {
+    if (!confirm('Supprimer ce contact ?')) return
+    setLoading(true)
+    await supabase.from('supplier_contacts').delete().eq('id', id)
+    await loadContacts()
+    onCountChange()
+    setLoading(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white text-sm">
+              <Users className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-900">Contacts — {supplier.name}</div>
+              <div className="text-xs text-slate-400">{contacts.length} contact{contacts.length > 1 ? 's' : ''}</div>
+            </div>
+          </div>
+          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {err && <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{err}</div>}
+
+          {/* Add contact form */}
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4">
+            <div className="mb-3 text-xs font-bold text-blue-700 uppercase tracking-wide">Ajouter un contact</div>
+            <form onSubmit={addContact} className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <input value={form.contact_name} onChange={e => setForm(f => ({ ...f, contact_name: e.target.value }))}
+                placeholder="Nom du contact *" className={inp} />
+              <input value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))}
+                placeholder="Rôle (commercial, technique…)" className={inp} />
+              <input value={form.brands} onChange={e => setForm(f => ({ ...f, brands: e.target.value }))}
+                placeholder="Marques (Fortinet, Dell…)" className={inp} />
+              <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                placeholder="Email" className={inp} />
+              <input value={form.tel} onChange={e => setForm(f => ({ ...f, tel: e.target.value }))}
+                placeholder="Téléphone" className={inp} />
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-600 cursor-pointer">
+                  <input type="checkbox" className="rounded" checked={form.is_primary}
+                    onChange={e => setForm(f => ({ ...f, is_primary: e.target.checked }))} />
+                  Principal
+                </label>
+                <button type="submit" disabled={loading || !form.contact_name.trim()}
+                  className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-xl bg-blue-600 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                  <Plus className="h-3.5 w-3.5" /> Ajouter
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Contacts list */}
+          {loading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
+            </div>
+          ) : contacts.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 py-10 text-center">
+              <span className="text-3xl mb-2 block">👥</span>
+              <p className="text-sm text-slate-500">Aucun contact pour ce fournisseur</p>
+              <p className="text-xs text-slate-400 mt-1">Ajoutez des contacts ci-dessus</p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-slate-100 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left">Contact</th>
+                    <th className="px-4 py-2.5 text-left">Rôle / Marques</th>
+                    <th className="px-4 py-2.5 text-left">Coordonnées</th>
+                    <th className="px-4 py-2.5 text-left">Statut</th>
+                    <th className="px-4 py-2.5 w-[100px]" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {contacts.map(c => (
+                    <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-2.5 font-semibold text-slate-900 text-xs">{c.contact_name}</td>
+                      <td className="px-4 py-2.5">
+                        <div className="text-xs text-slate-600">{c.role || '—'}</div>
+                        {c.brands && <div className="text-[10px] text-slate-400 mt-0.5">{c.brands}</div>}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex flex-col gap-0.5">
+                          {c.email && (
+                            <a href={`mailto:${c.email}`} className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline">
+                              <Mail className="h-2.5 w-2.5" />{c.email}
+                            </a>
+                          )}
+                          {c.tel && (
+                            <a href={`tel:${c.tel}`} className="inline-flex items-center gap-1 text-[11px] text-emerald-600 hover:underline">
+                              <Phone className="h-2.5 w-2.5" />{c.tel}
+                            </a>
+                          )}
+                          {!c.email && !c.tel && <span className="text-xs text-slate-300">—</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {c.is_primary ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                            <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" /> Principal
+                          </span>
+                        ) : <span className="text-xs text-slate-300">—</span>}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex gap-1">
+                          {!c.is_primary && (
+                            <button onClick={() => setPrimary(c.id)}
+                              className="inline-flex h-6 items-center gap-1 rounded-lg border border-slate-200 px-2 text-[10px] font-semibold text-slate-500 hover:bg-amber-50 hover:text-amber-700 hover:border-amber-200 transition-colors"
+                              title="Définir comme principal">
+                              <Star className="h-2.5 w-2.5" />
+                            </button>
+                          )}
+                          <button onClick={() => deleteContact(c.id)}
+                            className="flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors">
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────
 type SortKey = 'name' | 'total_orders' | 'total_achat_ht' | 'last_order_date' | 'avg_marge_pct'
 
@@ -148,6 +351,8 @@ export default function SuppliersPage() {
   const [sortKey, setSortKey]       = useState<SortKey>('name')
   const [sortDir, setSortDir]       = useState<'asc' | 'desc'>('asc')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [contactsModal, setContactsModal] = useState<Supplier | null>(null)
+  const [contactCounts, setContactCounts] = useState<Record<string, number>>({})
 
   useEffect(() => {
     document.title = 'Fournisseurs \u00b7 CRM-PIPE'
@@ -157,12 +362,21 @@ export default function SuppliersPage() {
 
   async function loadAll() {
     setLoading(true)
-    const [{ data: sups }, { data: statsData }] = await Promise.all([
+    const [{ data: sups }, { data: statsData }, contactsRes] = await Promise.all([
       supabase.from('suppliers').select('*').order('name'),
       supabase.from('supplier_stats').select('*'),
+      supabase.from('supplier_contacts').select('supplier_id'),
     ])
     setSuppliers(sups || [])
     setStats(statsData || [])
+    // Build contact counts
+    if (contactsRes && !contactsRes.error && contactsRes.data) {
+      const counts: Record<string, number> = {}
+      for (const c of contactsRes.data) {
+        counts[c.supplier_id] = (counts[c.supplier_id] || 0) + 1
+      }
+      setContactCounts(counts)
+    }
     setLoading(false)
   }
 
@@ -405,7 +619,16 @@ export default function SuppliersPage() {
                             ) : <span className="text-slate-300 text-xs">—</span>}
                           </td>
                           <td className="px-4 py-3">
-                            <div className="text-xs text-slate-700 font-medium">{s.contact || <span className="text-slate-300">—</span>}</div>
+                            <div className="flex items-center gap-1.5">
+                              <div className="text-xs text-slate-700 font-medium">{s.contact || <span className="text-slate-300">—</span>}</div>
+                              {(contactCounts[s.id] || 0) > 0 && (
+                                <button onClick={e => { e.stopPropagation(); setContactsModal(s) }}
+                                  className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 hover:bg-blue-200 transition-colors"
+                                  title={`${contactCounts[s.id]} contact(s) enregistré(s)`}>
+                                  +{contactCounts[s.id]}
+                                </button>
+                              )}
+                            </div>
                             <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                               {s.email && (
                                 <a href={`mailto:${s.email}`} onClick={e => e.stopPropagation()}
@@ -445,6 +668,10 @@ export default function SuppliersPage() {
                           </td>
                           <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1.5">
+                              <button onClick={() => setContactsModal(s)}
+                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors shadow-sm">
+                                <Users className="h-3 w-3" /> Contacts
+                              </button>
                               <button onClick={() => setModal(s)}
                                 className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors shadow-sm">
                                 <Edit2 className="h-3 w-3" /> Modifier
@@ -491,6 +718,14 @@ export default function SuppliersPage() {
           userEmail={userEmail}
           onClose={() => setModal(false)}
           onSaved={() => { setModal(false); loadAll() }}
+        />
+      )}
+
+      {contactsModal && (
+        <SupplierContactsModal
+          supplier={contactsModal}
+          onClose={() => setContactsModal(null)}
+          onCountChange={loadAll}
         />
       )}
     </div>

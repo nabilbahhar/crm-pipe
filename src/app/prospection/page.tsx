@@ -6,10 +6,20 @@ import { authFetch } from '@/lib/authFetch'
 import {
   Plus, RefreshCw, X, Phone, Mail, ChevronRight,
   LayoutGrid, List, Flame, Thermometer, Snowflake, ArrowRightCircle,
-  ArrowUp, ArrowDown, ChevronsUpDown, Download,
+  ArrowUp, ArrowDown, ChevronsUpDown, Download, Users, Trash2, Star,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
+type ProspectContact = {
+  id: string
+  prospect_id: string
+  full_name: string
+  email: string | null
+  phone: string | null
+  role: string | null
+  is_primary: boolean
+}
+
 type Prospect = {
   id: string
   company_name: string
@@ -310,6 +320,11 @@ export default function ProspectionPage() {
   const [undoToast, setUndoToast] = useState<{ item: Prospect; timer: ReturnType<typeof setTimeout> } | null>(null)
   const undoCancelled = useRef(false)
 
+  // Multi-contacts
+  const [modalContacts, setModalContacts] = useState<ProspectContact[]>([])
+  const [newContact, setNewContact] = useState({ full_name: '', email: '', phone: '', role: '' })
+  const [contactsMap, setContactsMap] = useState<Record<string, ProspectContact[]>>({})
+
   // Convert modal
   const [convertP, setConvertP]   = useState<Prospect | null>(null)
   const [accounts, setAccounts]   = useState<{ id: string; name: string }[]>([])
@@ -332,9 +347,21 @@ export default function ProspectionPage() {
 
   async function load() {
     setLoading(true); setErr(null)
-    const { data, error } = await supabase.from('prospects').select('*').order('created_at', { ascending: false })
+    const [{ data, error }, contactsRes] = await Promise.all([
+      supabase.from('prospects').select('*').order('created_at', { ascending: false }),
+      supabase.from('prospect_contacts').select('*').order('is_primary', { ascending: false }).order('full_name'),
+    ])
     if (error) { setErr(error.message); setLoading(false); return }
     setRows((data as Prospect[]) || [])
+    // Build contacts map
+    if (contactsRes && !contactsRes.error && contactsRes.data) {
+      const map: Record<string, ProspectContact[]> = {}
+      for (const c of contactsRes.data as ProspectContact[]) {
+        if (!map[c.prospect_id]) map[c.prospect_id] = []
+        map[c.prospect_id].push(c)
+      }
+      setContactsMap(map)
+    }
     setLoading(false)
   }
   useEffect(() => { load() }, [])
@@ -519,11 +546,46 @@ export default function ProspectionPage() {
         : form.notes || null,
       source: form.source || null, created_by: userEmail,
     }
-    const res = editId
-      ? await supabase.from('prospects').update(payload).eq('id', editId)
-      : await supabase.from('prospects').insert(payload)
+    let prospectId = editId
+    if (editId) {
+      const res = await supabase.from('prospects').update(payload).eq('id', editId)
+      if (res.error) { setSaving(false); setFormErr(res.error.message); return }
+    } else {
+      const res = await supabase.from('prospects').insert(payload).select('id').single()
+      if (res.error) { setSaving(false); setFormErr(res.error.message); return }
+      prospectId = res.data.id
+    }
+
+    // Save additional contacts (prospect_contacts table)
+    if (prospectId) {
+      try {
+        // Delete removed contacts
+        const existingIds = modalContacts.filter(c => !c.id.startsWith('new_')).map(c => c.id)
+        const oldContacts = contactsMap[prospectId] || []
+        for (const old of oldContacts) {
+          if (!existingIds.includes(old.id)) {
+            await supabase.from('prospect_contacts').delete().eq('id', old.id)
+          }
+        }
+        // Insert new contacts
+        for (const c of modalContacts) {
+          if (c.id.startsWith('new_')) {
+            await supabase.from('prospect_contacts').insert({
+              prospect_id: prospectId,
+              full_name: c.full_name.trim(),
+              email: c.email || null,
+              phone: c.phone || null,
+              role: c.role || null,
+              is_primary: c.is_primary,
+            })
+          }
+        }
+      } catch (e) {
+        // Contacts table may not exist yet — fail silently
+      }
+    }
+
     setSaving(false)
-    if (res.error) { setFormErr(res.error.message); return }
     toast(editId ? `${form.company_name} mis à jour` : `${form.company_name} ajouté`)
     setModalOpen(false); setEditId(null); load()
   }
@@ -575,6 +637,7 @@ export default function ProspectionPage() {
     setForm({ ...EMPTY, next_date: d.toISOString().split('T')[0] })
     setFormErr(null); setDupWarning(null); setAccountMatch(null)
     setGrandCompteMode(false); setTargetBu('')
+    setModalContacts([]); setNewContact({ full_name: '', email: '', phone: '', role: '' })
     setModalOpen(true)
   }
 
@@ -594,6 +657,9 @@ export default function ProspectionPage() {
       notes: isGC ? (p.notes?.replace(/\[GRAND COMPTE · BU: .+?\]\n?/, '') || '') : (p.notes || ''),
       source: p.source || '',
     })
+    // Load existing contacts for this prospect
+    setModalContacts(contactsMap[p.id] || [])
+    setNewContact({ full_name: '', email: '', phone: '', role: '' })
     setFormErr(null); setDupWarning(null); setAccountMatch(null); setModalOpen(true)
   }
 
@@ -864,7 +930,14 @@ export default function ProspectionPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="font-medium text-slate-800">{p.contact_name}</div>
+                          <div className="flex items-center gap-1.5">
+                            <div className="font-medium text-slate-800">{p.contact_name}</div>
+                            {(contactsMap[p.id]?.length || 0) > 0 && (
+                              <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700" title={`${contactsMap[p.id].length} contact(s) additionnel(s)`}>
+                                +{contactsMap[p.id].length}
+                              </span>
+                            )}
+                          </div>
                           {p.contact_role && <div className="text-[11px] text-slate-400">{p.contact_role}</div>}
                           <div className="mt-0.5 flex items-center gap-2">
                             {p.contact_phone && (
@@ -963,7 +1036,12 @@ export default function ProspectionPage() {
                             </div>
                             <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 flex-shrink-0">{p.type}</span>
                           </div>
-                          <div className="mt-1 text-xs text-slate-500">{p.contact_name}{p.contact_role ? ` · ${p.contact_role}` : ''}</div>
+                          <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
+                            <span>{p.contact_name}{p.contact_role ? ` · ${p.contact_role}` : ''}</span>
+                            {(contactsMap[p.id]?.length || 0) > 0 && (
+                              <span className="rounded-full bg-blue-100 px-1 py-0.5 text-[8px] font-bold text-blue-700">+{contactsMap[p.id].length}</span>
+                            )}
+                          </div>
                           {p.contact_phone && (
                             <a href={`tel:${p.contact_phone}`} className="mt-1 flex items-center gap-1 text-[11px] text-blue-600 hover:underline">
                               <Phone className="h-3 w-3" />{p.contact_phone}
@@ -1158,14 +1236,100 @@ export default function ProspectionPage() {
                 </div>
               </div>
 
-              {/* Section 2 — Contact */}
+              {/* Section 2 — Contact principal */}
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">👤 Contact</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">👤 Contact principal</div>
+                  {modalContacts.length > 0 && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">
+                      + {modalContacts.length} contact{modalContacts.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Inp label="Nom complet *" value={form.contact_name} onChange={fld('contact_name')} placeholder="Prénom Nom" />
                   <Inp label="Fonction / Rôle" value={form.contact_role} onChange={fld('contact_role')} placeholder="DSI, DG, Dir. Achats…" />
                   <Inp label="Téléphone" value={form.contact_phone} onChange={fld('contact_phone')} placeholder="+212 6 00 00 00 00" />
                   <Inp label="Email" value={form.contact_email} onChange={fld('contact_email')} placeholder="contact@societe.ma" type="email" />
+                </div>
+              </div>
+
+              {/* Section 2b — Contacts additionnels */}
+              <div className="rounded-2xl border border-blue-100 bg-blue-50/50 p-4 space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400">
+                  <Users className="inline h-3 w-3 mr-1" />Contacts additionnels
+                </div>
+
+                {/* List existing additional contacts */}
+                {modalContacts.length > 0 && (
+                  <div className="space-y-2">
+                    {modalContacts.map((c, i) => (
+                      <div key={c.id} className="flex items-center gap-2 rounded-xl border border-blue-100 bg-white px-3 py-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-slate-800 truncate">{c.full_name}</span>
+                            {c.role && <span className="text-[10px] text-slate-400">· {c.role}</span>}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            {c.phone && (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-blue-600">
+                                <Phone className="h-2.5 w-2.5" />{c.phone}
+                              </span>
+                            )}
+                            {c.email && (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-blue-600">
+                                <Mail className="h-2.5 w-2.5" />{c.email}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button type="button"
+                          onClick={() => setModalContacts(prev => prev.filter((_, j) => j !== i))}
+                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-100 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new contact form */}
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <input value={newContact.full_name}
+                    onChange={e => setNewContact(c => ({ ...c, full_name: e.target.value }))}
+                    placeholder="Nom du contact *"
+                    className="h-9 w-full rounded-xl border border-blue-200 bg-white px-3 text-sm outline-none focus:border-blue-400 placeholder:text-slate-400" />
+                  <input value={newContact.role}
+                    onChange={e => setNewContact(c => ({ ...c, role: e.target.value }))}
+                    placeholder="Rôle (DSI, Acheteur…)"
+                    className="h-9 w-full rounded-xl border border-blue-200 bg-white px-3 text-sm outline-none focus:border-blue-400 placeholder:text-slate-400" />
+                  <input value={newContact.phone}
+                    onChange={e => setNewContact(c => ({ ...c, phone: e.target.value }))}
+                    placeholder="Téléphone"
+                    className="h-9 w-full rounded-xl border border-blue-200 bg-white px-3 text-sm outline-none focus:border-blue-400 placeholder:text-slate-400" />
+                  <div className="flex gap-2">
+                    <input value={newContact.email}
+                      onChange={e => setNewContact(c => ({ ...c, email: e.target.value }))}
+                      placeholder="Email"
+                      className="h-9 flex-1 rounded-xl border border-blue-200 bg-white px-3 text-sm outline-none focus:border-blue-400 placeholder:text-slate-400" />
+                    <button type="button"
+                      disabled={!newContact.full_name.trim()}
+                      onClick={() => {
+                        setModalContacts(prev => [...prev, {
+                          id: `new_${Date.now()}`,
+                          prospect_id: editId || '',
+                          full_name: newContact.full_name.trim(),
+                          email: newContact.email.trim() || null,
+                          phone: newContact.phone.trim() || null,
+                          role: newContact.role.trim() || null,
+                          is_primary: false,
+                        }])
+                        setNewContact({ full_name: '', email: '', phone: '', role: '' })
+                      }}
+                      className="flex h-9 items-center gap-1 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-40 transition-colors shrink-0">
+                      <Plus className="h-3.5 w-3.5" /> Ajouter
+                    </button>
+                  </div>
                 </div>
               </div>
 

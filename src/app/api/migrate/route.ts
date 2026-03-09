@@ -25,12 +25,20 @@ export async function POST(req: NextRequest) {
       .from('purchase_lines').select('id, line_status, eta').limit(1)
     checks.push({ table: 'purchase_lines.line_status', exists: !e2, error: e2?.message })
 
+    // Check prospect_contacts table
+    const { error: e3 } = await supabaseServer.from('prospect_contacts').select('id').limit(1)
+    checks.push({ table: 'prospect_contacts', exists: !e3, error: e3?.message })
+
     const allOk = checks.every(c => c.exists)
+
+    const missingMigrations: string[] = []
+    if (!checks[0].exists || !checks[1].exists) missingMigrations.push('009_supplier_contacts_and_line_tracking.sql')
+    if (!checks[2].exists) missingMigrations.push('010_prospect_contacts.sql')
 
     return NextResponse.json({
       allOk,
       checks,
-      migrationFile: allOk ? null : 'Run migrations/009_supplier_contacts_and_line_tracking.sql in Supabase SQL Editor',
+      migrationFile: allOk ? null : `Run in Supabase SQL Editor: ${missingMigrations.join(', ')}`,
     })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Check failed' }, { status: 500 })
