@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import { Bell, X, ChevronDown, KeyRound, LogOut, Search } from "lucide-react";
+import { Bell, X, ChevronDown, KeyRound, LogOut, Search, User } from "lucide-react";
 
 type NavItem = { label: string; href: string; badge?: boolean; children?: { label: string; href: string }[] }
 
@@ -433,7 +433,7 @@ function ShortcutsPanel({ onClose, modKey }: { onClose: () => void; modKey: stri
 }
 
 // ── NavDropdown ──────────────────────────────────────────────────────────────
-function NavDropdown({ item, active, path, taskCount }: { item: NavItem; active: boolean; path: string; taskCount: number }) {
+function NavDropdown({ item, active, path }: { item: NavItem; active: boolean; path: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -683,7 +683,7 @@ export default function NavBar() {
               const active = allPaths.some(p => path === p || path.startsWith(p + "/"));
               if (it.children) {
                 return (
-                  <NavDropdown key={it.label} item={it} active={active} path={path} taskCount={taskCount} />
+                  <NavDropdown key={it.label} item={it} active={active} path={path} />
                 );
               }
               return (
@@ -759,6 +759,22 @@ export default function NavBar() {
                       <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</div>
                     </div>
                     <div style={{ padding: "6px" }}>
+                      <Link
+                        href="/profile"
+                        onClick={() => setShowUserMenu(false)}
+                        style={{
+                          width: "100%", display: "flex", alignItems: "center", gap: 9,
+                          padding: "9px 10px", borderRadius: 9, border: "none",
+                          background: "none", cursor: "pointer", fontSize: 13,
+                          color: "#374151", fontWeight: 500, textAlign: "left",
+                          textDecoration: "none",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "#f8fafc")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                      >
+                        <User style={{ width: 14, height: 14, color: "#64748b" }} />
+                        Mon profil
+                      </Link>
                       <button
                         onClick={() => { setShowUserMenu(false); setShowPwdModal(true); }}
                         style={{

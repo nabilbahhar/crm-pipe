@@ -14,7 +14,7 @@ import {
 import {
   ShieldCheck, Plus, RefreshCw, Download, Search,
   X, ChevronDown, Mail, Pencil, Trash2, AlertTriangle,
-  Clock, CheckCircle2, Filter, Activity, Loader2,
+  Clock, CheckCircle2, Loader2,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -150,7 +150,6 @@ export default function SupportPage() {
   async function save() {
     if (!fTitle.trim()) return
     setSaving(true)
-    const accountId = deals.find(d => d.id === fDeal)?.accounts?.name ? undefined : undefined
     const payload: any = {
       title: fTitle.trim(), description: fDesc.trim() || null,
       type: fType, priority: fPriority,
@@ -161,12 +160,12 @@ export default function SupportPage() {
     }
     if (editId) {
       await supabase.from('support_tickets').update(payload).eq('id', editId)
-      logActivity({ action_type: 'update', entity_type: 'deal' as any, entity_name: fTitle, detail: 'Ticket support mis à jour' })
+      logActivity({ action_type: 'update', entity_type: 'ticket', entity_name: fTitle, detail: 'Ticket support mis à jour' })
     } else {
       payload.created_by = userEmail
       payload.status = 'ouvert'
       await supabase.from('support_tickets').insert(payload)
-      logActivity({ action_type: 'create', entity_type: 'deal' as any, entity_name: fTitle, detail: 'Ticket support créé' })
+      logActivity({ action_type: 'create', entity_type: 'ticket', entity_name: fTitle, detail: 'Ticket support créé' })
     }
     setSaving(false); setShowModal(false); load()
   }
@@ -175,14 +174,14 @@ export default function SupportPage() {
     const up: any = { status: newStatus, updated_at: new Date().toISOString() }
     if (newStatus === 'resolu' || newStatus === 'ferme') up.resolved_at = new Date().toISOString()
     await supabase.from('support_tickets').update(up).eq('id', t.id)
-    logActivity({ action_type: 'update', entity_type: 'deal' as any, entity_name: t.title, detail: `Ticket → ${(TICKET_STATUS_CFG as any)[newStatus]?.label || newStatus}` })
+    logActivity({ action_type: 'update', entity_type: 'ticket', entity_name: t.title, detail: `Ticket → ${(TICKET_STATUS_CFG as any)[newStatus]?.label || newStatus}` })
     load()
   }
 
   async function deleteTicket(t: Ticket) {
     if (!confirm(`Supprimer le ticket "${t.title}" ?`)) return
     await supabase.from('support_tickets').delete().eq('id', t.id)
-    logActivity({ action_type: 'delete', entity_type: 'deal' as any, entity_name: t.title, detail: 'Ticket support supprimé' })
+    logActivity({ action_type: 'delete', entity_type: 'ticket', entity_name: t.title, detail: 'Ticket support supprimé' })
     load()
   }
 

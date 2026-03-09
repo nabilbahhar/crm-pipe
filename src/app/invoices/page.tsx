@@ -192,7 +192,7 @@ export default function InvoicesPage() {
       if (inv.issue_date) years.add(new Date(inv.issue_date).getFullYear())
     })
     return [...years].sort((a, b) => b - a)
-  }, [invoices])
+  }, [invoices, currentYear])
 
   // ── Status change ───────────────────────────────────────────────────────────
   async function changeStatus(inv: Invoice, newStatus: InvoiceStatus) {

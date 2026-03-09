@@ -262,7 +262,8 @@ type SupportEmailData = {
 }
 
 export function buildSupportEmail(data: SupportEmailData): string {
-  const prioColor = data.priority === 'urgent' ? 'badge-red' : data.priority === 'haute' ? 'badge-amber' : 'badge-blue'
+  const p = data.priority.toLowerCase()
+  const prioColor = p === 'urgent' ? 'badge-red' : p === 'haute' ? 'badge-amber' : 'badge-blue'
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseStyle}</head><body>
     <div class="header">

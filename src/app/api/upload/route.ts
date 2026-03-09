@@ -21,7 +21,10 @@ const ALLOWED_TYPES = [
 ]
 
 // ─── Security: Whitelist allowed buckets ───────────────────────
-const ALLOWED_BUCKETS = ['deal-files', 'account-files', 'expense-files']
+const ALLOWED_BUCKETS = ['deal-files', 'account-files', 'expense-files', 'profile-avatars']
+
+// ─── Security: Whitelist file_type values for DB records ────────
+const ALLOWED_FILE_TYPES = ['devis', 'bon_commande', 'facture', 'photo', 'autre', 'bc_client', 'bc_fournisseur', 'bon_livraison', 'pv_reception', 'contrat', 'avatar']
 
 // ─── Security: Validate path (no traversal) ───────────────────
 function isPathSafe(path: string): boolean {
@@ -54,7 +57,13 @@ export async function POST(req: NextRequest) {
     // Optional DB record fields
     const opportunityId = formData.get('opportunity_id') as string | null
     const fileType      = formData.get('file_type') as string | null
-    const uploadedBy    = formData.get('uploaded_by') as string | null
+    // Security: Use verified identity from auth, not client-provided value
+    const uploadedBy    = (auth as { user: { email?: string } }).user.email || 'unknown'
+
+    // Security: Validate file_type if provided
+    if (fileType && !ALLOWED_FILE_TYPES.includes(fileType)) {
+      return NextResponse.json({ error: 'Type de fichier DB non autorisé' }, { status: 400 })
+    }
 
     if (!file || !path) {
       return NextResponse.json({ error: 'Fichier ou chemin manquant' }, { status: 400 })
@@ -117,7 +126,7 @@ export async function POST(req: NextRequest) {
           file_type: fileType,
           file_name: file.name,
           file_url: data.path,
-          uploaded_by: uploadedBy || 'unknown',
+          uploaded_by: uploadedBy,
         })
         .select('id, file_type, file_name, file_url')
         .single()
@@ -136,7 +145,7 @@ export async function POST(req: NextRequest) {
           file_type: fileType,
           file_name: file.name,
           file_url: data.path,
-          uploaded_by: uploadedBy || 'unknown',
+          uploaded_by: uploadedBy,
         })
         .select('id, file_type, file_name, file_url')
         .single()
@@ -176,6 +185,11 @@ export async function DELETE(req: NextRequest) {
 
     if (!paths || !Array.isArray(paths) || paths.length === 0) {
       return NextResponse.json({ error: 'Chemins manquants' }, { status: 400 })
+    }
+
+    // ─── Security: Limit number of files to delete ────────────────
+    if (paths.length > 50) {
+      return NextResponse.json({ error: 'Trop de fichiers à supprimer (max 50)' }, { status: 400 })
     }
 
     // ─── Security: Validate all paths ──────────────────────────

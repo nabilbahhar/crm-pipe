@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import {
@@ -218,7 +218,7 @@ export default function Dashboard() {
 
   const [year, setYear]         = useState(thisYear)
   const [view, setView]         = useState<ViewMode>('quarter')
-  const [quarter, setQuarter]   = useState<'Q1'|'Q2'|'Q3'|'Q4'>('Q1')
+  const [quarter, setQuarter]   = useState<'Q1'|'Q2'|'Q3'|'Q4'>((['Q1','Q2','Q3','Q4'] as const)[Math.floor(now.getMonth() / 3)])
   const [month, setMonth]       = useState(`${thisYear}-${String(now.getMonth()+1).padStart(2,'0')}`)
   const [dateFrom, setDateFrom] = useState(`${thisYear}-01-01`)
   const [dateTo, setDateTo]     = useState(todayStr)
@@ -608,7 +608,7 @@ export default function Dashboard() {
       const oppId = ln.purchase_info?.opportunity_id
       if (!oppId) continue
       // Only include lines whose deal passes the current filters
-      if (filteredIds.size > 0 && !filteredIds.has(oppId)) continue
+      if (!filteredIds.has(oppId)) continue
       const opp = rows.find(r => r.id === oppId)
       if (!opp) continue
       const ptVente = Number(ln.pt_vente) || (Number(ln.qty||1) * Number(ln.pu_vente||0))

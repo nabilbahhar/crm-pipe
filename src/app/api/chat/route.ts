@@ -16,21 +16,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Configuration serveur manquante' }, { status: 500 })
     }
 
-    // Validate body size
-    const contentLength = Number(req.headers.get('content-length') || 0)
-    if (contentLength > MAX_BODY_SIZE) {
+    // Validate body size — read raw text to check actual size (Content-Length is spoofable)
+    const rawText = await req.text()
+    if (rawText.length > MAX_BODY_SIZE) {
       return NextResponse.json({ error: 'Requête trop volumineuse' }, { status: 413 })
     }
 
-    const body = await req.json()
+    const body = JSON.parse(rawText)
 
     // Validate & sanitize: only forward safe fields
     const model = ALLOWED_MODELS.includes(body.model) ? body.model : ALLOWED_MODELS[0]
     const maxTokens = Math.min(Math.max(Number(body.max_tokens) || 4096, 256), MAX_TOKENS_LIMIT)
 
     // Only allow messages and system prompt — no tools, no raw passthrough
-    const messages = Array.isArray(body.messages) ? body.messages : []
-    const systemPrompt = typeof body.system === 'string' ? body.system : undefined
+    const messages = Array.isArray(body.messages) ? body.messages.slice(-50) : [] // Max 50 messages
+    const systemPrompt = typeof body.system === 'string' ? body.system.slice(0, 8000) : undefined // Max 8KB
 
     const safeBody: Record<string, unknown> = {
       model,

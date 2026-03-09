@@ -8,7 +8,7 @@ import {
   CheckCircle2, RefreshCw, ChevronRight, Package, Phone,
   Search, ArrowUp, ArrowDown, ChevronsUpDown, X, Download,
   Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
-  FileText, AlertTriangle, TrendingUp, Users, Target, Zap, Sun, Truck,
+  FileText, AlertTriangle, TrendingUp, Users, Target, Zap, Sun,
   Shield, Key, BookOpen, Receipt,
 } from 'lucide-react'
 
@@ -261,6 +261,7 @@ export default function TasksPage() {
       .from('opportunities')
       .select('id, title, amount, bu, booking_month, stage, accounts(name)')
       .eq('status', 'Open')
+      .not('booking_month', 'is', null)
       .lt('booking_month', thisM)
       .order('booking_month', { ascending: true })
     if (error) throw error

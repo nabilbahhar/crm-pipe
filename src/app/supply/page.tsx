@@ -104,12 +104,17 @@ export default function SupplyPage() {
   const [emailHtml, setEmailHtml] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [buFilter, setBuFilter] = useState('Tous')
+  const [vendorFilter, setVendorFilter] = useState('Tous')
 
   function showToast(msg: string) {
     if (toastTimer.current) clearTimeout(toastTimer.current)
     setToast(msg)
     toastTimer.current = setTimeout(() => setToast(null), 3000)
   }
+
+  // Cleanup toast timer on unmount
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current) }, [])
 
   function toggleExpand(id: string) {
     setExpandedRows(prev => {
@@ -126,6 +131,7 @@ export default function SupplyPage() {
     const urlVendor = sp.get('vendor')
     if (urlVendor) setVendorFilter(urlVendor)
     load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   async function load() {
@@ -146,9 +152,6 @@ export default function SupplyPage() {
     setOrders((data || []) as Order[])
     setLoading(false)
   }
-
-  const [buFilter, setBuFilter] = useState('Tous')
-  const [vendorFilter, setVendorFilter] = useState('Tous')
 
   const buOptions = useMemo(() =>
     [...new Set(orders.map(o => o.opportunities?.bu || '').filter(Boolean))].sort()

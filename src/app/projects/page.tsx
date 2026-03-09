@@ -28,11 +28,14 @@ type ProjectService = {
   id: string
   opportunity_id: string
   title: string
+  description: string | null
   assigned_to: string | null
+  bu: string | null
   status: ProjectServiceStatus
   start_date: string | null
   end_date: string | null
   notes: string | null
+  sort_order: number
   prescription_status: PrescriptionStatus | null
   created_at: string
   updated_at: string | null
@@ -326,7 +329,7 @@ export default function ProjectsPage() {
     }
 
     await logActivity({
-      action_type: 'update', entity_type: 'deal',
+      action_type: 'update', entity_type: 'project_service',
       entity_id: oppId,
       entity_name: existing ? deals.find(d => d.id === oppId)?.title || '' : 'Nouveau',
       detail: `Presales assigne: ${name || '(retire)'}`,
@@ -355,7 +358,7 @@ export default function ProjectsPage() {
     }
 
     await logActivity({
-      action_type: 'update', entity_type: 'deal',
+      action_type: 'update', entity_type: 'project_service',
       entity_id: oppId,
       entity_name: deal?.title || '',
       detail: `Statut prescription: ${PRESCRIPTION_STATUS_CFG[newStatus].label}`,
@@ -372,18 +375,21 @@ export default function ProjectsPage() {
     const { error } = await supabase.from('project_services').insert({
       opportunity_id: oppId,
       title: svcForm.title.trim(),
+      description: null,
       assigned_to: svcForm.assigned_to.trim() || null,
+      bu: null,
       status: 'planifie' as ProjectServiceStatus,
       start_date: svcForm.start_date || null,
       end_date: svcForm.end_date || null,
       notes: svcForm.notes.trim() || null,
+      sort_order: 0,
     })
 
     if (error) { alert('Erreur: ' + error.message); return }
 
     const deal = deals.find(d => d.id === oppId)
     await logActivity({
-      action_type: 'create', entity_type: 'deal',
+      action_type: 'create', entity_type: 'project_service',
       entity_id: oppId,
       entity_name: deal?.title || '',
       detail: `Prestation ajoutee: ${svcForm.title}`,
@@ -403,7 +409,7 @@ export default function ProjectsPage() {
     const deal = deals.find(d => d.id === oppId)
     const svc = deal?.project_services?.find(s => s.id === svcId)
     await logActivity({
-      action_type: 'update', entity_type: 'deal',
+      action_type: 'update', entity_type: 'project_service',
       entity_id: oppId,
       entity_name: deal?.title || '',
       detail: `Prestation "${svc?.title}": ${PROJECT_SERVICE_STATUS_CFG[newStatus].label}`,
@@ -420,7 +426,7 @@ export default function ProjectsPage() {
     await supabase.from('project_services').delete().eq('id', svcId)
 
     await logActivity({
-      action_type: 'delete', entity_type: 'deal',
+      action_type: 'delete', entity_type: 'project_service',
       entity_id: oppId,
       entity_name: deal?.title || '',
       detail: `Prestation supprimee: ${svc?.title || ''}`,

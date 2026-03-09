@@ -361,12 +361,6 @@ export default function PurchasePage() {
         },
         { onConflict: 'opportunity_id', ignoreDuplicates: partial }
       )
-      if (!partial) {
-        // Full save : mettre à jour le statut même si la commande existait déjà
-        await supabase.from('supply_orders')
-          .update({ status: 'place', placed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-          .eq('opportunity_id', id)
-      }
       await logActivity({
         action_type: existingInfo?.id ? 'update' : 'create',
         entity_type: 'deal', entity_id: id,

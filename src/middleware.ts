@@ -25,7 +25,9 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
   // Permissions Policy (désactiver caméra, micro, géolocalisation)
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  // Content-Security-Policy
+  // Strict Transport Security (HSTS) — force HTTPS
+  response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')
+  // Content-Security-Policy — unsafe-inline requis par Next.js, unsafe-eval par Recharts
   response.headers.set(
     'Content-Security-Policy',
     [
@@ -38,6 +40,7 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
       "frame-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",
+      "form-action 'self'",
     ].join('; ')
   )
 

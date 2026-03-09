@@ -9,7 +9,14 @@ export async function POST(request: NextRequest) {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
 
-    const { pdfBase64 } = await request.json()
+    // Security: Check body size before parsing (Content-Length can be spoofed)
+    const MAX_BODY_SIZE = 20 * 1024 * 1024 // ~20 MB max
+    const rawText = await request.text()
+    if (rawText.length > MAX_BODY_SIZE) {
+      return NextResponse.json({ error: 'Requête trop volumineuse' }, { status: 413 })
+    }
+
+    const { pdfBase64 } = JSON.parse(rawText)
     if (!pdfBase64 || typeof pdfBase64 !== 'string') {
       return NextResponse.json({ error: 'PDF manquant' }, { status: 400 })
     }

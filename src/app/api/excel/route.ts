@@ -14,7 +14,19 @@ export async function POST(req: NextRequest) {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
 
-    const spec = await req.json()
+    // Security: Limit request body size (max 5 MB)
+    const MAX_BODY_SIZE = 5 * 1024 * 1024
+    const rawText = await req.text()
+    if (rawText.length > MAX_BODY_SIZE) {
+      return NextResponse.json({ error: 'Requête trop volumineuse' }, { status: 413 })
+    }
+    const spec = JSON.parse(rawText)
+
+    // Security: Limit number of sheets and rows
+    if (Array.isArray(spec.sheets) && spec.sheets.length > 20) {
+      return NextResponse.json({ error: 'Trop de feuilles (max 20)' }, { status: 400 })
+    }
+
     const wb = new ExcelJS.Workbook()
     wb.creator = 'CRM-PIPE'
     wb.created = new Date()
