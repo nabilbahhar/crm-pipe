@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabaseClient'
 import { logActivity } from '@/lib/logActivity'
-import { X, Plus, Trash2, Save, ChevronDown, ExternalLink } from 'lucide-react'
+import { X, Plus, Trash2, Save, ChevronDown, ExternalLink, ShieldCheck } from 'lucide-react'
 import { mad } from '@/lib/utils'
 import Link from 'next/link'
 
@@ -13,6 +13,7 @@ type Account   = { id: string; name: string }
 type CardRow   = { id: string; name: string }
 type BuLine    = { bu: string; card: string; amount: number }
 type CardSplit = { card: string; amount: number }
+type DRLine    = { id?: string; bu: string; card: string; platform: string; dr_number: string; expiry_date: string; enabled: boolean }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STAGES = [
@@ -274,6 +275,9 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
 
   const lastNonServiceCard = useRef('Dell')
 
+  // Deal Registration (DR)
+  const [drLines, setDrLines] = useState<DRLine[]>([])
+
   // ── Computed ──────────────────────────────────────────────────────────────
   const status           = useMemo(() => computeStatus(stage), [stage])
   const totalFromLines   = useMemo(() => lines.reduce((s, l) => s + (Number(l.amount) || 0), 0), [lines])
@@ -313,6 +317,22 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
       if (c.data) setCards(c.data as CardRow[])
     })
   }, [])
+
+  // ── Load DRs when editing ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!editRow?.id) return
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('deal_registrations').select('*').eq('opportunity_id', editRow.id)
+        if (data && data.length > 0) {
+          setDrLines(data.map((d: any) => ({
+            id: d.id, bu: d.bu || '', card: d.card || '', platform: d.platform || '',
+            dr_number: d.dr_number || '', expiry_date: d.expiry_date || '', enabled: true,
+          })))
+        }
+      } catch {} // table may not exist yet
+    })()
+  }, [editRow?.id])
 
   // ── Populate form when editing ────────────────────────────────────────────
   useEffect(() => {
@@ -473,9 +493,12 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
         payload.amount   = totalFromLines
       }
 
+      let savedDealId: string | null = null
+
       if (isEdit) {
         const { error } = await supabase.from('opportunities').update(payload).eq('id', editRow.id)
         if (error) throw error
+        savedDealId = editRow.id
         await logActivity({
           action_type: status === 'Won' ? 'won' : status === 'Lost' ? 'lost' : 'update',
           entity_type: 'deal',
@@ -497,21 +520,45 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
       } else {
         const { data: inserted, error } = await supabase.from('opportunities').insert(payload).select('id').single()
         if (error) throw error
-        const newId = inserted?.id
+        savedDealId = inserted?.id ?? null
         await logActivity({
           action_type: 'create',
           entity_type: 'deal',
-          entity_id: newId ?? undefined,
+          entity_id: savedDealId ?? undefined,
           entity_name: title.trim(),
           detail: `${stage} · ${payload.bu || ''} · ${payload.amount ? payload.amount + ' MAD' : ''}`.trim(),
         })
         // Auto-create supply_order when deal is created as Won
-        if (status === 'Won' && newId) {
+        if (status === 'Won' && savedDealId) {
           await supabase.from('supply_orders').insert({
-            opportunity_id: newId,
+            opportunity_id: savedDealId,
             status: 'a_commander',
           })
         }
+      }
+
+      // Save Deal Registrations
+      const dealId = savedDealId
+      if (dealId) {
+        try {
+          // Delete old DRs
+          await supabase.from('deal_registrations').delete().eq('opportunity_id', dealId)
+          // Insert new ones (only enabled with dr_number)
+          const activeDrs = drLines.filter(d => d.enabled && d.dr_number.trim())
+          if (activeDrs.length > 0) {
+            await supabase.from('deal_registrations').insert(
+              activeDrs.map(d => ({
+                opportunity_id: dealId,
+                bu: d.bu || null,
+                card: d.card || null,
+                platform: d.platform || null,
+                dr_number: d.dr_number,
+                expiry_date: d.expiry_date || null,
+                status: 'active',
+              }))
+            )
+          }
+        } catch {} // table may not exist yet
       }
 
       onSaved()
@@ -856,6 +903,70 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
               </div>
             </Section>
           )}
+
+          {/* ── Deal Registration (DR) ── */}
+          <Section title="🛡️ Deal Registration (DR)">
+            <div className="space-y-3">
+              {drLines.length === 0 ? (
+                <p className="text-xs text-slate-400">Aucune DR. Clique ci-dessous pour en ajouter.</p>
+              ) : (
+                drLines.map((dr, i) => (
+                  <div key={i} className={`rounded-xl border p-3 space-y-2 transition ${dr.enabled ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200 bg-slate-50 opacity-60'}`}>
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer select-none">
+                        <input type="checkbox" checked={dr.enabled}
+                          onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, enabled: e.target.checked } : d))}
+                          className="h-4 w-4 rounded" />
+                        <ShieldCheck className="h-3.5 w-3.5 text-blue-500" />
+                        DR {dr.bu && dr.card ? `${dr.bu} / ${dr.card}` : `#${i + 1}`}
+                      </label>
+                      <button type="button" onClick={() => setDrLines(p => p.filter((_, j) => j !== i))}
+                        className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    {dr.enabled && (
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <Field label="BU">
+                          <input value={dr.bu} onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, bu: e.target.value } : d))}
+                            placeholder="HCI, Network…" className={inp + ' !h-8 text-xs'} />
+                        </Field>
+                        <Field label="Carte / Éditeur">
+                          <input value={dr.card} onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, card: e.target.value } : d))}
+                            placeholder="HPE, Dell…" className={inp + ' !h-8 text-xs'} />
+                        </Field>
+                        <Field label="Plateforme">
+                          <input value={dr.platform} onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, platform: e.target.value } : d))}
+                            placeholder="Partner Portal…" className={inp + ' !h-8 text-xs'} />
+                        </Field>
+                        <Field label="N° DR *">
+                          <input value={dr.dr_number} onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, dr_number: e.target.value } : d))}
+                            placeholder="DR-2026-XXX" className={inp + ' !h-8 text-xs font-semibold'} />
+                        </Field>
+                        <Field label="Date expiration">
+                          <input type="date" value={dr.expiry_date} onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, expiry_date: e.target.value } : d))}
+                            className={inp + ' !h-8 text-xs'} />
+                        </Field>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+              <button type="button"
+                onClick={() => {
+                  // Pre-fill BU/card from current deal config
+                  const newDr: DRLine = { bu: '', card: '', platform: '', dr_number: '', expiry_date: '', enabled: true }
+                  if (!multiBu) {
+                    newDr.bu = bu
+                    newDr.card = isService(bu) ? SERVICE_CARD : card
+                  }
+                  setDrLines(p => [...p, newDr])
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50 hover:border-slate-400 transition">
+                <Plus className="h-3.5 w-3.5" /> Ajouter une DR
+              </button>
+            </div>
+          </Section>
 
           {/* ── Next step + Notes ── */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">

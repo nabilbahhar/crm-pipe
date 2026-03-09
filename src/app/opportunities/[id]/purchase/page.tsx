@@ -26,6 +26,7 @@ type PurchaseLine = {
   qty: number; pu_vente: number; pt_vente: number; pu_achat: number
   fournisseur_id: string | null; fournisseur?: string
   contact_fournisseur?: string; email_fournisseur?: string; tel_fournisseur?: string
+  warranty_months?: number; license_months?: number
 }
 type DBFile = { id?: string; file_type: string; file_name: string; file_url?: string }
 
@@ -40,6 +41,7 @@ const REASONS = [
 const emptyLine = (): PurchaseLine => ({
   ref: '', designation: '', qty: 1, pu_vente: 0, pt_vente: 0, pu_achat: 0,
   fournisseur_id: null, contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '',
+  warranty_months: 0, license_months: 0,
 })
 
 // ─── Format Excel : 57.500,00 MAD ────────────────────────────
@@ -94,6 +96,8 @@ export default function PurchasePage() {
   const [notes, setNotes]   = useState('')
   const [justifReason, setJustifReason] = useState(REASONS[0])
   const [justifText, setJustifText]     = useState('')
+  const [paymentTerms, setPaymentTerms] = useState('')
+  const [paymentTermsCustom, setPaymentTermsCustom] = useState('')
   const [saving, setSaving]   = useState(false)
   const [err, setErr]         = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -177,6 +181,11 @@ export default function PurchasePage() {
       setExistingInfo(info)
       setFrais(info.frais_engagement || 0)
       setNotes(info.notes || '')
+      if (info.payment_terms) {
+        const known = ['a_la_livraison','30j','60j','90j']
+        if (known.includes(info.payment_terms)) { setPaymentTerms(info.payment_terms) }
+        else { setPaymentTerms('autre'); setPaymentTermsCustom(info.payment_terms) }
+      }
       if (info.justif_reason) setJustifReason(info.justif_reason)
       if (info.justif_text)   setJustifText(info.justif_text)
       if (info.purchase_lines?.length > 0) {
@@ -190,6 +199,8 @@ export default function PurchasePage() {
           contact_fournisseur: l.contact_fournisseur || '',
           email_fournisseur: l.email_fournisseur || '',
           tel_fournisseur: l.tel_fournisseur || '',
+          warranty_months: l.warranty_months || 0,
+          license_months: l.license_months || 0,
         })))
         setExtracted(true)
         setLoading(false)
@@ -302,9 +313,11 @@ export default function PurchasePage() {
     setSaving(true)
     try {
       let infoId = existingInfo?.id
+      const ptValue = paymentTerms === 'autre' ? paymentTermsCustom : paymentTerms
       const payload: any = {
         opportunity_id: id, frais_engagement: frais, notes,
         filled_by: userEmail, updated_at: new Date().toISOString(),
+        payment_terms: ptValue || null,
         ...(margeFaible
           ? { justif_reason: justifReason, justif_text: justifText, approved_by: null }
           : { justif_reason: null, justif_text: null }),
@@ -326,9 +339,12 @@ export default function PurchasePage() {
             qty: l.qty, pu_vente: l.pu_vente,
             pt_vente: l.pt_vente || l.qty*l.pu_vente, pu_achat: l.pu_achat,
             fournisseur: fourn?.name || l.fournisseur || null,
+            fournisseur_id: l.fournisseur_id || null,
             contact_fournisseur: l.contact_fournisseur || fourn?.contact || null,
             email_fournisseur: l.email_fournisseur || fourn?.email || null,
             tel_fournisseur: l.tel_fournisseur || fourn?.tel || null,
+            warranty_months: l.warranty_months || null,
+            license_months: l.license_months || null,
           }
         })
       )
@@ -653,7 +669,7 @@ export default function PurchasePage() {
           )}
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full" style={{ minWidth: 1020 }}>
+            <table className="w-full" style={{ minWidth: 1200 }}>
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50">
                   {[
@@ -665,6 +681,8 @@ export default function PurchasePage() {
                     { l:'PU Achat ★', w:120, r:true, amber:true },
                     { l:'PT Achat',   w:130, r:true  },
                     { l:'Marge',      w:80,  r:true  },
+                    { l:'Garantie',   w:80,  r:true  },
+                    { l:'Licence',    w:80,  r:true  },
                     { l:'Fournisseur / Contact',w:260, r:false },
                     { l:'',           w:40,  r:false },
                   ].map(({ l, w, r, amber }, i) => (
@@ -723,6 +741,16 @@ export default function PurchasePage() {
                             {pct(margePc)}
                           </span>
                         ) : <span className="text-slate-300 text-sm">—</span>}
+                      </td>
+                      {/* Garantie (mois) */}
+                      <td className="px-4 py-3">
+                        <input type="number" min={0} value={l.warranty_months||''} onChange={e => updateLine(i,'warranty_months',Number(e.target.value)||0)}
+                          placeholder="mois" className={`${inp} text-right text-xs`} style={{ minWidth: 70 }} />
+                      </td>
+                      {/* Licence (mois) */}
+                      <td className="px-4 py-3">
+                        <input type="number" min={0} value={l.license_months||''} onChange={e => updateLine(i,'license_months',Number(e.target.value)||0)}
+                          placeholder="mois" className={`${inp} text-right text-xs`} style={{ minWidth: 70 }} />
                       </td>
                       <td className="px-4 py-3">
                         <div className="space-y-2">
@@ -825,7 +853,7 @@ export default function PurchasePage() {
                         </span>
                       )}
                     </td>
-                    <td colSpan={2} />
+                    <td colSpan={4} />
                   </tr>
                 </tfoot>
               )}
@@ -854,6 +882,25 @@ export default function PurchasePage() {
               <input type="number" min={0} value={frais||''} onChange={e => setFrais(Number(e.target.value))}
                 placeholder="0" className={`${inp} max-w-[180px]`} />
               <span className="text-sm text-slate-500">MAD — Frais d'engagement</span>
+            </div>
+            {/* Payment Terms */}
+            <div className="mb-4">
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Modalités de paiement</label>
+              <div className="flex items-center gap-2">
+                <select value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)}
+                  className={`${inp} max-w-[200px] appearance-none`}>
+                  <option value="">— Choisir —</option>
+                  <option value="a_la_livraison">À la livraison</option>
+                  <option value="30j">30 jours</option>
+                  <option value="60j">60 jours</option>
+                  <option value="90j">90 jours</option>
+                  <option value="autre">Autre</option>
+                </select>
+                {paymentTerms === 'autre' && (
+                  <input value={paymentTermsCustom} onChange={e => setPaymentTermsCustom(e.target.value)}
+                    placeholder="Préciser…" className={`${inp} max-w-[200px]`} />
+                )}
+              </div>
             </div>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4}
               placeholder="Notes internes, contexte, remarques…"

@@ -3,15 +3,59 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
-import { mad, fmt, getAnnualTarget } from '@/lib/utils'
+import { mad, fmt, fmtDate, getAnnualTarget, INVOICE_STATUS_CFG, type InvoiceStatus } from '@/lib/utils'
 import {
   CheckCircle2, RefreshCw, ChevronRight, Package, Phone,
   Search, ArrowUp, ArrowDown, ChevronsUpDown, X, Download,
   Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
   FileText, AlertTriangle, TrendingUp, Users, Target, Zap, Sun, Truck,
+  Shield, Key, BookOpen, Receipt,
 } from 'lucide-react'
 
 type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard' | 'eta_retard'
+
+// ── Types for new sections ──
+type WarrantyItem = {
+  id: string
+  designation: string
+  client: string
+  warrantyMonths: number
+  expiryDate: Date
+  daysLeft: number
+  opportunityId: string
+}
+
+type LicenseItem = {
+  id: string
+  designation: string
+  client: string
+  licenseMonths: number
+  expiryDate: Date
+  daysLeft: number
+  opportunityId: string
+}
+
+type DRItem = {
+  id: string
+  drNumber: string
+  card: string
+  bu: string
+  dealTitle: string
+  expiryDate: string
+  daysLeft: number
+  opportunityId: string
+}
+
+type InvoiceItem = {
+  id: string
+  invoiceNumber: string
+  dealTitle: string
+  amount: number
+  dueDate: string
+  daysOverdue: number
+  status: InvoiceStatus
+  opportunityId: string
+}
 type Priority   = 'high' | 'medium'
 type FicheStatus = 'a_faire' | 'en_cours' | 'complete'
 type SortKey    = 'priority' | 'title' | 'amount' | 'daysLate' | 'ficheStatus'
@@ -77,20 +121,31 @@ export default function TasksPage() {
   const [wonYTD, setWonYTD]             = useState(0)
   const [openPipeline, setOpenPipeline] = useState(0)
 
+  // New section state
+  const [warranties, setWarranties]     = useState<WarrantyItem[]>([])
+  const [licenses, setLicenses]         = useState<LicenseItem[]>([])
+  const [drs, setDrs]                   = useState<DRItem[]>([])
+  const [overdueInvoices, setOverdueInvoices] = useState<InvoiceItem[]>([])
+
   useEffect(() => { document.title = 'Tâches · CRM-PIPE'; load() }, [])
 
   async function load() {
     setLoading(true); setErr(null)
     try {
       const year = new Date().getFullYear()
-      const [a, b, c, d, e, wonRes, openRes] = await Promise.all([
+      const [a, b, c, d, e, wonRes, openRes, warr, lic, drItems, invItems] = await Promise.all([
         loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(), loadEtaRetards(),
         supabase.from('opportunities').select('amount').eq('status', 'Won').gte('booking_month', `${year}-01`),
         supabase.from('opportunities').select('amount').eq('status', 'Open'),
+        loadWarranties(), loadLicenses(), loadDRs(), loadOverdueInvoices(),
       ])
       setTasks([...a, ...b, ...c, ...d, ...e])
       setWonYTD((wonRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
       setOpenPipeline((openRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
+      setWarranties(warr)
+      setLicenses(lic)
+      setDrs(drItems)
+      setOverdueInvoices(invItems)
     } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
     finally { setLoading(false) }
   }
@@ -256,6 +311,124 @@ export default function TasksPage() {
       // Table may not have eta column yet
       return []
     }
+  }
+
+  // ── Renouvellements garantie ────────────────────────────
+  async function loadWarranties(): Promise<WarrantyItem[]> {
+    try {
+      const { data: lines, error } = await supabase
+        .from('purchase_lines')
+        .select('id, designation, warranty_months, purchase_info!inner(opportunity_id, opportunities!inner(id, title, po_date, accounts(name)))')
+        .gt('warranty_months', 0)
+      if (error || !lines) return []
+      const now = new Date()
+      const items: WarrantyItem[] = []
+      for (const l of lines as any[]) {
+        const opp = l.purchase_info?.opportunities
+        if (!opp?.po_date) continue
+        const poDate = new Date(opp.po_date)
+        const expiryDate = new Date(poDate)
+        expiryDate.setMonth(expiryDate.getMonth() + Number(l.warranty_months))
+        const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000)
+        if (daysLeft > 90) continue // only show within 90 days
+        items.push({
+          id: l.id,
+          designation: l.designation || '—',
+          client: opp?.accounts?.name || opp?.title || '—',
+          warrantyMonths: l.warranty_months,
+          expiryDate,
+          daysLeft,
+          opportunityId: opp?.id || '',
+        })
+      }
+      return items.sort((a, b) => a.daysLeft - b.daysLeft)
+    } catch { return [] }
+  }
+
+  // ── Renouvellements licence ────────────────────────────
+  async function loadLicenses(): Promise<LicenseItem[]> {
+    try {
+      const { data: lines, error } = await supabase
+        .from('purchase_lines')
+        .select('id, designation, license_months, purchase_info!inner(opportunity_id, opportunities!inner(id, title, po_date, accounts(name)))')
+        .gt('license_months', 0)
+      if (error || !lines) return []
+      const now = new Date()
+      const items: LicenseItem[] = []
+      for (const l of lines as any[]) {
+        const opp = l.purchase_info?.opportunities
+        if (!opp?.po_date) continue
+        const poDate = new Date(opp.po_date)
+        const expiryDate = new Date(poDate)
+        expiryDate.setMonth(expiryDate.getMonth() + Number(l.license_months))
+        const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / 86400000)
+        if (daysLeft > 90) continue
+        items.push({
+          id: l.id,
+          designation: l.designation || '—',
+          client: opp?.accounts?.name || opp?.title || '—',
+          licenseMonths: l.license_months,
+          expiryDate,
+          daysLeft,
+          opportunityId: opp?.id || '',
+        })
+      }
+      return items.sort((a, b) => a.daysLeft - b.daysLeft)
+    } catch { return [] }
+  }
+
+  // ── DR à renouveler ────────────────────────────
+  async function loadDRs(): Promise<DRItem[]> {
+    try {
+      const now = new Date()
+      const in30 = new Date(now)
+      in30.setDate(in30.getDate() + 30)
+      const in30Str = in30.toISOString().split('T')[0]
+      const { data, error } = await supabase
+        .from('deal_registrations')
+        .select('id, dr_number, bu, card, expiry_date, opportunity_id, opportunities(id, title)')
+        .lte('expiry_date', in30Str)
+        .order('expiry_date', { ascending: true })
+      if (error || !data) return []
+      return data.map((d: any) => {
+        const daysLeft = Math.ceil((new Date(d.expiry_date).getTime() - now.getTime()) / 86400000)
+        return {
+          id: d.id,
+          drNumber: d.dr_number || '—',
+          card: d.card || '—',
+          bu: d.bu || '—',
+          dealTitle: d.opportunities?.title || '—',
+          expiryDate: d.expiry_date,
+          daysLeft,
+          opportunityId: d.opportunity_id || d.opportunities?.id || '',
+        }
+      })
+    } catch { return [] }
+  }
+
+  // ── Factures échues ────────────────────────────
+  async function loadOverdueInvoices(): Promise<InvoiceItem[]> {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0]
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('id, invoice_number, amount, due_date, status, opportunity_id, opportunities(id, title)')
+        .lt('due_date', todayStr)
+        .neq('status', 'payee')
+        .order('due_date', { ascending: true })
+      if (error || !data) return []
+      const now = new Date()
+      return data.map((d: any) => ({
+        id: d.id,
+        invoiceNumber: d.invoice_number || '—',
+        dealTitle: d.opportunities?.title || '—',
+        amount: Number(d.amount) || 0,
+        dueDate: d.due_date,
+        daysOverdue: Math.floor((now.getTime() - new Date(d.due_date).getTime()) / 86400000),
+        status: d.status as InvoiceStatus,
+        opportunityId: d.opportunity_id || d.opportunities?.id || '',
+      }))
+    } catch { return [] }
   }
 
   // ── Filtered & sorted ────────────────────────────────
@@ -435,6 +608,58 @@ export default function TasksPage() {
             color="orange"
             active={typeFilter === 'closing_retard'}
             onClick={() => setTypeFilter(typeFilter === 'closing_retard' ? 'Tous' : 'closing_retard')}
+          />
+        </div>
+
+        {/* ── KPI STRIP 2 — Renewals & Invoices ── */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <KPICard
+            icon={<Shield className="h-4 w-4" />}
+            label="Garanties"
+            value={String(warranties.length)}
+            sub={warranties.filter(w => w.daysLeft < 30).length + ' < 30 jours'}
+            color="emerald"
+            active={false}
+            onClick={() => {
+              const el = document.getElementById('section-warranties')
+              el?.scrollIntoView({ behavior: 'smooth' })
+            }}
+          />
+          <KPICard
+            icon={<Key className="h-4 w-4" />}
+            label="Licences"
+            value={String(licenses.length)}
+            sub={licenses.filter(l => l.daysLeft < 30).length + ' < 30 jours'}
+            color="violet"
+            active={false}
+            onClick={() => {
+              const el = document.getElementById('section-licenses')
+              el?.scrollIntoView({ behavior: 'smooth' })
+            }}
+          />
+          <KPICard
+            icon={<BookOpen className="h-4 w-4" />}
+            label="DR a renouveler"
+            value={String(drs.length)}
+            sub={drs.filter(d => d.daysLeft < 0).length + ' expirees'}
+            color="teal"
+            active={false}
+            onClick={() => {
+              const el = document.getElementById('section-drs')
+              el?.scrollIntoView({ behavior: 'smooth' })
+            }}
+          />
+          <KPICard
+            icon={<Receipt className="h-4 w-4" />}
+            label="Factures echues"
+            value={String(overdueInvoices.length)}
+            sub={overdueInvoices.length > 0 ? mad(overdueInvoices.reduce((s, i) => s + i.amount, 0)) : '0 MAD'}
+            color="rose"
+            active={false}
+            onClick={() => {
+              const el = document.getElementById('section-invoices')
+              el?.scrollIntoView({ behavior: 'smooth' })
+            }}
           />
         </div>
 
@@ -828,6 +1053,224 @@ export default function TasksPage() {
                 </table>
               </TaskSection>
             )}
+
+            {/* ── Renouvellements Garantie ── */}
+            {warranties.length > 0 && typeFilter === 'Tous' && (
+              <div id="section-warranties">
+                <TaskSection
+                  icon={<Shield className="h-4 w-4" />}
+                  title="Renouvellements garantie"
+                  count={warranties.length}
+                  colorScheme="emerald">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/70">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Designation</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Client</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Garantie</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Expiration</th>
+                        <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Jours restants</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {warranties.map(w => (
+                        <tr key={w.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-4 py-3">
+                            <span className="font-bold text-slate-900 text-xs">{w.designation}</span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{w.client}</td>
+                          <td className="px-4 py-3 text-center text-xs text-slate-500">{w.warrantyMonths} mois</td>
+                          <td className="px-4 py-3 text-center text-xs text-slate-500">{fmtDate(w.expiryDate.toISOString())}</td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full
+                              ${w.daysLeft < 0 ? 'bg-red-100 text-red-700' : w.daysLeft < 30 ? 'bg-red-100 text-red-700' : w.daysLeft < 60 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {w.daysLeft < 0 ? `${Math.abs(w.daysLeft)}j expire` : `${w.daysLeft}j`}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-center">
+                              <button onClick={() => router.push(`/opportunities/${w.opportunityId}`)}
+                                className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                                Voir <ChevronRight className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TaskSection>
+              </div>
+            )}
+
+            {/* ── Renouvellements Licence ── */}
+            {licenses.length > 0 && typeFilter === 'Tous' && (
+              <div id="section-licenses">
+                <TaskSection
+                  icon={<Key className="h-4 w-4" />}
+                  title="Renouvellements licence"
+                  count={licenses.length}
+                  colorScheme="violet">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/70">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Designation</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Client</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Licence</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Expiration</th>
+                        <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Jours restants</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {licenses.map(l => (
+                        <tr key={l.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-4 py-3">
+                            <span className="font-bold text-slate-900 text-xs">{l.designation}</span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{l.client}</td>
+                          <td className="px-4 py-3 text-center text-xs text-slate-500">{l.licenseMonths} mois</td>
+                          <td className="px-4 py-3 text-center text-xs text-slate-500">{fmtDate(l.expiryDate.toISOString())}</td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full
+                              ${l.daysLeft < 0 ? 'bg-red-100 text-red-700' : l.daysLeft < 30 ? 'bg-red-100 text-red-700' : l.daysLeft < 60 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                              {l.daysLeft < 0 ? `${Math.abs(l.daysLeft)}j expire` : `${l.daysLeft}j`}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-center">
+                              <button onClick={() => router.push(`/opportunities/${l.opportunityId}`)}
+                                className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                                Voir <ChevronRight className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TaskSection>
+              </div>
+            )}
+
+            {/* ── DR à Renouveler ── */}
+            {drs.length > 0 && typeFilter === 'Tous' && (
+              <div id="section-drs">
+                <TaskSection
+                  icon={<BookOpen className="h-4 w-4" />}
+                  title="DR à renouveler"
+                  count={drs.length}
+                  colorScheme="teal">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/70">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">N° DR</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Card / BU</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Deal</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Expiration</th>
+                        <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Jours restants</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {drs.map(d => (
+                        <tr key={d.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-4 py-3">
+                            <span className="font-bold text-slate-900 text-xs">{d.drNumber}</span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-600">{d.card} / {d.bu}</td>
+                          <td className="px-4 py-3 text-xs text-slate-700 max-w-[200px]">
+                            <span className="truncate block">{d.dealTitle}</span>
+                          </td>
+                          <td className="px-4 py-3 text-center text-xs text-slate-500">{fmtDate(d.expiryDate)}</td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full
+                              ${d.daysLeft < 0 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {d.daysLeft < 0 ? `Expire ${Math.abs(d.daysLeft)}j` : `${d.daysLeft}j`}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-center">
+                              <button onClick={() => router.push(`/opportunities/${d.opportunityId}`)}
+                                className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                                Voir <ChevronRight className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TaskSection>
+              </div>
+            )}
+
+            {/* ── Factures Échues ── */}
+            {overdueInvoices.length > 0 && typeFilter === 'Tous' && (
+              <div id="section-invoices">
+                <TaskSection
+                  icon={<Receipt className="h-4 w-4" />}
+                  title="Factures échues"
+                  count={overdueInvoices.length}
+                  colorScheme="rose"
+                  amount={overdueInvoices.reduce((s, i) => s + i.amount, 0)}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/70">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">N° Facture</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Deal</th>
+                        <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Montant</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Echeance</th>
+                        <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Retard</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Statut</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {overdueInvoices.map(inv => {
+                        const invCfg = INVOICE_STATUS_CFG[inv.status]
+                        return (
+                          <tr key={inv.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-4 py-3">
+                              <span className="font-bold text-slate-900 text-xs">{inv.invoiceNumber}</span>
+                            </td>
+                            <td className="px-4 py-3 text-xs text-slate-700 max-w-[200px]">
+                              <span className="truncate block">{inv.dealTitle}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap text-xs">
+                              {mad(inv.amount)}
+                            </td>
+                            <td className="px-4 py-3 text-center text-xs text-slate-500">{fmtDate(inv.dueDate)}</td>
+                            <td className="px-4 py-3 text-right">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full
+                                ${inv.daysOverdue > 30 ? 'bg-red-100 text-red-700' : inv.daysOverdue > 15 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                                {inv.daysOverdue}j
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex justify-center">
+                                <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold whitespace-nowrap ${invCfg?.bg || 'bg-slate-50'} ${invCfg?.color || 'text-slate-600'} border ${invCfg?.border || 'border-slate-200'}`}>
+                                  {invCfg?.icon} {invCfg?.label || inv.status}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex justify-center">
+                                <button onClick={() => router.push(`/opportunities/${inv.opportunityId}`)}
+                                  className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                                  Voir <ChevronRight className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </TaskSection>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -838,16 +1281,21 @@ export default function TasksPage() {
 // ── KPI Card ──────────────────────────────────────────────────
 function KPICard({ icon, label, value, sub, color, active, onClick }: {
   icon: React.ReactNode; label: string; value: string; sub: string
-  color: 'slate' | 'amber' | 'red' | 'blue' | 'orange'
+  color: 'slate' | 'amber' | 'red' | 'blue' | 'orange' | 'emerald' | 'violet' | 'teal' | 'rose'
   active: boolean; onClick: () => void
 }) {
-  const colors = {
-    slate:  { ring: active ? 'ring-slate-400'  : 'ring-slate-200', icon: 'bg-slate-100 text-slate-600',   val: 'text-slate-900' },
-    amber:  { ring: active ? 'ring-amber-400'  : 'ring-slate-200', icon: 'bg-amber-100 text-amber-600',   val: 'text-amber-700' },
-    red:    { ring: active ? 'ring-red-400'    : 'ring-slate-200', icon: 'bg-red-100 text-red-600',       val: 'text-red-700' },
-    blue:   { ring: active ? 'ring-blue-400'   : 'ring-slate-200', icon: 'bg-blue-100 text-blue-600',     val: 'text-blue-700' },
-    orange: { ring: active ? 'ring-orange-400' : 'ring-slate-200', icon: 'bg-orange-100 text-orange-600', val: 'text-orange-700' },
-  }[color]
+  const colorMap: Record<string, { ring: string; icon: string; val: string }> = {
+    slate:   { ring: active ? 'ring-slate-400'   : 'ring-slate-200', icon: 'bg-slate-100 text-slate-600',     val: 'text-slate-900'   },
+    amber:   { ring: active ? 'ring-amber-400'   : 'ring-slate-200', icon: 'bg-amber-100 text-amber-600',     val: 'text-amber-700'   },
+    red:     { ring: active ? 'ring-red-400'     : 'ring-slate-200', icon: 'bg-red-100 text-red-600',         val: 'text-red-700'     },
+    blue:    { ring: active ? 'ring-blue-400'    : 'ring-slate-200', icon: 'bg-blue-100 text-blue-600',       val: 'text-blue-700'    },
+    orange:  { ring: active ? 'ring-orange-400'  : 'ring-slate-200', icon: 'bg-orange-100 text-orange-600',   val: 'text-orange-700'  },
+    emerald: { ring: active ? 'ring-emerald-400' : 'ring-slate-200', icon: 'bg-emerald-100 text-emerald-600', val: 'text-emerald-700' },
+    violet:  { ring: active ? 'ring-violet-400'  : 'ring-slate-200', icon: 'bg-violet-100 text-violet-600',   val: 'text-violet-700'  },
+    teal:    { ring: active ? 'ring-teal-400'    : 'ring-slate-200', icon: 'bg-teal-100 text-teal-600',       val: 'text-teal-700'    },
+    rose:    { ring: active ? 'ring-rose-400'    : 'ring-slate-200', icon: 'bg-rose-100 text-rose-600',       val: 'text-rose-700'    },
+  }
+  const colors = colorMap[color]
 
   return (
     <button onClick={onClick}
@@ -865,15 +1313,20 @@ function KPICard({ icon, label, value, sub, color, active, onClick }: {
 // ── TaskSection ────────────────────────────────────────────────
 function TaskSection({ icon, title, count, colorScheme, amount, children }: {
   icon: React.ReactNode; title: string; count: number
-  colorScheme: 'amber' | 'red' | 'blue' | 'orange'
+  colorScheme: 'amber' | 'red' | 'blue' | 'orange' | 'emerald' | 'violet' | 'teal' | 'rose'
   amount?: number; children: React.ReactNode
 }) {
-  const cfg = {
-    amber:  { border: 'border-amber-200',  bg: 'bg-amber-50',   text: 'text-amber-800',  badge: 'bg-amber-200 text-amber-800',   icon: 'text-amber-600'  },
-    red:    { border: 'border-red-200',    bg: 'bg-red-50',     text: 'text-red-800',    badge: 'bg-red-200 text-red-800',       icon: 'text-red-600'    },
-    blue:   { border: 'border-blue-200',   bg: 'bg-blue-50',    text: 'text-blue-800',   badge: 'bg-blue-200 text-blue-800',     icon: 'text-blue-600'   },
-    orange: { border: 'border-orange-200', bg: 'bg-orange-50',  text: 'text-orange-800', badge: 'bg-orange-200 text-orange-800', icon: 'text-orange-600' },
-  }[colorScheme]
+  const cfgMap: Record<string, { border: string; bg: string; text: string; badge: string; icon: string }> = {
+    amber:   { border: 'border-amber-200',   bg: 'bg-amber-50',   text: 'text-amber-800',   badge: 'bg-amber-200 text-amber-800',     icon: 'text-amber-600'   },
+    red:     { border: 'border-red-200',     bg: 'bg-red-50',     text: 'text-red-800',     badge: 'bg-red-200 text-red-800',         icon: 'text-red-600'     },
+    blue:    { border: 'border-blue-200',    bg: 'bg-blue-50',    text: 'text-blue-800',    badge: 'bg-blue-200 text-blue-800',       icon: 'text-blue-600'    },
+    orange:  { border: 'border-orange-200',  bg: 'bg-orange-50',  text: 'text-orange-800',  badge: 'bg-orange-200 text-orange-800',   icon: 'text-orange-600'  },
+    emerald: { border: 'border-emerald-200', bg: 'bg-emerald-50', text: 'text-emerald-800', badge: 'bg-emerald-200 text-emerald-800', icon: 'text-emerald-600' },
+    violet:  { border: 'border-violet-200',  bg: 'bg-violet-50',  text: 'text-violet-800',  badge: 'bg-violet-200 text-violet-800',   icon: 'text-violet-600'  },
+    teal:    { border: 'border-teal-200',    bg: 'bg-teal-50',    text: 'text-teal-800',    badge: 'bg-teal-200 text-teal-800',       icon: 'text-teal-600'    },
+    rose:    { border: 'border-rose-200',    bg: 'bg-rose-50',    text: 'text-rose-800',    badge: 'bg-rose-200 text-rose-800',       icon: 'text-rose-600'    },
+  }
+  const cfg = cfgMap[colorScheme]
 
   return (
     <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">

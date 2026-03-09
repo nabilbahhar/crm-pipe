@@ -1,7 +1,7 @@
 import { supabase } from './supabaseClient'
 
 export type ActionType = 'create' | 'update' | 'delete' | 'stage' | 'convert' | 'won' | 'lost'
-export type EntityType = 'deal' | 'account' | 'prospect' | 'contact' | 'card'
+export type EntityType = 'deal' | 'account' | 'prospect' | 'contact' | 'card' | 'invoice' | 'expense' | 'project_service' | 'ticket' | 'dr'
 
 export async function logActivity(params: {
   action_type: ActionType

@@ -7,17 +7,35 @@ import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { Bell, X, ChevronDown, KeyRound, LogOut, Search } from "lucide-react";
 
-const NAV_ITEMS = [
-  { label: "Dashboard",   href: "/dashboard" },
+type NavItem = { label: string; href: string; badge?: boolean; children?: { label: string; href: string }[] }
+
+const NAV_ITEMS: NavItem[] = [
+  { label: "Dashboard", href: "/dashboard" },
   { label: "Prospection", href: "/prospection" },
-  { label: "Pipeline",    href: "/pipeline" },
-  { label: "Comptes",     href: "/accounts" },
-  { label: "Deals",       href: "/opportunities" },
-  { label: "Tasks",       href: "/tasks",   badge: true },
-  { label: "Supply",       href: "/supply" },
-  { label: "Fournisseurs", href: "/supply/fournisseurs" },
-  { label: "KPI",         href: "/kpi" },
+  { label: "Vente", href: "/pipeline", children: [
+    { label: "Pipeline", href: "/pipeline" },
+    { label: "Deals", href: "/opportunities" },
+    { label: "Comptes", href: "/accounts" },
+  ]},
+  { label: "Logistique", href: "/supply", children: [
+    { label: "Supply", href: "/supply" },
+    { label: "Fournisseurs", href: "/supply/fournisseurs" },
+  ]},
+  { label: "Projets", href: "/projects", children: [
+    { label: "Prescription", href: "/projects?tab=prescription" },
+    { label: "Déploiement", href: "/projects?tab=deploiement" },
+  ]},
+  { label: "Finance", href: "/invoices", children: [
+    { label: "Facturation", href: "/invoices" },
+    { label: "Notes de frais", href: "/expenses" },
+  ]},
+  { label: "Support", href: "/support" },
+  { label: "Tasks", href: "/tasks", badge: true },
+  { label: "KPI", href: "/kpi" },
 ];
+
+/* flat list for QuickSearch links */
+const ALL_NAV_LINKS = NAV_ITEMS.flatMap(it => it.children ? it.children : [{ label: it.label, href: it.href }]);
 
 type Activity = {
   id: string;
@@ -343,7 +361,7 @@ function QuickSearch({ onClose }: { onClose: () => void }) {
         </div>
         {!q && (
           <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {NAV_ITEMS.map(it => (
+            {ALL_NAV_LINKS.map(it => (
               <a key={it.href} href={it.href} onClick={onClose}
                 style={{ fontSize: 11, fontWeight: 500, color: '#64748b', background: '#f8fafc', borderRadius: 8, padding: '4px 10px', textDecoration: 'none', border: '1px solid #e2e8f0' }}>
                 {it.label}
@@ -360,15 +378,19 @@ function QuickSearch({ onClose }: { onClose: () => void }) {
 const SHORTCUTS_TEMPLATE = [
   { keys: ["MOD", "K"], label: "Recherche rapide" },
   { keys: ["?"], label: "Afficher les raccourcis" },
-  { keys: ["G", "D"], label: "Aller au Dashboard" },
-  { keys: ["G", "P"], label: "Aller au Pipeline" },
-  { keys: ["G", "T"], label: "Aller aux Tasks" },
-  { keys: ["G", "S"], label: "Aller au Supply" },
-  { keys: ["G", "A"], label: "Aller aux Comptes" },
-  { keys: ["G", "O"], label: "Aller aux Deals" },
-  { keys: ["G", "K"], label: "Aller aux KPI" },
-  { keys: ["G", "R"], label: "Aller à la Prospection" },
-  { keys: ["G", "H"], label: "Aller à l'Historique" },
+  { keys: ["G", "D"], label: "Dashboard" },
+  { keys: ["G", "P"], label: "Pipeline" },
+  { keys: ["G", "R"], label: "Prospection" },
+  { keys: ["G", "A"], label: "Comptes" },
+  { keys: ["G", "O"], label: "Deals" },
+  { keys: ["G", "T"], label: "Tasks" },
+  { keys: ["G", "S"], label: "Supply" },
+  { keys: ["G", "J"], label: "Projets" },
+  { keys: ["G", "F"], label: "Facturation" },
+  { keys: ["G", "E"], label: "Notes de frais" },
+  { keys: ["G", "U"], label: "Support" },
+  { keys: ["G", "K"], label: "KPI" },
+  { keys: ["G", "H"], label: "Historique" },
 ];
 
 function ShortcutsPanel({ onClose, modKey }: { onClose: () => void; modKey: string }) {
@@ -406,6 +428,67 @@ function ShortcutsPanel({ onClose, modKey }: { onClose: () => void; modKey: stri
           <span style={{ fontSize: 11, color: "#94a3b8" }}>Appuie sur <kbd style={{ fontSize: 10, background: "#f1f5f9", borderRadius: 4, padding: "1px 5px", fontFamily: "monospace", border: "1px solid #e2e8f0" }}>?</kbd> pour afficher ce panneau</span>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── NavDropdown ──────────────────────────────────────────────────────────────
+function NavDropdown({ item, active, path, taskCount }: { item: NavItem; active: boolean; path: string; taskCount: number }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}
+      onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          padding: "5px 10px", borderRadius: 8, fontSize: 13,
+          fontWeight: active ? 600 : 400,
+          color: active ? "#0f172a" : "#64748b",
+          background: active ? "#f1f5f9" : "transparent",
+          border: "none", cursor: "pointer",
+          display: "inline-flex", alignItems: "center", gap: 3,
+        }}>
+        {item.label}
+        <ChevronDown style={{ width: 11, height: 11, opacity: 0.5, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+      </button>
+      {open && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, marginTop: 4,
+          background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12,
+          boxShadow: "0 8px 30px rgba(0,0,0,0.08)", overflow: "hidden",
+          minWidth: 160, zIndex: 200, padding: "4px",
+        }}>
+          {item.children!.map(child => {
+            const childActive = path === child.href.split('?')[0] || path.startsWith(child.href.split('?')[0] + "/");
+            return (
+              <Link key={child.href} href={child.href}
+                onClick={() => setOpen(false)}
+                style={{
+                  display: "block", padding: "8px 12px", borderRadius: 8,
+                  fontSize: 13, fontWeight: childActive ? 600 : 400,
+                  color: childActive ? "#0f172a" : "#475569",
+                  textDecoration: "none",
+                  background: childActive ? "#f1f5f9" : "transparent",
+                }}
+                onMouseEnter={e => { if (!childActive) (e.currentTarget.style.background = "#f8fafc") }}
+                onMouseLeave={e => { if (!childActive) (e.currentTarget.style.background = "transparent") }}
+              >
+                {child.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -472,7 +555,8 @@ export default function NavBar() {
         const routes: Record<string, string> = {
           d: "/dashboard", p: "/pipeline", t: "/tasks", s: "/supply",
           a: "/accounts", o: "/opportunities", k: "/kpi", r: "/prospection",
-          h: "/activity",
+          h: "/activity", j: "/projects", f: "/invoices", e: "/expenses",
+          u: "/support",
         };
         const route = routes[e.key.toLowerCase()];
         if (route) {
@@ -595,7 +679,13 @@ export default function NavBar() {
 
           <nav style={{ display: "flex", gap: 2, flex: 1 }}>
             {NAV_ITEMS.map(it => {
-              const active = path === it.href || path.startsWith(it.href + "/");
+              const allPaths = it.children ? it.children.map(c => c.href.split('?')[0]) : [it.href];
+              const active = allPaths.some(p => path === p || path.startsWith(p + "/"));
+              if (it.children) {
+                return (
+                  <NavDropdown key={it.label} item={it} active={active} path={path} taskCount={taskCount} />
+                );
+              }
               return (
                 <Link key={it.href} href={it.href} style={{
                   padding: "5px 12px", borderRadius: 8, fontSize: 13,

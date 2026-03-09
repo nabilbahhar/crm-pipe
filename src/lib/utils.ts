@@ -202,6 +202,96 @@ export const LINE_STATUS_ORDER: LineStatus[] = [
   'pending', 'commande', 'sous_douane', 'en_stock', 'livre', 'pas_de_visibilite',
 ]
 
+// ─── Invoice status ──────────────────────────────────────────────────────────
+
+export type InvoiceStatus = 'emise' | 'echue' | 'relancee' | 'payee'
+
+export const INVOICE_STATUS_CFG: Record<InvoiceStatus, {
+  label: string; icon: string; color: string; bg: string; border: string; dot: string; next?: InvoiceStatus
+}> = {
+  emise:    { label: 'Émise',    icon: '📄', color: 'text-blue-700',    bg: 'bg-blue-50',    border: 'border-blue-200',    dot: 'bg-blue-500',    next: 'echue'    },
+  echue:    { label: 'Échue',    icon: '⚠️', color: 'text-red-600',     bg: 'bg-red-50',     border: 'border-red-200',     dot: 'bg-red-500',     next: 'relancee' },
+  relancee: { label: 'Relancée', icon: '🔔', color: 'text-orange-700',  bg: 'bg-orange-50',  border: 'border-orange-200',  dot: 'bg-orange-500',  next: 'payee'    },
+  payee:    { label: 'Payée',    icon: '✅', color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-500'                   },
+}
+
+export const INVOICE_STATUS_ORDER: InvoiceStatus[] = ['emise', 'echue', 'relancee', 'payee']
+
+// ─── Project / Prescription status ──────────────────────────────────────────
+
+export type PrescriptionStatus = 'en_attente' | 'en_cours' | 'prescrit' | 'soutenu'
+
+export const PRESCRIPTION_STATUS_CFG: Record<PrescriptionStatus, {
+  label: string; icon: string; color: string; bg: string; dot: string
+}> = {
+  en_attente: { label: 'En attente',  icon: '⏳', color: 'text-slate-600',   bg: 'bg-slate-50',   dot: 'bg-slate-400'   },
+  en_cours:   { label: 'En cours',    icon: '🔄', color: 'text-blue-700',    bg: 'bg-blue-50',    dot: 'bg-blue-500'    },
+  prescrit:   { label: 'Prescrit',    icon: '📋', color: 'text-violet-700',  bg: 'bg-violet-50',  dot: 'bg-violet-500'  },
+  soutenu:    { label: 'Soutenu',     icon: '✅', color: 'text-emerald-700', bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
+}
+
+export type ProjectServiceStatus = 'planifie' | 'en_cours' | 'termine' | 'bloque'
+
+export const PROJECT_SERVICE_STATUS_CFG: Record<ProjectServiceStatus, {
+  label: string; icon: string; color: string; bg: string; dot: string
+}> = {
+  planifie: { label: 'Planifié',  icon: '📅', color: 'text-slate-600',   bg: 'bg-slate-50',   dot: 'bg-slate-400'   },
+  en_cours: { label: 'En cours',  icon: '🔧', color: 'text-blue-700',    bg: 'bg-blue-50',    dot: 'bg-blue-500'    },
+  termine:  { label: 'Terminé',   icon: '✅', color: 'text-emerald-700', bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
+  bloque:   { label: 'Bloqué',    icon: '🚫', color: 'text-red-600',     bg: 'bg-red-50',     dot: 'bg-red-500'     },
+}
+
+// ─── Support / Ticket status ────────────────────────────────────────────────
+
+export type TicketStatus = 'ouvert' | 'en_cours' | 'resolu' | 'ferme'
+
+export const TICKET_STATUS_CFG: Record<TicketStatus, {
+  label: string; icon: string; color: string; bg: string; dot: string
+}> = {
+  ouvert:   { label: 'Ouvert',    icon: '🔴', color: 'text-red-600',     bg: 'bg-red-50',     dot: 'bg-red-500'     },
+  en_cours: { label: 'En cours',  icon: '🟡', color: 'text-amber-700',   bg: 'bg-amber-50',   dot: 'bg-amber-500'   },
+  resolu:   { label: 'Résolu',    icon: '🟢', color: 'text-emerald-700', bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
+  ferme:    { label: 'Fermé',     icon: '⚫', color: 'text-slate-600',   bg: 'bg-slate-100',  dot: 'bg-slate-400'   },
+}
+
+export type TicketType = 'sav' | 'maintenance' | 'intervention' | 'helpdesk'
+
+export const TICKET_TYPE_CFG: Record<TicketType, { label: string; icon: string; color: string; bg: string }> = {
+  sav:           { label: 'SAV',           icon: '🔧', color: 'text-orange-700', bg: 'bg-orange-50' },
+  maintenance:   { label: 'Maintenance',   icon: '🛠️', color: 'text-blue-700',   bg: 'bg-blue-50'   },
+  intervention:  { label: 'Intervention',  icon: '🚀', color: 'text-violet-700', bg: 'bg-violet-50' },
+  helpdesk:      { label: 'Help Desk',     icon: '💬', color: 'text-teal-700',   bg: 'bg-teal-50'   },
+}
+
+// ─── Expense status ─────────────────────────────────────────────────────────
+
+export type ExpenseStatus = 'brouillon' | 'soumise' | 'remboursee' | 'encaissee'
+
+export const EXPENSE_STATUS_CFG: Record<ExpenseStatus, {
+  label: string; icon: string; color: string; bg: string; dot: string
+}> = {
+  brouillon:  { label: 'Brouillon',   icon: '📝', color: 'text-slate-600',   bg: 'bg-slate-50',   dot: 'bg-slate-400'   },
+  soumise:    { label: 'Soumise',     icon: '📤', color: 'text-blue-700',    bg: 'bg-blue-50',    dot: 'bg-blue-500'    },
+  remboursee: { label: 'Remboursée',  icon: '💰', color: 'text-amber-700',   bg: 'bg-amber-50',   dot: 'bg-amber-500'   },
+  encaissee:  { label: 'Encaissée',   icon: '✅', color: 'text-emerald-700', bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
+}
+
+// ─── Payment terms ──────────────────────────────────────────────────────────
+
+export const PAYMENT_TERMS = [
+  { value: 'a_la_livraison', label: 'À la livraison' },
+  { value: '30j', label: '30 jours' },
+  { value: '60j', label: '60 jours' },
+  { value: '90j', label: '90 jours' },
+  { value: 'autre', label: 'Autre' },
+] as const
+
+export function paymentTermLabel(value: string | null | undefined): string {
+  if (!value) return '—'
+  const found = PAYMENT_TERMS.find(t => t.value === value)
+  return found ? found.label : value
+}
+
 // ─── Team name mapping ────────────────────────────────────────────────────────
 const TEAM_NAMES: Record<string, string> = {
   'nabil.imdh@gmail.com': 'Nabil Bahhar',
@@ -210,4 +300,23 @@ const TEAM_NAMES: Record<string, string> = {
 export function ownerName(email: string | null | undefined): string {
   if (!email) return '—'
   return TEAM_NAMES[email] || email.split('@')[0]
+}
+
+// ─── Compucom team emails ───────────────────────────────────────────────────
+
+export const COMPUCOM_EMAILS = {
+  supply: 'supplychain@compucom.ma',
+  kader: 'm.abdelkader@compucom.ma',
+  hanane: 'h.benramadane@compucom.ma',
+  achraf: 'a.lahkim@compucom.ma',
+  mernassi: 'a.marnassi@compucom.ma',
+  samira: 's.samrani@compucom.ma',
+} as const
+
+// ─── AE check (not Inside) ─────────────────────────────────────────────────
+
+export const INSIDE_EMAILS = ['s.chitachny@compucom.ma'] as const
+export function isAE(email: string | null | undefined): boolean {
+  if (!email) return false
+  return !INSIDE_EMAILS.includes(email as any)
 }

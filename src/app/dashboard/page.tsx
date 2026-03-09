@@ -14,7 +14,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line,
   LabelList, ComposedChart, Area,
 } from 'recharts'
-import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget, ownerName } from '@/lib/utils'
+import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget, ownerName, SUPPLY_STATUS_CFG, INVOICE_STATUS_CFG, type InvoiceStatus, fmtDate } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONSTANTS
@@ -234,6 +234,8 @@ export default function Dashboard() {
   const [purchaseLines, setPurchaseLines] = useState<any[]>([])
   const [supplyOrders,  setSupplyOrders]  = useState<any[]>([])
   const [prospects, setProspects] = useState<any[]>([])
+  const [invoices, setInvoices] = useState<any[]>([])
+  const [dealRegs, setDealRegs] = useState<any[]>([])
 
   // ── Filtres avancés ──────────────────────────────────────────────────────
   const [showFilters, setShowFilters]   = useState(false)
@@ -299,6 +301,15 @@ export default function Dashboard() {
       setRows(opps||[]); setAccounts(accs||[])
       setPurchaseLines(pLines||[]); setSupplyOrders(sOrders||[])
       setProspects(prosp||[])
+      // Load invoices and deal registrations (may not exist yet)
+      try {
+        const [{ data: inv }, { data: drs }] = await Promise.all([
+          supabase.from('invoices').select('*'),
+          supabase.from('deal_registrations').select('*'),
+        ])
+        setInvoices(inv || [])
+        setDealRegs(drs || [])
+      } catch {} // tables may not exist yet
     } catch(e:any) { setErr(e?.message||'Erreur') }
     finally { setLoading(false) }
   }
@@ -1655,6 +1666,167 @@ export default function Dashboard() {
           )}
         </div>
 
+
+        {/* ══ SECTION : LOGISTIQUE + FINANCE + ALERTES ══ */}
+        {(() => {
+          // Supply KPIs
+          const supTotal = supplyOrders.length
+          const supEnCours = supplyOrders.filter((s: any) => !['livre','facture'].includes(s.status)).length
+          const supLivre = supplyOrders.filter((s: any) => s.status === 'livre' || s.status === 'facture').length
+          const supFacture = supplyOrders.filter((s: any) => s.status === 'facture').length
+
+          // Invoice KPIs
+          const thisYr = String(thisYear)
+          const invThisYear = invoices.filter((i: any) => String(i.issue_date || i.created_at || '').startsWith(thisYr))
+          const invTotal = invThisYear.reduce((s: number, i: any) => s + Number(i.amount || 0), 0)
+          const invPayee = invThisYear.filter((i: any) => i.status === 'payee').reduce((s: number, i: any) => s + Number(i.amount || 0), 0)
+          const invEchue = invThisYear.filter((i: any) => i.status === 'echue' || (i.due_date && new Date(i.due_date) < now && i.status !== 'payee')).length
+          const tauxRecouvre = invTotal > 0 ? Math.round((invPayee / invTotal) * 100) : 0
+
+          // Alerts
+          const today = new Date()
+          const drExpiring = dealRegs.filter((d: any) => {
+            if (!d.expiry_date) return false
+            const diff = Math.ceil((new Date(d.expiry_date).getTime() - today.getTime()) / 86400000)
+            return diff <= 30
+          })
+          const warrantyExpiring = purchaseLines.filter((pl: any) => {
+            if (!pl.warranty_months || pl.warranty_months <= 0) return false
+            const oppId = pl.purchase_info?.opportunity_id
+            const opp = rows.find((r: any) => r.id === oppId)
+            if (!opp?.po_date) return false
+            const expDate = new Date(opp.po_date)
+            expDate.setMonth(expDate.getMonth() + pl.warranty_months)
+            const diff = Math.ceil((expDate.getTime() - today.getTime()) / 86400000)
+            return diff <= 90 && diff >= -30
+          })
+          const licenseExpiring = purchaseLines.filter((pl: any) => {
+            if (!pl.license_months || pl.license_months <= 0) return false
+            const oppId = pl.purchase_info?.opportunity_id
+            const opp = rows.find((r: any) => r.id === oppId)
+            if (!opp?.po_date) return false
+            const expDate = new Date(opp.po_date)
+            expDate.setMonth(expDate.getMonth() + pl.license_months)
+            const diff = Math.ceil((expDate.getTime() - today.getTime()) / 86400000)
+            return diff <= 90 && diff >= -30
+          })
+          const invOverdue = invoices.filter((i: any) => i.due_date && new Date(i.due_date) < today && i.status !== 'payee')
+
+          const totalAlerts = drExpiring.length + warrantyExpiring.length + licenseExpiring.length + invOverdue.length
+
+          // Invoice monthly chart
+          const invChartData = Array.from({ length: 12 }, (_, i) => {
+            const m = `${thisYear}-${String(i + 1).padStart(2, '0')}`
+            const mInvoices = invThisYear.filter((inv: any) => String(inv.issue_date || '').slice(0, 7) === m)
+            const facture = mInvoices.reduce((s: number, inv: any) => s + Number(inv.amount || 0), 0)
+            const paye = mInvoices.filter((inv: any) => inv.status === 'payee').reduce((s: number, inv: any) => s + Number(inv.amount || 0), 0)
+            return { name: MONTHS_FR[i], facture, paye }
+          })
+
+          return (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              {/* Logistique */}
+              <Panel title="📦 Logistique" sub={`${supTotal} commandes`}>
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  {[
+                    { label: 'Total', value: supTotal, color: 'text-slate-800' },
+                    { label: 'En cours', value: supEnCours, color: 'text-blue-600' },
+                    { label: 'Livrées', value: supLivre, color: 'text-emerald-600' },
+                    { label: 'Facturées', value: supFacture, color: 'text-violet-600' },
+                  ].map((k, i) => (
+                    <div key={i} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-center">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase">{k.label}</div>
+                      <div className={`text-lg font-black ${k.color}`}>{k.value}</div>
+                    </div>
+                  ))}
+                </div>
+                {supTotal > 0 && (
+                  <div className="flex items-center gap-2">
+                    {(['a_commander','place','commande','en_stock','livre','facture'] as const).map(s => {
+                      const cfg = SUPPLY_STATUS_CFG[s]
+                      const cnt = supplyOrders.filter((o: any) => o.status === s).length
+                      if (cnt === 0) return null
+                      return (
+                        <span key={s} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${cfg.bg} ${cfg.color}`}>
+                          {cfg.icon} {cnt}
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+              </Panel>
+
+              {/* Finance */}
+              <Panel title="💰 Finance" sub={`Facturation ${thisYear}`}>
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  {[
+                    { label: 'Facturé', value: mad(invTotal) },
+                    { label: 'Payé', value: mad(invPayee) },
+                    { label: 'Échues', value: String(invEchue), alert: invEchue > 0 },
+                    { label: 'Recouvr.', value: `${tauxRecouvre}%` },
+                  ].map((k, i) => (
+                    <div key={i} className={`rounded-xl border p-3 text-center ${k.alert ? 'border-red-200 bg-red-50' : 'border-slate-100 bg-slate-50'}`}>
+                      <div className="text-[10px] font-bold text-slate-400 uppercase">{k.label}</div>
+                      <div className={`text-xs font-black ${k.alert ? 'text-red-600' : 'text-slate-800'}`}>{k.value}</div>
+                    </div>
+                  ))}
+                </div>
+                {invThisYear.length > 0 && (
+                  <div className="h-[160px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={invChartData} barGap={2}>
+                        <CartesianGrid strokeDasharray="3 3" stroke={C.grid} />
+                        <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                        <YAxis tick={{ fontSize: 10 }} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : String(v)} />
+                        <Tooltip content={<ChartTip isAmt />} />
+                        <Bar dataKey="facture" fill="#3b82f6" name="Facturé" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="paye" fill="#16a34a" name="Payé" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </Panel>
+
+              {/* Alertes */}
+              {totalAlerts > 0 && (
+                <Panel title="🚨 Alertes" sub={`${totalAlerts} alerte(s)`} className="lg:col-span-2">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {drExpiring.length > 0 && (
+                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                        <div className="text-[10px] font-bold text-amber-600 uppercase mb-1">🛡️ DR expirant</div>
+                        <div className="text-lg font-black text-amber-800">{drExpiring.length}</div>
+                        <div className="text-[10px] text-amber-600 mt-0.5">Dans les 30 prochains jours</div>
+                      </div>
+                    )}
+                    {warrantyExpiring.length > 0 && (
+                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+                        <div className="text-[10px] font-bold text-emerald-600 uppercase mb-1">🛡️ Garanties</div>
+                        <div className="text-lg font-black text-emerald-800">{warrantyExpiring.length}</div>
+                        <div className="text-[10px] text-emerald-600 mt-0.5">Expirant sous 90 jours</div>
+                      </div>
+                    )}
+                    {licenseExpiring.length > 0 && (
+                      <div className="rounded-xl border border-violet-200 bg-violet-50 p-3">
+                        <div className="text-[10px] font-bold text-violet-600 uppercase mb-1">🔑 Licences</div>
+                        <div className="text-lg font-black text-violet-800">{licenseExpiring.length}</div>
+                        <div className="text-[10px] text-violet-600 mt-0.5">Expirant sous 90 jours</div>
+                      </div>
+                    )}
+                    {invOverdue.length > 0 && (
+                      <Link href="/invoices" className="rounded-xl border border-red-200 bg-red-50 p-3 hover:bg-red-100 transition-colors">
+                        <div className="text-[10px] font-bold text-red-600 uppercase mb-1">💰 Factures échues</div>
+                        <div className="text-lg font-black text-red-800">{invOverdue.length}</div>
+                        <div className="text-[10px] text-red-600 mt-0.5">
+                          {mad(invOverdue.reduce((s: number, i: any) => s + Number(i.amount || 0), 0))} impayés
+                        </div>
+                      </Link>
+                    )}
+                  </div>
+                </Panel>
+              )}
+            </div>
+          )
+        })()}
 
         {/* ══ LISTE COMPLÈTE DEALS ══ */}
         <Panel title="📋 Tous les deals — période" sub={`${periodLabel} · ${sortedDeals.length} deals · Clic sur en-tête pour trier`}>

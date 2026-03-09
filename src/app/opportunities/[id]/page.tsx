@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName } from '@/lib/utils'
+import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName, paymentTermLabel } from '@/lib/utils'
 
 // HTML escape helper — prevents XSS in email template
 function esc(s: string | null | undefined): string {
@@ -36,12 +36,17 @@ type PurchaseLine = {
   fournisseur?: string; contact_fournisseur?: string
   email_fournisseur?: string; tel_fournisseur?: string
   line_status?: string; eta?: string; eta_updated_at?: string; status_note?: string
+  warranty_months?: number; license_months?: number
 }
 type PurchaseInfo = {
-  id: string; frais_engagement: number; notes: string
+  id: string; frais_engagement: number; notes: string; payment_terms?: string
   filled_by: string; justif_reason?: string; justif_text?: string
   approved_by?: string; created_at: string; updated_at?: string
   purchase_lines: PurchaseLine[]
+}
+type DealRegistration = {
+  id: string; bu?: string; card?: string; platform?: string
+  dr_number?: string; expiry_date?: string; status?: string
 }
 type DealFile = { id: string; file_type: string; file_name: string; file_url: string }
 type SupplyOrder = {
@@ -349,6 +354,7 @@ export default function OpportunityDetailPage() {
   const [fileUrls, setFileUrls]   = useState<Record<string, string>>({})
   const [supply, setSupply]       = useState<SupplyOrder | null>(null)
   const [activities, setActivities] = useState<Activity[]>([])
+  const [drs, setDrs]             = useState<DealRegistration[]>([])
   const [loading, setLoading]     = useState(true)
   const [showEmail, setShowEmail] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
@@ -396,6 +402,13 @@ export default function OpportunityDetailPage() {
 
     if (supplyRes.data) setSupply(supplyRes.data)
     setActivities(actRes.data || [])
+
+    // Load Deal Registrations
+    try {
+      const { data: drData } = await supabase.from('deal_registrations').select('*').eq('opportunity_id', id)
+      setDrs(drData || [])
+    } catch {} // table may not exist yet
+
     setLoading(false)
   }
 
@@ -615,6 +628,49 @@ export default function OpportunityDetailPage() {
           </div>
         )}
 
+        {/* ══ SECTION : DEAL REGISTRATIONS ══ */}
+        {drs.length > 0 && (
+          <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-slate-50 bg-blue-50/50 px-5 py-3 flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-blue-500">🛡️ Deal Registration ({drs.length})</span>
+            </div>
+            <div className="p-5 space-y-2">
+              {drs.map(dr => {
+                const daysLeft = dr.expiry_date ? Math.ceil((new Date(dr.expiry_date).getTime() - Date.now()) / 86400000) : null
+                const isExpired = daysLeft !== null && daysLeft < 0
+                const expiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 30
+                return (
+                  <div key={dr.id} className={`rounded-xl border p-3 flex items-center justify-between gap-4 ${isExpired ? 'border-red-200 bg-red-50' : expiringSoon ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                    <div className="flex items-center gap-3 min-w-0">
+                      <ShieldCheck className={`h-5 w-5 shrink-0 ${isExpired ? 'text-red-500' : expiringSoon ? 'text-amber-500' : 'text-emerald-500'}`} />
+                      <div className="min-w-0">
+                        <div className="font-bold text-sm text-slate-800">
+                          {dr.dr_number || 'DR'}
+                          {dr.card && <span className="ml-2 text-xs text-slate-500">{dr.card}</span>}
+                          {dr.bu && <span className="ml-1 text-xs text-slate-400">({dr.bu})</span>}
+                        </div>
+                        {dr.platform && <div className="text-[10px] text-slate-500">Plateforme : {dr.platform}</div>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      {dr.expiry_date ? (
+                        <div>
+                          <div className={`text-xs font-bold ${isExpired ? 'text-red-600' : expiringSoon ? 'text-amber-600' : 'text-emerald-600'}`}>
+                            {isExpired ? `Expiré (${Math.abs(daysLeft!)}j)` : expiringSoon ? `Expire dans ${daysLeft}j` : `Valide (${daysLeft}j)`}
+                          </div>
+                          <div className="text-[10px] text-slate-400">{fmtDate(dr.expiry_date)}</div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-emerald-600 font-bold">Actif</span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* ══ SECTION 3 : FICHE ACHAT (Won uniquement) ══ */}
         {isWon && (
           <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
@@ -682,6 +738,12 @@ export default function OpportunityDetailPage() {
                                   Contact: {l.contact_fournisseur}
                                 </div>
                               )}
+                              {(l.warranty_months || l.license_months) ? (
+                                <div className="flex gap-1.5 mt-1">
+                                  {l.warranty_months ? <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">🛡️ {l.warranty_months} mois</span> : null}
+                                  {l.license_months ? <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-50 border border-violet-200 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">🔑 {l.license_months} mois</span> : null}
+                                </div>
+                              ) : null}
                             </td>
                             <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-600">{l.qty}</td>
                             <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-700">{ptV > 0 ? mad(ptV) : '—'}</td>
@@ -773,6 +835,11 @@ export default function OpportunityDetailPage() {
                             ? <span className="text-emerald-600">✓ Validé par {info.approved_by}</span>
                             : <span className="text-amber-500 flex items-center gap-1"><Clock className="h-3 w-3" /> En attente Achraf</span>}
                         </div>
+                      </div>
+                    )}
+                    {info.payment_terms && (
+                      <div className="border-t border-slate-200 pt-2">
+                        <RRow label="Modalités paiement" value={paymentTermLabel(info.payment_terms)} />
                       </div>
                     )}
                     {info.notes && <p className="border-t border-slate-200 pt-2 text-xs text-slate-500 italic">{info.notes}</p>}

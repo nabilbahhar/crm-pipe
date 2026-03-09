@@ -21,7 +21,7 @@ const ALLOWED_TYPES = [
 ]
 
 // ─── Security: Whitelist allowed buckets ───────────────────────
-const ALLOWED_BUCKETS = ['deal-files', 'account-files']
+const ALLOWED_BUCKETS = ['deal-files', 'account-files', 'expense-files']
 
 // ─── Security: Validate path (no traversal) ───────────────────
 function isPathSafe(path: string): boolean {
