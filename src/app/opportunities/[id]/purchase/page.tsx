@@ -17,10 +17,15 @@ type Deal = {
   bu?: string | null; po_number?: string | null
 }
 type Fournisseur = { id: string; name: string; contact?: string; email?: string; tel?: string }
+type SupplierContact = {
+  id: string; supplier_id: string; contact_name: string
+  email?: string; tel?: string; role?: string; brands?: string
+}
 type PurchaseLine = {
   id?: string; ref: string; designation: string
   qty: number; pu_vente: number; pt_vente: number; pu_achat: number
   fournisseur_id: string | null; fournisseur?: string
+  contact_fournisseur?: string; email_fournisseur?: string; tel_fournisseur?: string
 }
 type DBFile = { id?: string; file_type: string; file_name: string; file_url?: string }
 
@@ -33,7 +38,8 @@ const REASONS = [
 ]
 
 const emptyLine = (): PurchaseLine => ({
-  ref: '', designation: '', qty: 1, pu_vente: 0, pt_vente: 0, pu_achat: 0, fournisseur_id: null,
+  ref: '', designation: '', qty: 1, pu_vente: 0, pt_vente: 0, pu_achat: 0,
+  fournisseur_id: null, contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '',
 })
 
 // ─── Format Excel : 57.500,00 MAD ────────────────────────────
@@ -104,6 +110,9 @@ export default function PurchasePage() {
   const [autreFiles, setAutreFiles] = useState<File[]>([])
   const [dbFiles, setDbFiles]       = useState<DBFile[]>([])
 
+  // Supplier contacts (multi-contacts par fournisseur)
+  const [supplierContacts, setSupplierContacts] = useState<SupplierContact[]>([])
+
   // New fournisseur modal
   const [showFournModal, setShowFournModal] = useState(false)
   const [newFourn, setNewFourn] = useState({ name:'', contact:'', email:'', tel:'' })
@@ -132,19 +141,25 @@ export default function PurchasePage() {
 
   async function loadAll() {
     setLoading(true)
-    const [dealRes, fournsRes] = await Promise.all([
+    const [dealRes, fournsRes, contactsRes] = await Promise.all([
       supabase.from('opportunities')
         .select('id, title, amount, bu, po_number, accounts(name)')
         .eq('id', id).single(),
       supabase.from('suppliers')
         .select('id, name, contact, email, tel')
         .order('name'),
+      supabase.from('supplier_contacts')
+        .select('id, supplier_id, contact_name, email, tel, role, brands')
+        .order('contact_name'),
     ])
     if (dealRes.data) {
       setDeal({ ...dealRes.data, accounts: dealRes.data.accounts as any })
       document.title = `Achat · ${dealRes.data.title} · CRM-PIPE`
     }
     if (fournsRes.data) setFourns(fournsRes.data)
+    if (contactsRes && !contactsRes.error && contactsRes.data) {
+      setSupplierContacts(contactsRes.data as SupplierContact[])
+    }
 
     // Existing purchase info
     const { data: info } = await supabase
@@ -171,6 +186,9 @@ export default function PurchasePage() {
           pt_vente: l.pt_vente || 0, pu_achat: l.pu_achat || 0,
           fournisseur_id: l.fournisseur_id || null,
           fournisseur: l.fournisseur || '',
+          contact_fournisseur: l.contact_fournisseur || '',
+          email_fournisseur: l.email_fournisseur || '',
+          tel_fournisseur: l.tel_fournisseur || '',
         })))
         setExtracted(true)
         setLoading(false)
@@ -247,8 +265,7 @@ export default function PurchasePage() {
   // ── Validation ────────────────────────────────────────────────
   const hasBcClient = !!bcFile || dbFiles.some(f => f.file_type === 'bc_client')
   const hasDevis    = !!devisFile || dbFiles.some(f => f.file_type === 'devis_compucom')
-  const justifOk    = !margeFaible || justifText.trim().length >= 10
-  const canSave     = hasBcClient && hasDevis && justifOk && totalMatch
+  const canSave     = hasBcClient && hasDevis && totalMatch
 
   // ── Line update ───────────────────────────────────────────────
   const updateLine = (i: number, field: keyof PurchaseLine, val: any) =>
@@ -268,12 +285,11 @@ export default function PurchasePage() {
     if (!partial && validLines.length === 0) {
       setErr('Ajoute au moins une ligne avec une désignation.'); return
     }
-    // Pour save complet : validations strictes
+    // Pour save complet : validations strictes (marge faible = info seulement, pas bloquant)
     if (!partial) {
       if (!hasBcClient) { setErr('BC Client est obligatoire pour finaliser.'); return }
       if (!hasDevis)    { setErr('Devis Compucom est obligatoire pour finaliser.'); return }
       if (!totalMatch)  { setErr(`Total (${mad(totalVente)}) ≠ montant deal (${mad(dealAmount)}). Écart : ${mad(Math.abs(totalDiff))}`); return }
-      if (margeFaible && justifText.trim().length < 10) { setErr('Justification obligatoire (min. 10 car.) pour marge < 10%.'); return }
     }
 
     setSaving(true)
@@ -304,9 +320,9 @@ export default function PurchasePage() {
             pt_vente: l.pt_vente || l.qty*l.pu_vente, pu_achat: l.pu_achat,
             fournisseur_id: l.fournisseur_id || null,
             fournisseur: fourn?.name || l.fournisseur || null,
-            contact_fournisseur: fourn?.contact || null,
-            email_fournisseur: fourn?.email || null,
-            tel_fournisseur: fourn?.tel || null,
+            contact_fournisseur: l.contact_fournisseur || fourn?.contact || null,
+            email_fournisseur: l.email_fournisseur || fourn?.email || null,
+            tel_fournisseur: l.tel_fournisseur || fourn?.tel || null,
           }
         })
       )
@@ -703,17 +719,61 @@ export default function PurchasePage() {
                         ) : <span className="text-slate-300 text-sm">—</span>}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-1.5">
-                          <select value={l.fournisseur_id||''} onChange={e => updateLine(i,'fournisseur_id', e.target.value||null)}
-                            className={`h-10 flex-1 rounded-lg border px-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-50
-                              ${l.fournisseur_id?'border-slate-300 bg-white text-slate-800 font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
-                            <option value="">Choisir…</option>
-                            {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                          </select>
-                          <button onClick={() => setShowFournModal(true)} title="Nouveau fournisseur"
-                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-slate-400 hover:text-slate-600 transition">
-                            <Plus className="h-4 w-4" />
-                          </button>
+                        <div className="space-y-1.5">
+                          <div className="flex gap-1.5">
+                            <select value={l.fournisseur_id||''} onChange={e => {
+                              const fid = e.target.value || null
+                              updateLine(i, 'fournisseur_id', fid)
+                              // Auto-fill contact info from supplier default contact
+                              if (fid) {
+                                const fourn = fourns.find(f => f.id === fid)
+                                if (fourn) {
+                                  updateLine(i, 'contact_fournisseur', fourn.contact || '')
+                                  updateLine(i, 'email_fournisseur', fourn.email || '')
+                                  updateLine(i, 'tel_fournisseur', fourn.tel || '')
+                                }
+                              }
+                            }}
+                              className={`h-10 flex-1 rounded-lg border px-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-50
+                                ${l.fournisseur_id?'border-slate-300 bg-white text-slate-800 font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                              <option value="">Choisir…</option>
+                              {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                            </select>
+                            <button onClick={() => setShowFournModal(true)} title="Nouveau fournisseur"
+                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-slate-400 hover:text-slate-600 transition">
+                              <Plus className="h-4 w-4" />
+                            </button>
+                          </div>
+                          {/* Contact selector — shows contacts for this supplier */}
+                          {l.fournisseur_id && (() => {
+                            const contacts = supplierContacts.filter(c => c.supplier_id === l.fournisseur_id)
+                            const fourn = fourns.find(f => f.id === l.fournisseur_id)
+                            // Build options: default supplier contact + supplier_contacts entries
+                            const options: { label: string; contact: string; email: string; tel: string }[] = []
+                            if (fourn?.contact) options.push({ label: `${fourn.contact} (principal)`, contact: fourn.contact, email: fourn.email || '', tel: fourn.tel || '' })
+                            contacts.forEach(c => options.push({ label: `${c.contact_name}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
+                            if (options.length > 1) {
+                              return (
+                                <select value={l.contact_fournisseur || ''} onChange={e => {
+                                  const opt = options.find(o => o.contact === e.target.value)
+                                  if (opt) {
+                                    updateLine(i, 'contact_fournisseur', opt.contact)
+                                    updateLine(i, 'email_fournisseur', opt.email)
+                                    updateLine(i, 'tel_fournisseur', opt.tel)
+                                  }
+                                }}
+                                  className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs outline-none focus:border-slate-400 transition">
+                                  <option value="">Contact…</option>
+                                  {options.map((o, j) => <option key={j} value={o.contact}>{o.label}</option>)}
+                                </select>
+                              )
+                            }
+                            // Show current contact name if only one
+                            if (l.contact_fournisseur) {
+                              return <span className="text-[11px] text-slate-500 pl-1">{l.contact_fournisseur}</span>
+                            }
+                            return null
+                          })()}
                         </div>
                       </td>
                       <td className="px-3 py-3">
@@ -747,15 +807,11 @@ export default function PurchasePage() {
             </table>
           </div>
 
-              {/* Row "Ajouter ligne" — dans le tableau, proche des lignes */}
-              <tr>
-                <td colSpan={10} className="px-4 py-2 border-t border-dashed border-slate-200">
-                  <button onClick={() => setLines(l => [...l, emptyLine()])}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-sm font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors">
-                    <Plus className="h-4 w-4" /> Ajouter une ligne
-                  </button>
-                </td>
-              </tr>
+          {/* Ajouter une ligne */}
+          <button onClick={() => setLines(l => [...l, emptyLine()])}
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-3 text-sm font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors">
+            <Plus className="h-4 w-4" /> Ajouter une ligne
+          </button>
 
           {fourns.length === 0 && (
             <div className="mt-3 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
@@ -796,14 +852,14 @@ export default function PurchasePage() {
           </div>
         </div>
 
-        {/* ── Justif marge ── */}
+        {/* ── Justif marge (informatif — ne bloque PAS la commande) ── */}
         {margeFaible && (
           <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 p-6">
             <div className="mb-4 flex items-start gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-amber-800">Marge nette &lt; 10% — Justification obligatoire</p>
-                <p className="text-sm text-amber-600 mt-0.5">Ce deal sera soumis à validation par <strong>Achraf Lahkim</strong> avant commande Supply.</p>
+                <p className="font-bold text-amber-800">Marge nette &lt; 10% — Justification recommandée</p>
+                <p className="text-sm text-amber-600 mt-0.5">Supply se chargera de la validation <strong>Achraf</strong>. Tu peux placer la commande normalement.</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-2 mb-4">
@@ -818,8 +874,8 @@ export default function PurchasePage() {
               placeholder="Ex : Client stratégique, remise accordée pour signature avant fin trimestre…"
               className={`w-full rounded-xl border px-4 py-3 text-sm outline-none resize-none transition ${justifText.trim().length>=10?'border-amber-300 bg-white':'border-red-300 bg-red-50'}`} />
             <div className="mt-2 flex items-center justify-between">
-              <span className={`text-sm ${justifText.trim().length>=10?'text-amber-600':'text-red-500 font-semibold'}`}>{justifText.trim().length} / 10 min.</span>
-              <span className="flex items-center gap-1.5 text-sm text-amber-600"><ShieldCheck className="h-4 w-4" /> Validation Achraf requise</span>
+              <span className="text-sm text-amber-600">{justifText.trim().length} car.</span>
+              <span className="flex items-center gap-1.5 text-sm text-amber-600"><ShieldCheck className="h-4 w-4" /> Supply gère la validation Achraf</span>
             </div>
           </div>
         )}
@@ -857,15 +913,13 @@ export default function PurchasePage() {
               <Save className="h-4 w-4" /> Sauvegarder (partiel)
             </button>
 
-            {/* Full save = "Placer la commande" */}
+            {/* Full save = "Placer la commande" — toujours disponible si BC + Devis + totalMatch */}
             <button onClick={() => handleSave(false)} disabled={saving || success || !canSave}
               className={`flex flex-1 sm:flex-none sm:min-w-[260px] h-11 items-center justify-center gap-2 rounded-xl text-sm font-bold text-white transition disabled:opacity-50
-                ${!canSave?'bg-slate-300 cursor-not-allowed':margeFaible?'bg-amber-600 hover:bg-amber-700 shadow-amber-200 shadow-lg':'bg-slate-900 hover:bg-slate-800 shadow-slate-200 shadow-lg'}`}>
+                ${!canSave?'bg-slate-300 cursor-not-allowed':'bg-slate-900 hover:bg-slate-800 shadow-slate-200 shadow-lg'}`}>
               {saving
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Sauvegarde…</>
-                : margeFaible
-                  ? <><ShieldCheck className="h-4 w-4" /> Enregistrer (validation Achraf)</>
-                  : <><Package className="h-4 w-4" /> Placer la commande</>}
+                : <><Package className="h-4 w-4" /> Placer la commande</>}
             </button>
           </div>
         </div>
@@ -882,22 +936,22 @@ export default function PurchasePage() {
             </div>
             <div className="p-6 space-y-4">
               {[
-                { f:'name',         l:'Nom *',   p:'Dell, HP, Lenovo…' },
-                { f:'contact',      l:'Contact', p:'Nom du commercial' },
-                { f:'email',        l:'Email',   p:'contact@fournisseur.com' },
-                { f:'tel',          l:'Tél',     p:'06XXXXXXXX / +212…' },
+                { f:'name',    l:'Nom *',     p:'Dell, HP, Lenovo…' },
+                { f:'contact', l:'Contact *', p:'Nom du commercial' },
+                { f:'email',   l:'Email *',   p:'contact@fournisseur.com' },
+                { f:'tel',     l:'Tél *',     p:'06XXXXXXXX / +212…' },
               ].map(({ f, l, p }) => (
                 <div key={f}>
                   <label className="mb-1.5 block text-sm font-semibold text-slate-600">{l}</label>
                   <input value={(newFourn as any)[f]} onChange={e => setNewFourn(prev => ({ ...prev, [f]: e.target.value }))}
-                    placeholder={p} className={inp} />
+                    placeholder={p} className={`${inp} ${!(newFourn as any)[f]?.trim() ? 'border-red-200 bg-red-50/30' : ''}`} />
                 </div>
               ))}
-              <p className="text-xs text-slate-400">Les informations complètes se gèrent dans <strong>Supply → Fournisseurs</strong>.</p>
+              <p className="text-xs text-slate-400">Tous les champs sont obligatoires. Détails complets dans <strong>Supply → Fournisseurs</strong>.</p>
             </div>
             <div className="flex gap-3 border-t border-slate-100 px-6 py-4">
               <button onClick={() => setShowFournModal(false)} className="flex-1 h-10 rounded-xl border border-slate-200 text-sm text-slate-600 hover:bg-slate-50 transition">Annuler</button>
-              <button onClick={addFournisseur} disabled={addingFourn || !newFourn.name.trim()}
+              <button onClick={addFournisseur} disabled={addingFourn || !newFourn.name.trim() || !newFourn.contact.trim() || !newFourn.email.trim() || !newFourn.tel.trim()}
                 className="flex-1 h-10 rounded-xl bg-slate-900 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60 transition">
                 {addingFourn ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'Créer le fournisseur'}
               </button>

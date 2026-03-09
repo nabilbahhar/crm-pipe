@@ -8,10 +8,10 @@ import {
   CheckCircle2, RefreshCw, ChevronRight, Package, Phone,
   Search, ArrowUp, ArrowDown, ChevronsUpDown, X, Download,
   Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
-  FileText, AlertTriangle, TrendingUp, Users, Target, Zap, Sun,
+  FileText, AlertTriangle, TrendingUp, Users, Target, Zap, Sun, Truck,
 } from 'lucide-react'
 
-type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard'
+type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard' | 'eta_retard'
 type Priority   = 'high' | 'medium'
 type FicheStatus = 'a_faire' | 'en_cours' | 'complete'
 type SortKey    = 'priority' | 'title' | 'amount' | 'daysLate' | 'ficheStatus'
@@ -38,6 +38,7 @@ const TYPE_LABELS: Record<TaskType, string> = {
   relance_semaine: 'Relance semaine',
   achat_manquant: 'Fiche achat',
   closing_retard: 'Closing retard',
+  eta_retard: 'ETA retard',
 }
 
 const STATUS_CFG: Record<FicheStatus, { label: string; icon: React.ReactNode; badge: string; row: string }> = {
@@ -82,12 +83,12 @@ export default function TasksPage() {
     setLoading(true); setErr(null)
     try {
       const year = new Date().getFullYear()
-      const [a, b, c, d, wonRes, openRes] = await Promise.all([
-        loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(),
+      const [a, b, c, d, e, wonRes, openRes] = await Promise.all([
+        loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(), loadEtaRetards(),
         supabase.from('opportunities').select('amount').eq('status', 'Won').gte('booking_month', `${year}-01`),
         supabase.from('opportunities').select('amount').eq('status', 'Open'),
       ])
-      setTasks([...a, ...b, ...c, ...d])
+      setTasks([...a, ...b, ...c, ...d, ...e])
       setWonYTD((wonRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
       setOpenPipeline((openRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
     } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
@@ -224,6 +225,37 @@ export default function TasksPage() {
         entity_id: d.id, entity: d,
       } as Task
     })
+  }
+
+  // ── ETA retards (lignes avec ETA dépassé) ────────────
+  async function loadEtaRetards(): Promise<Task[]> {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0]
+      const { data: lines, error } = await supabase
+        .from('purchase_lines')
+        .select('id, designation, ref, qty, fournisseur, contact_fournisseur, eta, line_status, status_note, purchase_info_id, purchase_info!inner(opportunity_id, opportunities!inner(id, title, amount, accounts(name)))')
+        .lt('eta', todayStr)
+        .not('line_status', 'eq', 'livre')
+      if (error || !lines) return []
+      return lines.map((l: any) => {
+        const opp = l.purchase_info?.opportunities
+        const daysLate = Math.floor((Date.now() - new Date(l.eta).getTime()) / 86400000)
+        return {
+          id: `eta_${l.id}`, type: 'eta_retard' as TaskType,
+          priority: (daysLate > 7 ? 'high' : 'medium') as Priority,
+          title: opp?.accounts?.name || opp?.title || l.designation,
+          subtitle: l.designation,
+          detail: `📦 ${l.fournisseur || '—'} · ${l.contact_fournisseur || ''} · ETA: ${l.eta}${l.status_note ? ` · ${l.status_note}` : ''}`,
+          amount: opp?.amount || 0, daysLate,
+          ficheStatus: 'en_cours' as FicheStatus,
+          ficheProgress: 0, linesTotal: 1, linesComplete: 0,
+          entity_id: opp?.id || '', entity: opp,
+        } as Task
+      })
+    } catch {
+      // Table may not have eta column yet
+      return []
+    }
   }
 
   // ── Filtered & sorted ────────────────────────────────

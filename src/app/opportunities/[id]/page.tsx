@@ -3,14 +3,14 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
-import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, ownerName } from '@/lib/utils'
+import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName } from '@/lib/utils'
 import {
   ArrowLeft, Package, Mail, Edit2, Loader2, X,
   Copy, Check, ExternalLink, FileText, Building2,
   Clock, ShieldCheck, AlertTriangle, CheckCircle2,
   TrendingUp, Download, Phone, Globe, MapPin,
   ChevronRight, Activity, Target, Calendar, Zap,
-  BarChart2, User, Tag, Flag,
+  BarChart2, User, Tag, Flag, Truck, Save,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -29,6 +29,7 @@ type PurchaseLine = {
   qty: number; pu_vente: number; pt_vente: number; pu_achat: number
   fournisseur?: string; contact_fournisseur?: string
   email_fournisseur?: string; tel_fournisseur?: string
+  line_status?: string; eta?: string; eta_updated_at?: string; status_note?: string
 }
 type PurchaseInfo = {
   id: string; frais_engagement: number; notes: string
@@ -139,6 +140,14 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo): string {
         <tr style="background:#f0fdf4"><td style="padding:12px 16px;font-size:14px;font-weight:700;color:#166534">Marge nette</td><td style="padding:12px 16px;text-align:right"><span style="font-size:16px;font-weight:900;color:${mc};font-family:monospace">${mad(margeNette)}</span><span style="margin-left:8px;background:${mc};color:#fff;border-radius:4px;padding:2px 6px;font-size:11px;font-weight:700">${pct(margePct)}</span></td></tr>
       </table>
     </div>
+    ${margePct < 10 ? `<div style="margin-top:12px;border-radius:8px;border:2px solid #fbbf24;background:#fffbeb;padding:14px 16px">
+      <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:6px">⚠️ Validation requise — Marge &lt; 10%</div>
+      <div style="font-size:13px;color:#78350f;line-height:1.5">
+        <strong>@Achraf Lahkim</strong> — Merci de valider cette commande (marge nette : <strong style="color:${mc}">${pct(margePct)}</strong>).
+        ${info.justif_reason ? `<br>Raison : <em>${info.justif_reason}</em>` : ''}
+        ${info.justif_text ? `<br>Détail : ${info.justif_text}` : ''}
+      </div>
+    </div>` : ''}
     ${info.notes?`<div style="margin-top:12px;border-radius:8px;border:1px solid #fde68a;background:#fffbeb;padding:12px 16px"><div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:3px">📝 Notes</div><div style="font-size:13px;color:#78350f">${info.notes}</div></div>`:''}
   </td></tr>
   <tr><td style="background:#f8fafc;border-top:1px solid #e2e8f0;border-radius:0 0 16px 16px;padding:16px 28px">
@@ -157,7 +166,15 @@ function EmailModal({ deal, info, onClose }: { deal: Opp; info: PurchaseInfo; on
   const client  = deal.accounts?.name || deal.title
   const today   = new Date().toLocaleDateString('fr-MA', { day:'2-digit', month:'2-digit', year:'numeric' })
   const subject = `Commande ${client}${deal.po_number ? ` – PO ${deal.po_number}` : ''} – ${mad(deal.amount)} – ${today}`
-  const mailto  = `mailto:supplychain@compucom.ma?cc=n.bahhar@compucom.ma&subject=${encodeURIComponent(subject)}`
+  // Si marge < 10%, ajouter Achraf en CC pour validation
+  const totalVente = info.purchase_lines.reduce((s,l) => s + (l.pt_vente || l.qty*l.pu_vente), 0)
+  const totalAchat = info.purchase_lines.reduce((s,l) => s + l.qty*l.pu_achat, 0)
+  const margeNette = totalVente - totalAchat - (info.frais_engagement||0)
+  const margeFaible = totalVente > 0 && (margeNette/totalVente)*100 < 10
+  const ccList = margeFaible
+    ? 'n.bahhar@compucom.ma,A.lahkim@compucom.ma'
+    : 'n.bahhar@compucom.ma'
+  const mailto  = `mailto:supplychain@compucom.ma?cc=${encodeURIComponent(ccList)}&subject=${encodeURIComponent(subject)}`
 
   async function copyHtml() {
     await navigator.clipboard.writeText(html).catch(() => {})
@@ -171,7 +188,10 @@ function EmailModal({ deal, info, onClose }: { deal: Opp; info: PurchaseInfo; on
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-lg shrink-0">📧</div>
           <div className="flex-1 min-w-0">
             <div className="font-bold text-slate-900 text-sm">Email commande Supply Chain</div>
-            <div className="text-xs text-slate-400 truncate">À : supplychain@compucom.ma · CC : n.bahhar@compucom.ma</div>
+            <div className="text-xs text-slate-400 truncate">
+              À : supplychain@compucom.ma · CC : n.bahhar@compucom.ma{margeFaible && ', A.lahkim@compucom.ma'}
+              {margeFaible && <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-700">Validation Achraf</span>}
+            </div>
           </div>
           <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-100 hover:text-slate-600 transition-colors">
             <X className="h-4 w-4" />
@@ -513,43 +533,74 @@ export default function OpportunityDetailPage() {
 
             {info && info.purchase_lines.length > 0 ? (
               <div className="p-5 space-y-4">
-                {/* Lines table */}
+                {/* Lines table with status tracking */}
                 <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-sm" style={{ minWidth: 680 }}>
+                  <table className="w-full text-sm" style={{ minWidth: 900 }}>
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50">
                         <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">Désignation</th>
                         <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400 w-16">Qté</th>
-                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400 w-36">PT Vente HT</th>
-                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400 w-36">PT Achat HT</th>
-                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400 w-24">Marge</th>
-                        <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 w-36">Fournisseur</th>
+                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400 w-28">PT Vente</th>
+                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400 w-28">PT Achat</th>
+                        <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 w-32">Fournisseur</th>
+                        <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400 w-36">Statut</th>
+                        <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400 w-28">ETA</th>
                       </tr>
                     </thead>
                     <tbody>
                       {info.purchase_lines.map((l, i) => {
                         const ptV   = l.pt_vente || l.qty*l.pu_vente
                         const ptA   = l.qty*l.pu_achat
-                        const mg    = ptV - ptA
-                        const mgPct = ptV > 0 ? (mg/ptV)*100 : 0
+                        const status = (l.line_status || 'pending') as LineStatus
+                        const sCfg = LINE_STATUS_CFG[status] || LINE_STATUS_CFG.pending
+                        const etaDate = l.eta ? new Date(l.eta) : null
+                        const today = new Date()
+                        const isLate = etaDate && etaDate < today && status !== 'livre'
+                        const daysLeft = etaDate ? Math.ceil((etaDate.getTime() - today.getTime()) / 86400000) : null
                         return (
-                          <tr key={l.id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50">
+                          <tr key={l.id} className={`border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors ${isLate ? 'bg-red-50/30' : ''}`}>
                             <td className="px-4 py-3">
-                              {l.ref && <span className="text-[11px] text-slate-400 mr-1.5">[{l.ref}]</span>}
-                              <span className="font-medium text-slate-800">{l.designation}</span>
+                              <div>
+                                {l.ref && <span className="text-[11px] text-slate-400 mr-1.5">[{l.ref}]</span>}
+                                <span className="font-medium text-slate-800">{l.designation}</span>
+                              </div>
+                              {l.contact_fournisseur && (
+                                <div className="text-[10px] text-slate-400 mt-0.5">
+                                  Contact: {l.contact_fournisseur}
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-600">{l.qty}</td>
                             <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-700">{ptV > 0 ? mad(ptV) : '—'}</td>
                             <td className="px-4 py-3 text-right tabular-nums">
                               {l.pu_achat > 0 ? <span className="font-semibold text-slate-700">{mad(ptA)}</span>
-                                : <span className="text-[11px] font-bold text-amber-500">⚠ manquant</span>}
+                                : <span className="text-[11px] font-bold text-amber-500">⚠</span>}
                             </td>
-                            <td className="px-4 py-3 text-right">
-                              {l.pu_achat > 0 && ptV > 0
-                                ? <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${mgPct>=20?'bg-emerald-100 text-emerald-700':mgPct>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-600'}`}>{pct(mgPct)}</span>
-                                : '—'}
+                            <td className="px-4 py-3 text-sm font-medium text-slate-700">
+                              {l.fournisseur || <span className="text-[11px] font-bold text-amber-500">⚠</span>}
                             </td>
-                            <td className="px-4 py-3 text-sm font-medium text-slate-700">{l.fournisseur || <span className="text-[11px] font-bold text-amber-500">⚠</span>}</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${sCfg.bg} ${sCfg.color} border ${sCfg.border}`}>
+                                <span>{sCfg.icon}</span> {sCfg.label}
+                              </span>
+                              {l.status_note && (
+                                <div className="text-[10px] text-slate-400 mt-0.5 max-w-[140px] truncate" title={l.status_note}>{l.status_note}</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              {etaDate ? (
+                                <div>
+                                  <span className={`text-xs font-bold tabular-nums ${isLate ? 'text-red-600' : daysLeft! <= 3 ? 'text-amber-600' : 'text-slate-700'}`}>
+                                    {etaDate.toLocaleDateString('fr-MA', { day:'2-digit', month:'short' })}
+                                  </span>
+                                  <div className={`text-[10px] font-semibold ${isLate ? 'text-red-500' : daysLeft! <= 3 ? 'text-amber-500' : 'text-slate-400'}`}>
+                                    {isLate ? `⚠ ${Math.abs(daysLeft!)}j retard` : daysLeft === 0 ? "Aujourd'hui" : `${daysLeft}j`}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-[11px] text-slate-300">—</span>
+                              )}
+                            </td>
                           </tr>
                         )
                       })}
@@ -559,18 +610,26 @@ export default function OpportunityDetailPage() {
                         <td colSpan={2} className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400">Totaux</td>
                         <td className="px-4 py-3 text-right font-black text-slate-900 tabular-nums">{mad(totalVente)}</td>
                         <td className="px-4 py-3 text-right font-black text-slate-900 tabular-nums">{totalAchat > 0 ? mad(totalAchat) : '—'}</td>
-                        <td className="px-4 py-3 text-right">
-                          {totalAchat > 0 && (
-                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${margePctNette>=20?'bg-emerald-100 text-emerald-700':margePctNette>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-600'}`}>
-                              {pct(margePctNette)}
-                            </span>
-                          )}
+                        <td />
+                        <td className="px-4 py-3 text-center">
+                          {(() => {
+                            const delivered = info.purchase_lines.filter(l => l.line_status === 'livre').length
+                            const total = info.purchase_lines.length
+                            return (
+                              <span className={`text-[11px] font-bold ${delivered === total ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                {delivered}/{total} livré{delivered > 1 ? 's' : ''}
+                              </span>
+                            )
+                          })()}
                         </td>
                         <td />
                       </tr>
                     </tfoot>
                   </table>
                 </div>
+
+                {/* Line status update section (Supply management) */}
+                <LineStatusManager lines={info.purchase_lines} opportunityId={id} onUpdate={loadAll} />
 
                 {/* 3-col: recap + suppliers + files */}
                 <div className="grid gap-4 lg:grid-cols-3">
@@ -655,7 +714,10 @@ export default function OpportunityDetailPage() {
                       <div className={`text-sm font-bold ${canEmail ? 'text-slate-900' : 'text-slate-400'}`}>
                         {canEmail ? '✅ Fiche complète — prête à envoyer à Supply Chain' : '⏳ Complétez la fiche pour activer la commande'}
                       </div>
-                      <div className="text-xs text-slate-400 mt-0.5">À : supplychain@compucom.ma · CC : n.bahhar@compucom.ma</div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        À : supplychain@compucom.ma · CC : n.bahhar@compucom.ma
+                        {margePctNette < 10 && totalAchat > 0 && <>, A.lahkim@compucom.ma <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-700">⚠ Achraf</span></>}
+                      </div>
                     </div>
                     <button onClick={() => setShowEmail(true)} disabled={!canEmail}
                       className={`shrink-0 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors shadow-sm ${canEmail ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
@@ -714,6 +776,162 @@ export default function OpportunityDetailPage() {
 
       {showEmail && opp && info && (
         <EmailModal deal={opp} info={info} onClose={() => setShowEmail(false)} />
+      )}
+    </div>
+  )
+}
+
+// ─── Line Status Manager ─────────────────────────────────────
+function LineStatusManager({ lines, opportunityId, onUpdate }: {
+  lines: PurchaseLine[]; opportunityId: string; onUpdate: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [edits, setEdits] = useState<Record<string, { status: string; eta: string; note: string }>>({})
+
+  const initEdit = (l: PurchaseLine) => {
+    if (!edits[l.id]) {
+      setEdits(prev => ({
+        ...prev,
+        [l.id]: {
+          status: l.line_status || 'pending',
+          eta: l.eta || '',
+          note: l.status_note || '',
+        }
+      }))
+    }
+  }
+
+  const updateEdit = (id: string, field: string, value: string) => {
+    setEdits(prev => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+  }
+
+  const saveLineStatus = async (lineId: string) => {
+    const edit = edits[lineId]
+    if (!edit) return
+    setSaving(lineId)
+    try {
+      await supabase.from('purchase_lines').update({
+        line_status: edit.status,
+        eta: edit.eta || null,
+        status_note: edit.note || null,
+        eta_updated_at: new Date().toISOString(),
+      }).eq('id', lineId)
+      onUpdate()
+    } catch (e) {
+      console.error('Error updating line status:', e)
+    }
+    setSaving(null)
+  }
+
+  // Count delays
+  const today = new Date()
+  const lateLines = lines.filter(l => {
+    if (l.line_status === 'livre') return false
+    if (!l.eta) return false
+    return new Date(l.eta) < today
+  })
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+      <button onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-100 transition-colors">
+        <div className="flex items-center gap-2">
+          <Truck className="h-4 w-4 text-slate-500" />
+          <span className="text-sm font-bold text-slate-700">Suivi ligne par ligne</span>
+          {lateLines.length > 0 && (
+            <span className="rounded-full bg-red-100 border border-red-200 px-2 py-0.5 text-[10px] font-bold text-red-600">
+              {lateLines.length} retard{lateLines.length > 1 ? 's' : ''}
+            </span>
+          )}
+          {(() => {
+            const delivered = lines.filter(l => l.line_status === 'livre').length
+            return delivered > 0 && (
+              <span className="rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-600">
+                {delivered}/{lines.length} livré{delivered > 1 ? 's' : ''}
+              </span>
+            )
+          })()}
+        </div>
+        <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+      </button>
+
+      {expanded && (
+        <div className="border-t border-slate-200 divide-y divide-slate-100">
+          {lines.map((l) => {
+            const edit = edits[l.id]
+            const isEditing = !!edit
+            const status = (l.line_status || 'pending') as LineStatus
+            const sCfg = LINE_STATUS_CFG[status] || LINE_STATUS_CFG.pending
+            const etaDate = l.eta ? new Date(l.eta) : null
+            const isLate = etaDate && etaDate < today && status !== 'livre'
+
+            return (
+              <div key={l.id} className={`px-4 py-3 ${isLate ? 'bg-red-50/50' : 'bg-white'}`}>
+                <div className="flex items-start gap-3">
+                  {/* Line info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {l.ref && <span className="text-[10px] text-slate-400 font-mono">[{l.ref}]</span>}
+                      <span className="text-sm font-semibold text-slate-800 truncate">{l.designation}</span>
+                      <span className="text-[10px] text-slate-400">×{l.qty}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      {l.fournisseur && <span className="text-[10px] font-medium text-slate-500">📦 {l.fournisseur}</span>}
+                      {l.contact_fournisseur && <span className="text-[10px] text-slate-400">· {l.contact_fournisseur}</span>}
+                    </div>
+                  </div>
+
+                  {/* Status + ETA display */}
+                  {!isEditing && (
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${sCfg.bg} ${sCfg.color} border ${sCfg.border}`}>
+                        {sCfg.icon} {sCfg.label}
+                      </span>
+                      {etaDate && (
+                        <span className={`text-xs font-bold tabular-nums ${isLate ? 'text-red-600' : 'text-slate-600'}`}>
+                          {isLate && '⚠ '}{etaDate.toLocaleDateString('fr-MA', { day:'2-digit', month:'short' })}
+                        </span>
+                      )}
+                      <button onClick={() => initEdit(l)}
+                        className="flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-500 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors">
+                        <Edit2 className="h-3 w-3" /> Mettre à jour
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Edit mode */}
+                  {isEditing && (
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <select value={edit.status} onChange={e => updateEdit(l.id, 'status', e.target.value)}
+                        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold outline-none focus:border-blue-400">
+                        {LINE_STATUS_ORDER.map(s => (
+                          <option key={s} value={s}>{LINE_STATUS_CFG[s].icon} {LINE_STATUS_CFG[s].label}</option>
+                        ))}
+                      </select>
+                      <input type="date" value={edit.eta} onChange={e => updateEdit(l.id, 'eta', e.target.value)}
+                        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-blue-400" />
+                      <input value={edit.note} onChange={e => updateEdit(l.id, 'note', e.target.value)}
+                        placeholder="Note…"
+                        className="h-8 w-32 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-blue-400 placeholder:text-slate-300" />
+                      <button onClick={() => saveLineStatus(l.id)} disabled={saving === l.id}
+                        className="flex h-8 items-center gap-1 rounded-lg bg-slate-900 px-3 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50 transition">
+                        {saving === l.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                      </button>
+                      <button onClick={() => setEdits(prev => { const n = { ...prev }; delete n[l.id]; return n })}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-slate-600 transition">
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {l.status_note && !isEditing && (
+                  <div className="mt-1 text-[10px] text-slate-400 italic pl-1">💬 {l.status_note}</div>
+                )}
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )

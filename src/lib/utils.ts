@@ -184,6 +184,25 @@ export const SUPPLY_STATUS_ORDER: SupplyStatus[] = [
   'a_commander', 'place', 'commande', 'en_stock', 'livre', 'facture',
 ]
 
+// ─── Line status (tracking par ligne) ────────────────────────────────────────
+
+export type LineStatus = 'pending' | 'commande' | 'sous_douane' | 'en_stock' | 'livre' | 'pas_de_visibilite'
+
+export const LINE_STATUS_CFG: Record<LineStatus, {
+  label: string; icon: string; color: string; bg: string; border: string; dot: string
+}> = {
+  pending:            { label: 'En attente',           icon: '⏳', color: 'text-slate-600',   bg: 'bg-slate-50',    border: 'border-slate-200',   dot: 'bg-slate-400'   },
+  commande:           { label: 'Commandé',             icon: '🔄', color: 'text-blue-700',    bg: 'bg-blue-50',     border: 'border-blue-200',    dot: 'bg-blue-500'    },
+  sous_douane:        { label: 'Sous douane',          icon: '🛃', color: 'text-violet-700',  bg: 'bg-violet-50',   border: 'border-violet-200',  dot: 'bg-violet-500'  },
+  en_stock:           { label: 'En stock',             icon: '📦', color: 'text-orange-700',  bg: 'bg-orange-50',   border: 'border-orange-200',  dot: 'bg-orange-400'  },
+  livre:              { label: 'Livré',                icon: '✅', color: 'text-emerald-700', bg: 'bg-emerald-50',  border: 'border-emerald-200', dot: 'bg-emerald-500' },
+  pas_de_visibilite:  { label: 'Pas de visibilité',    icon: '❓', color: 'text-red-600',     bg: 'bg-red-50',      border: 'border-red-200',     dot: 'bg-red-400'     },
+}
+
+export const LINE_STATUS_ORDER: LineStatus[] = [
+  'pending', 'commande', 'sous_douane', 'en_stock', 'livre', 'pas_de_visibilite',
+]
+
 // ─── Team name mapping ────────────────────────────────────────────────────────
 const TEAM_NAMES: Record<string, string> = {
   'nabil.imdh@gmail.com': 'Nabil Bahhar',

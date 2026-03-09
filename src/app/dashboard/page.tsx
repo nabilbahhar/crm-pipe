@@ -644,6 +644,14 @@ export default function Dashboard() {
     })
   },[supplyOrders])
 
+  // ── ETA delays (lignes avec ETA dépassé) ─────────────────────────────────
+  const etaDelays = useMemo(()=>{
+    const todayStr = new Date().toISOString().split('T')[0]
+    return purchaseLines.filter((l: any) =>
+      l.eta && l.eta < todayStr && l.line_status !== 'livre'
+    )
+  },[purchaseLines])
+
   // ── Prospect stats ──────────────────────────────────────────────────────
   const prospectStats = useMemo(()=>{
     const total = prospects.length
@@ -1001,6 +1009,27 @@ export default function Dashboard() {
             </div>
             <div className="shrink-0 flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white group-hover:bg-red-600 transition-colors">
               Voir Supply <ChevronDown className="h-4 w-4 rotate-[-90deg]" />
+            </div>
+          </a>
+        )}
+
+        {/* ══ ALERTE ETA RETARD ══ */}
+        {etaDelays.length > 0 && (
+          <a href="/tasks"
+            className="flex items-center gap-4 rounded-2xl border-2 border-amber-300 bg-amber-50 px-5 py-4 shadow-sm hover:shadow-md transition-all group">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white text-2xl shadow-md group-hover:scale-105 transition-transform">
+              ⏰
+            </div>
+            <div className="flex-1">
+              <div className="text-base font-black text-amber-800">
+                {etaDelays.length} ligne{etaDelays.length > 1 ? 's' : ''} de commande en retard ETA
+              </div>
+              <div className="text-sm text-amber-600 mt-0.5">
+                Des articles commandés ont dépassé leur date de livraison prévue — mettre à jour les ETA.
+              </div>
+            </div>
+            <div className="shrink-0 flex items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-sm font-bold text-white group-hover:bg-amber-600 transition-colors">
+              Voir Tâches <ChevronDown className="h-4 w-4 rotate-[-90deg]" />
             </div>
           </a>
         )}
