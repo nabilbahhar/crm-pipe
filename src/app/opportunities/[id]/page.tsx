@@ -69,7 +69,7 @@ const ACTION_COLOR: Record<string, string> = {
 }
 
 // ─── HTML email builder ───────────────────────────────────────
-function buildEmailHtml(deal: Opp, info: PurchaseInfo): string {
+function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | null): string {
   const client     = deal.accounts?.name || deal.title
   const totalVente = info.purchase_lines.reduce((s,l) => s + (l.pt_vente || l.qty*l.pu_vente), 0)
   const totalAchat = info.purchase_lines.reduce((s,l) => s + l.qty*l.pu_achat, 0)
@@ -153,16 +153,16 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo): string {
   <tr><td style="background:#f8fafc;border-top:1px solid #e2e8f0;border-radius:0 0 16px 16px;padding:16px 28px">
     <table width="100%"><tr>
       <td style="font-size:12px;color:#94a3b8">Merci de <strong style="color:#64748b">confirmer la réception</strong> et d'indiquer le délai estimé.</td>
-      <td align="right"><span style="background:#0f172a;color:#fff;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700">Compucom · Supply Chain</span></td>
+      <td align="right"><span style="background:#0f172a;color:#fff;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700">${senderEmail ? ownerName(senderEmail) : 'Compucom'} · BDM</span></td>
     </tr></table>
   </td></tr>
 </table></td></tr></table></body></html>`
 }
 
 // ─── Email Modal ──────────────────────────────────────────────
-function EmailModal({ deal, info, onClose }: { deal: Opp; info: PurchaseInfo; onClose: () => void }) {
+function EmailModal({ deal, info, onClose, senderEmail }: { deal: Opp; info: PurchaseInfo; onClose: () => void; senderEmail?: string | null }) {
   const [copied, setCopied] = useState(false)
-  const html    = buildEmailHtml(deal, info)
+  const html    = buildEmailHtml(deal, info, senderEmail)
   const client  = deal.accounts?.name || deal.title
   const today   = new Date().toLocaleDateString('fr-MA', { day:'2-digit', month:'2-digit', year:'numeric' })
   const subject = `Commande ${client}${deal.po_number ? ` – PO ${deal.po_number}` : ''} – ${mad(deal.amount)} – ${today}`
@@ -177,7 +177,14 @@ function EmailModal({ deal, info, onClose }: { deal: Opp; info: PurchaseInfo; on
   const mailto  = `mailto:supplychain@compucom.ma?cc=${encodeURIComponent(ccList)}&subject=${encodeURIComponent(subject)}`
 
   async function copyHtml() {
-    await navigator.clipboard.writeText(html).catch(() => {})
+    try {
+      // Copier en HTML formaté pour coller directement dans Outlook avec le design
+      const blob = new Blob([html], { type: 'text/html' })
+      await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob, 'text/plain': new Blob([html], { type: 'text/plain' }) })])
+    } catch {
+      // Fallback : copier en texte brut si l'API clipboard avancée échoue
+      await navigator.clipboard.writeText(html).catch(() => {})
+    }
     setCopied(true); setTimeout(() => setCopied(false), 2500)
   }
 
@@ -240,7 +247,9 @@ export default function OpportunityDetailPage() {
   const [activities, setActivities] = useState<Activity[]>([])
   const [loading, setLoading]     = useState(true)
   const [showEmail, setShowEmail] = useState(false)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
 
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null)) }, [])
   useEffect(() => { if (id) loadAll() }, [id])
   useEffect(() => { if (opp) document.title = `${opp.title} \u00b7 CRM-PIPE` }, [opp])
 
@@ -775,7 +784,7 @@ export default function OpportunityDetailPage() {
       </div>
 
       {showEmail && opp && info && (
-        <EmailModal deal={opp} info={info} onClose={() => setShowEmail(false)} />
+        <EmailModal deal={opp} info={info} onClose={() => setShowEmail(false)} senderEmail={userEmail} />
       )}
     </div>
   )
