@@ -313,12 +313,12 @@ export default function ActivityPage() {
                                 {a.entity_name}
                               </Link>
                             ) : a.entity_type === 'prospect' ? (
-                              <Link href="/prospection"
+                              <Link href={`/prospection`}
                                 className="text-sm font-semibold text-slate-800 hover:text-blue-600 hover:underline truncate">
                                 {a.entity_name}
                               </Link>
-                            ) : a.entity_type === 'account' ? (
-                              <Link href="/accounts"
+                            ) : a.entity_type === 'account' && a.entity_id ? (
+                              <Link href={`/accounts/${a.entity_id}`}
                                 className="text-sm font-semibold text-slate-800 hover:text-blue-600 hover:underline truncate">
                                 {a.entity_name}
                               </Link>

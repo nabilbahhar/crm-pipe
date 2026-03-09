@@ -5,6 +5,7 @@ import { authFetch } from '@/lib/authFetch'
 import { mad, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus } from '@/lib/utils'
 import PurchaseModal from '@/components/PurchaseModal'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import { RefreshCw, Package, ChevronRight, Search, AlertCircle, Download, Clock } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ const ALL_STATUSES = SUPPLY_STATUS_ORDER
 
 // ─── Main ─────────────────────────────────────────────────────
 export default function SupplyPage() {
+  const sp = useSearchParams()
   const [orders, setOrders]       = useState<Order[]>([])
   const [loading, setLoading]     = useState(true)
   const [err, setErr]             = useState<string | null>(null)
@@ -49,8 +51,7 @@ export default function SupplyPage() {
     document.title = 'Supply \u00b7 CRM-PIPE'
     supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null))
     // Read vendor filter from URL params (e.g., from fournisseurs page link)
-    const params = new URLSearchParams(window.location.search)
-    const urlVendor = params.get('vendor')
+    const urlVendor = sp.get('vendor')
     if (urlVendor) setVendorFilter(urlVendor)
     load()
   }, [])

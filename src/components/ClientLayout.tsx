@@ -14,7 +14,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const [checking, setChecking]           = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
 
-  const isPublic = PUBLIC_ROUTES.some(r => pathname === r || pathname.startsWith(r + '#') || pathname.startsWith(r + '?'))
+  const isPublic = PUBLIC_ROUTES.some(r => pathname === r)
 
   useEffect(() => {
     // Vérification initiale de la session

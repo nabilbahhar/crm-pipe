@@ -293,7 +293,7 @@ function QuickSearch({ onClose }: { onClose: () => void }) {
   function go(r: SearchResult) {
     onClose();
     if (r.type === 'deal') router.push(`/opportunities/${r.id}`);
-    else if (r.type === 'account') router.push(`/accounts`);
+    else if (r.type === 'account') router.push(`/accounts/${r.id}`);
     else router.push(`/prospection`);
   }
 

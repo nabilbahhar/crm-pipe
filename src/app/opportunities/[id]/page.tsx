@@ -4,6 +4,12 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName } from '@/lib/utils'
+
+// HTML escape helper — prevents XSS in email template
+function esc(s: string | null | undefined): string {
+  if (!s) return ''
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+}
 import {
   ArrowLeft, Package, Mail, Edit2, Loader2, X,
   Copy, Check, ExternalLink, FileText, Building2,
@@ -102,12 +108,12 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
       .map(([c, cls]) => {
         const first = cls[0]
         return `<span style="display:inline-block;background:rgba(255,255,255,.15);border-radius:4px;padding:2px 8px;font-size:11px;color:#fff;margin-right:4px">
-          👤 ${c}${first.email_fournisseur ? ` · ${first.email_fournisseur}` : ''}${first.tel_fournisseur ? ` · ${first.tel_fournisseur}` : ''}</span>`
+          👤 ${esc(c)}${first.email_fournisseur ? ` · ${esc(first.email_fournisseur)}` : ''}${first.tel_fournisseur ? ` · ${esc(first.tel_fournisseur)}` : ''}</span>`
       }).join('')
     const rows  = lines.map((l,i) => `
       <tr style="background:${i%2?'#f8fafc':'#fff'}">
         <td style="padding:10px 16px;font-size:13px;color:#374151;border-bottom:1px solid #f1f5f9">
-          ${l.ref?`<span style="color:#94a3b8;font-size:11px;margin-right:6px">[${l.ref}]</span>`:''}${l.designation}
+          ${l.ref?`<span style="color:#94a3b8;font-size:11px;margin-right:6px">[${esc(l.ref)}]</span>`:''}${esc(l.designation)}
         </td>
         <td style="padding:10px 16px;font-size:13px;text-align:center;font-weight:600;border-bottom:1px solid #f1f5f9">${l.qty}</td>
         <td style="padding:10px 16px;font-size:13px;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(l.pu_achat)}</td>
@@ -117,7 +123,7 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
       <div style="background:${col};padding:14px 20px">
         <table width="100%"><tr>
           <td>
-            <div style="color:#fff;font-size:15px;font-weight:800;margin-bottom:4px">🏭 ${name}</div>
+            <div style="color:#fff;font-size:15px;font-weight:800;margin-bottom:4px">🏭 ${esc(name)}</div>
             <div style="margin-top:4px">${contactBadges || '<span style="color:rgba(255,255,255,.5);font-size:11px">Aucun contact spécifié</span>'}</div>
           </td>
           <td align="right" style="vertical-align:top"><span style="background:rgba(255,255,255,.2);border-radius:8px;padding:5px 14px;color:#fff;font-size:13px;font-weight:800">${mad(subT)}</span></td>
@@ -145,8 +151,8 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
     <table width="100%"><tr>
       <td>
         <div style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">Commande · ${today}</div>
-        <div style="color:#fff;font-size:22px;font-weight:900;line-height:1.2">📦 ${deal.title}</div>
-        <div style="color:#cbd5e1;font-size:13px;margin-top:8px;line-height:1.5">🏢 <strong style="color:#e2e8f0">${client}</strong>${deal.po_number?` &nbsp;·&nbsp; PO <strong style="color:#e2e8f0">${deal.po_number}</strong>`:''}${deal.multi_bu && Array.isArray(deal.bu_lines) && deal.bu_lines.length > 0 ? ` &nbsp;·&nbsp; ${[...new Set(deal.bu_lines.map((l: any) => l.card || l.bu).filter(Boolean))].join(' + ')}` : deal.bu ? ` &nbsp;·&nbsp; ${deal.bu}` : ''}</div>
+        <div style="color:#fff;font-size:22px;font-weight:900;line-height:1.2">📦 ${esc(deal.title)}</div>
+        <div style="color:#cbd5e1;font-size:13px;margin-top:8px;line-height:1.5">🏢 <strong style="color:#e2e8f0">${esc(client)}</strong>${deal.po_number?` &nbsp;·&nbsp; PO <strong style="color:#e2e8f0">${esc(deal.po_number)}</strong>`:''}${deal.multi_bu && Array.isArray(deal.bu_lines) && deal.bu_lines.length > 0 ? ` &nbsp;·&nbsp; ${[...new Set(deal.bu_lines.map((l: any) => l.card || l.bu).filter(Boolean))].map(esc).join(' + ')}` : deal.bu ? ` &nbsp;·&nbsp; ${esc(deal.bu)}` : ''}</div>
       </td>
       <td align="right" style="vertical-align:top">
         <div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:12px 16px;text-align:center">
@@ -204,8 +210,8 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
       <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">⚠️ Validation requise — Marge &lt; 10%</div>
       <div style="font-size:13px;color:#78350f;line-height:1.6">
         <strong>@Achraf Lahkim</strong> — Merci de valider cette commande (marge nette : <strong style="color:${mcN}">${pct(margeNettePct)}</strong>).
-        ${info.justif_reason ? `<br>Raison : <em>${info.justif_reason}</em>` : ''}
-        ${info.justif_text ? `<br>Détail : ${info.justif_text}` : ''}
+        ${info.justif_reason ? `<br>Raison : <em>${esc(info.justif_reason)}</em>` : ''}
+        ${info.justif_text ? `<br>Détail : ${esc(info.justif_text)}` : ''}
       </div>
     </div>` : ''}
 
@@ -219,11 +225,11 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
         <tr>
           <td style="padding:8px 16px;border-bottom:1px solid #f1f5f9">
             <span style="font-size:14px;margin-right:6px">${typeIcon[f.file_type] || '📎'}</span>
-            <span style="font-size:12px;font-weight:600;color:#374151">${f.file_name}</span>
-            <span style="font-size:10px;color:#94a3b8;margin-left:6px">${typeLabel[f.file_type] || f.file_type}</span>
+            <span style="font-size:12px;font-weight:600;color:#374151">${esc(f.file_name)}</span>
+            <span style="font-size:10px;color:#94a3b8;margin-left:6px">${esc(typeLabel[f.file_type] || f.file_type)}</span>
           </td>
           <td style="padding:8px 16px;border-bottom:1px solid #f1f5f9;text-align:right">
-            <a href="${f.url}" style="background:#3b82f6;color:#fff;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;text-decoration:none">Télécharger</a>
+            <a href="${encodeURI(f.url)}" style="background:#3b82f6;color:#fff;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;text-decoration:none">Télécharger</a>
           </td>
         </tr>`).join('')
       return `<div style="margin-top:14px;border-radius:10px;overflow:hidden;border:1px solid #dbeafe;background:#eff6ff">
@@ -237,7 +243,7 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
     <!-- Notes -->
     ${info.notes?`<div style="margin-top:14px;border-radius:10px;border:1px solid #fde68a;background:#fffbeb;padding:14px 20px">
       <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:4px">📝 Notes</div>
-      <div style="font-size:13px;color:#78350f;line-height:1.5">${info.notes}</div>
+      <div style="font-size:13px;color:#78350f;line-height:1.5">${esc(info.notes)}</div>
     </div>`:''}
   </td></tr>
 
@@ -309,7 +315,7 @@ function EmailModal({ deal, info, onClose, senderEmail, files, fileUrls }: { dea
           </div>
         </div>
         <div className="flex-1 overflow-auto bg-[#e8edf3] p-3">
-          <iframe srcDoc={html} title="Aperçu email" className="w-full rounded-xl bg-white shadow border border-slate-200" style={{ minHeight: 480, height: '100%' }} />
+          <iframe srcDoc={html} sandbox="allow-popups" title="Aperçu email" className="w-full rounded-xl bg-white shadow border border-slate-200" style={{ minHeight: 480, height: '100%' }} />
         </div>
         <div className="shrink-0 border-t border-slate-100 px-5 py-4 space-y-2.5">
           <div className="flex flex-wrap gap-2.5">

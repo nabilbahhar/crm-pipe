@@ -94,7 +94,7 @@ function ConfirmDialog({ open, title, msg, danger, confirmLabel, onConfirm, onCa
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function AccountsPage() {
   const [accounts, setAccounts] = useState<AccountRow[]>([])
-  const [loading, setLoading]   = useState(false)
+  const [loading, setLoading]   = useState(true)
   const [err, setErr]           = useState<string|null>(null)
   const [toast, setToast]       = useState<string|null>(null)
   const [dealCounts, setDealCounts]   = useState<Record<string, number>>({})

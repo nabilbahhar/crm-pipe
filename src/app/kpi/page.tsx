@@ -59,7 +59,7 @@ export default function KPIPage() {
   const [rows, setRows] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState<string|null>(null)
-  const [year, setYear] = useState(2026)
+  const [year, setYear] = useState(() => new Date().getFullYear())
   const [email, setEmail] = useState<string|null>(null)
   const [activeQ, setActiveQ] = useState<string>('Q1')
   const [AT, setATState] = useState(30_000_000)

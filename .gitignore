@@ -18,3 +18,7 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 .vscode
+
+# Sensitive files — NEVER commit
+*.txt
+!README.txt

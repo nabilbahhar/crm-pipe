@@ -81,7 +81,7 @@ function ResetPasswordInner() {
       redirectTo: `${window.location.origin}/reset-password`,
     })
     setLoading(false)
-    if (error) return setErr(error.message)
+    if (error) return setErr('Impossible d\'envoyer le lien. Réessaie plus tard.')
     setInfo(`Email envoyé à ${emailNormalized}. Vérifie ta boîte mail et clique sur le lien.`)
   }
 
@@ -93,7 +93,7 @@ function ResetPasswordInner() {
     setLoading(true)
     const { error } = await supabase.auth.updateUser({ password: newPwd })
     setLoading(false)
-    if (error) return setErr(error.message)
+    if (error) return setErr('Erreur lors de la mise à jour. Réessaie.')
     setInfo('Mot de passe mis à jour ! Redirection…')
     setTimeout(() => router.replace('/dashboard'), 1500)
   }

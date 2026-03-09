@@ -488,11 +488,14 @@ export default function ProspectionPage() {
   async function advanceStatus(p: Prospect) {
     const next = STATUS_NEXT[p.status]
     if (!next) return
-    await supabase.from('prospects').update({
-      status: next, attempts: p.attempts + 1,
-      last_contact_at: new Date().toISOString().split('T')[0],
-    }).eq('id', p.id)
-    toast(`${p.company_name} → ${next}`); load()
+    try {
+      const { error } = await supabase.from('prospects').update({
+        status: next, attempts: p.attempts + 1,
+        last_contact_at: new Date().toISOString().split('T')[0],
+      }).eq('id', p.id)
+      if (error) { setErr(error.message); return }
+      toast(`${p.company_name} → ${next}`); load()
+    } catch (e: any) { setErr(e.message || 'Erreur advanceStatus') }
   }
 
   async function handleProspectDrop(targetStatus: string) {
@@ -516,11 +519,14 @@ export default function ProspectionPage() {
   }
 
   async function addAttempt(p: Prospect) {
-    await supabase.from('prospects').update({
-      attempts: p.attempts + 1,
-      last_contact_at: new Date().toISOString().split('T')[0],
-    }).eq('id', p.id)
-    toast(`+1 tentative · ${p.company_name}`); load()
+    try {
+      const { error } = await supabase.from('prospects').update({
+        attempts: p.attempts + 1,
+        last_contact_at: new Date().toISOString().split('T')[0],
+      }).eq('id', p.id)
+      if (error) { setErr(error.message); return }
+      toast(`+1 tentative · ${p.company_name}`); load()
+    } catch (e: any) { setErr(e.message || 'Erreur addAttempt') }
   }
 
   async function save() {

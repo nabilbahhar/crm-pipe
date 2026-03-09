@@ -78,10 +78,16 @@ export async function GET(req: NextRequest) {
 
     // 1) Load data
     const { data: opps, error: oppErr } = await supabaseServer.from("opportunities").select("*").limit(5000)
-    if (oppErr) return NextResponse.json({ error: oppErr.message }, { status: 500 })
+    if (oppErr) {
+      console.error('[analytics/meeting] oppErr:', oppErr.message)
+      return NextResponse.json({ error: 'Erreur chargement opportunités' }, { status: 500 })
+    }
 
     const { data: accs, error: accErr } = await supabaseServer.from("accounts").select("id,name").limit(5000)
-    if (accErr) return NextResponse.json({ error: accErr.message }, { status: 500 })
+    if (accErr) {
+      console.error('[analytics/meeting] accErr:', accErr.message)
+      return NextResponse.json({ error: 'Erreur chargement comptes' }, { status: 500 })
+    }
 
     const accMap = new Map<string, string>()
     for (const a of accs || []) accMap.set(a.id, a.name)
