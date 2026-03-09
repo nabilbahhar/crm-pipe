@@ -665,7 +665,7 @@ export default function PurchasePage() {
                     { l:'PU Achat ★', w:120, r:true, amber:true },
                     { l:'PT Achat',   w:130, r:true  },
                     { l:'Marge',      w:80,  r:true  },
-                    { l:'Fournisseur',w:180, r:false },
+                    { l:'Fournisseur / Contact',w:260, r:false },
                     { l:'',           w:40,  r:false },
                   ].map(({ l, w, r, amber }, i) => (
                     <th key={i} style={w ? { width: w } : {}} className={`px-4 py-3 text-[11px] font-bold uppercase tracking-wide ${r?'text-right':'text-left'} ${amber?'text-amber-500':'text-slate-400'}`}>
@@ -725,12 +725,12 @@ export default function PurchasePage() {
                         ) : <span className="text-slate-300 text-sm">—</span>}
                       </td>
                       <td className="px-4 py-3">
-                        <div className="space-y-1.5">
+                        <div className="space-y-2">
+                          {/* Fournisseur selector */}
                           <div className="flex gap-1.5">
                             <select value={l.fournisseur_id||''} onChange={e => {
                               const fid = e.target.value || null
                               updateLine(i, 'fournisseur_id', fid)
-                              // Auto-fill contact info from supplier default contact
                               if (fid) {
                                 const fourn = fourns.find(f => f.id === fid)
                                 if (fourn) {
@@ -738,6 +738,10 @@ export default function PurchasePage() {
                                   updateLine(i, 'email_fournisseur', fourn.email || '')
                                   updateLine(i, 'tel_fournisseur', fourn.tel || '')
                                 }
+                              } else {
+                                updateLine(i, 'contact_fournisseur', '')
+                                updateLine(i, 'email_fournisseur', '')
+                                updateLine(i, 'tel_fournisseur', '')
                               }
                             }}
                               className={`h-10 flex-1 rounded-lg border px-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-50
@@ -750,35 +754,50 @@ export default function PurchasePage() {
                               <Plus className="h-4 w-4" />
                             </button>
                           </div>
-                          {/* Contact selector — shows contacts for this supplier */}
+                          {/* Contact selector */}
                           {l.fournisseur_id && (() => {
                             const contacts = supplierContacts.filter(c => c.supplier_id === l.fournisseur_id)
                             const fourn = fourns.find(f => f.id === l.fournisseur_id)
-                            // Build options: default supplier contact + supplier_contacts entries
                             const options: { label: string; contact: string; email: string; tel: string }[] = []
                             if (fourn?.contact) options.push({ label: `${fourn.contact} (principal)`, contact: fourn.contact, email: fourn.email || '', tel: fourn.tel || '' })
                             contacts.forEach(c => options.push({ label: `${c.contact_name}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
-                            if (options.length >= 1) {
-                              return (
-                                <select value={l.contact_fournisseur || ''} onChange={e => {
-                                  const opt = options.find(o => o.contact === e.target.value)
-                                  if (opt) {
-                                    updateLine(i, 'contact_fournisseur', opt.contact)
-                                    updateLine(i, 'email_fournisseur', opt.email)
-                                    updateLine(i, 'tel_fournisseur', opt.tel)
-                                  } else {
-                                    updateLine(i, 'contact_fournisseur', '')
-                                    updateLine(i, 'email_fournisseur', '')
-                                    updateLine(i, 'tel_fournisseur', '')
-                                  }
-                                }}
-                                  className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50 px-2 text-xs outline-none focus:border-slate-400 transition">
-                                  <option value="">Contact…</option>
-                                  {options.map((o, j) => <option key={j} value={o.contact}>{o.label}</option>)}
-                                </select>
-                              )
-                            }
-                            return null
+                            return (
+                              <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2 space-y-1.5">
+                                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-400">
+                                  <span>👤</span> Contact fournisseur
+                                </div>
+                                {options.length >= 1 ? (
+                                  <select value={l.contact_fournisseur || ''} onChange={e => {
+                                    const opt = options.find(o => o.contact === e.target.value)
+                                    if (opt) {
+                                      updateLine(i, 'contact_fournisseur', opt.contact)
+                                      updateLine(i, 'email_fournisseur', opt.email)
+                                      updateLine(i, 'tel_fournisseur', opt.tel)
+                                    } else {
+                                      updateLine(i, 'contact_fournisseur', '')
+                                      updateLine(i, 'email_fournisseur', '')
+                                      updateLine(i, 'tel_fournisseur', '')
+                                    }
+                                  }}
+                                    className={`h-8 w-full rounded-md border px-2 text-xs font-medium outline-none transition
+                                      ${l.contact_fournisseur ? 'border-blue-300 bg-white text-slate-800' : 'border-blue-200 bg-white text-slate-400'}`}>
+                                    <option value="">Choisir le contact…</option>
+                                    {options.map((o, j) => <option key={j} value={o.contact}>{o.label}</option>)}
+                                  </select>
+                                ) : (
+                                  <input value={l.contact_fournisseur || ''} onChange={e => updateLine(i, 'contact_fournisseur', e.target.value)}
+                                    placeholder="Nom du contact…"
+                                    className="h-8 w-full rounded-md border border-blue-200 bg-white px-2 text-xs outline-none focus:border-blue-400 transition" />
+                                )}
+                                {l.contact_fournisseur && (l.email_fournisseur || l.tel_fournisseur) && (
+                                  <div className="text-[10px] text-slate-500 leading-relaxed pl-0.5">
+                                    {l.email_fournisseur && <span>{l.email_fournisseur}</span>}
+                                    {l.email_fournisseur && l.tel_fournisseur && <span> · </span>}
+                                    {l.tel_fournisseur && <span>{l.tel_fournisseur}</span>}
+                                  </div>
+                                )}
+                              </div>
+                            )
                           })()}
                         </div>
                       </td>
