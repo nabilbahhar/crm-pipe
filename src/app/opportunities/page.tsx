@@ -95,7 +95,7 @@ function FicheBadge({ d }: { d: Deal }) {
 // ─── Helpers locaux ─────────────────────────────────────────────────────────────
 const mainBU = (d: Deal): string => {
   if (Array.isArray(d.bu_lines) && d.bu_lines.length > 0) {
-    const cartes = [...new Set(d.bu_lines.map((l: any) => l.card || l.bu).filter(Boolean))]
+    const cartes = [...new Set(d.bu_lines.map((l: any) => l.bu || l.card).filter(Boolean))]
     return cartes.join(' + ')
   }
   return d.bu || '—'
@@ -398,12 +398,21 @@ function DealsPageInner() {
       const winRate = wonDeals.length + lostDeals.length > 0
         ? Math.round(wonDeals.length / (wonDeals.length + lostDeals.length) * 100) : 0
 
-      // BU breakdown
+      // BU breakdown — split multi-BU deals into individual BU contributions
       const buMap = new Map<string, { count: number; amount: number }>()
       sorted.forEach(d => {
-        const bu = mainBU(d)
-        const prev = buMap.get(bu) || { count: 0, amount: 0 }
-        buMap.set(bu, { count: prev.count + 1, amount: prev.amount + (d.amount || 0) })
+        if (Array.isArray(d.bu_lines) && d.bu_lines.length > 0) {
+          for (const l of d.bu_lines) {
+            const bu = String(l.bu || l.card || 'Other').trim() || 'Other'
+            const amt = Number(l.amount || 0)
+            const prev = buMap.get(bu) || { count: 0, amount: 0 }
+            buMap.set(bu, { count: prev.count + 1, amount: prev.amount + amt })
+          }
+        } else {
+          const bu = d.bu || 'Other'
+          const prev = buMap.get(bu) || { count: 0, amount: 0 }
+          buMap.set(bu, { count: prev.count + 1, amount: prev.amount + (d.amount || 0) })
+        }
       })
 
       const spec = {

@@ -501,21 +501,27 @@ export default function Dashboard() {
     })
   },[openDeals])
 
-  // ── Trend ────────────────────────────────────────────────────────────────
-  const trend = useMemo(()=>monthsOfYear(year).map((m,i)=>{
-    const base=deals.filter(d=>d.closingYm.startsWith(`${year}-`))
-    const inM=base.filter(d=>d.closingYm===m)
-    const open=inM.filter(d=>d.status==='Open')
-    const won=inM.filter(d=>d.status==='Won')
-    const isCommit=(s:string)=>s.toLowerCase()==='commit'
-    return {
-      month:MONTHS_FR[i],
-      total:   open.reduce((s,d)=>s+d.amount,0),
-      forecast:open.reduce((s,d)=>s+d.amount*(d.prob/100),0),
-      commit:  open.filter(d=>isCommit(d.stage)).reduce((s,d)=>s+d.amount,0),
-      won:     won.reduce((s,d)=>s+d.amount,0),
-    }
-  }),[deals,year])
+  // ── Trend (respects stage/status/BU filters) ────────────────────────────
+  const trend = useMemo(()=>{
+    // Apply stage/status/BU filters on all deals of the year
+    let base = deals.filter(d=>d.closingYm.startsWith(`${year}-`))
+    if (stageFilters.size>0)  base=base.filter(x=>stageFilters.has(x.stage))
+    if (statusFilter.size>0)  base=base.filter(x=>statusFilter.has(x.status))
+    if (buFilters.size>0)     base=base.filter(x=>x.lines.some(ln=>buFilters.has(ln.group)||buFilters.has(String(ln.sbu))))
+    return monthsOfYear(year).map((m,i)=>{
+      const inM=base.filter(d=>d.closingYm===m)
+      const open=inM.filter(d=>d.status==='Open')
+      const won=inM.filter(d=>d.status==='Won')
+      const isCommit=(s:string)=>s.toLowerCase()==='commit'
+      return {
+        month:MONTHS_FR[i],
+        total:   open.reduce((s,d)=>s+d.amount,0),
+        forecast:open.reduce((s,d)=>s+d.amount*(d.prob/100),0),
+        commit:  open.filter(d=>isCommit(d.stage)).reduce((s,d)=>s+d.amount,0),
+        won:     won.reduce((s,d)=>s+d.amount,0),
+      }
+    })
+  },[deals,year,stageFilters,statusFilter,buFilters])
 
   // ── Top Clients ──────────────────────────────────────────────────────────
   const topClients = useMemo(()=>{
@@ -578,15 +584,21 @@ export default function Dashboard() {
     openDeals.filter(d=>d.daysOld>=60).sort((a,b)=>b.daysOld-a.daysOld).slice(0,10)
   ,[openDeals])
 
-  // ── Marge stats (from purchase_lines) ───────────────────────────────────
+  // ── Marge stats (respects stage/status/BU filters via inPeriod) ─────────
   const margeStats = useMemo(()=>{
-    let totalVente=0, totalAchat=0, totalFrais=0
+    // Build a Set of filtered opportunity IDs from inPeriod
+    const filteredIds = new Set(inPeriod.map(d=>d.id))
+
+    let totalVente=0, totalAchat=0
     const byBU: Record<string,{vente:number;achat:number;count:number}> = {}
     const byMonth: Record<string,{vente:number;achat:number;marge:number}> = {}
 
     for (const ln of purchaseLines) {
       const oppId = ln.purchase_info?.opportunity_id
-      const opp   = rows.find(r => r.id === oppId)
+      if (!oppId) continue
+      // Only include lines whose deal passes the current filters
+      if (filteredIds.size > 0 && !filteredIds.has(oppId)) continue
+      const opp = rows.find(r => r.id === oppId)
       if (!opp) continue
       const ptVente = Number(ln.pt_vente) || (Number(ln.qty||1) * Number(ln.pu_vente||0))
       const ptAchat = Number(ln.qty||1) * Number(ln.pu_achat||0)
@@ -622,35 +634,46 @@ export default function Dashboard() {
     }))
 
     return { totalVente, totalAchat, margeBrute, margePct, buArr, trendMarge }
-  },[purchaseLines, rows, year])
+  },[purchaseLines, rows, year, inPeriod])
 
-  // ── Supply status counts ─────────────────────────────────────────────────
+  // ── Supply status counts (respects filters via inPeriod) ────────────────
+  const filteredSupplyOrders = useMemo(()=>{
+    if (stageFilters.size===0 && statusFilter.size===0 && buFilters.size===0) return supplyOrders
+    const filteredIds = new Set(inPeriod.map(d=>d.id))
+    return supplyOrders.filter(o => filteredIds.has(o.opportunity_id))
+  },[supplyOrders, inPeriod, stageFilters, statusFilter, buFilters])
+
   const supplyCounts = useMemo(()=>{
     const counts: Record<string,number> = {
       a_commander:0, place:0, commande:0, en_stock:0, livre:0, facture:0
     }
-    for (const o of supplyOrders) counts[o.status] = (counts[o.status]||0)+1
+    for (const o of filteredSupplyOrders) counts[o.status] = (counts[o.status]||0)+1
     return counts
-  },[supplyOrders])
+  },[filteredSupplyOrders])
 
   // Commandes en retard : status 'a_commander' depuis plus de 24h
   const overdueOrders = useMemo(()=>{
     const limit = Date.now() - 24*60*60*1000
-    return supplyOrders.filter(o => {
+    return filteredSupplyOrders.filter(o => {
       if (o.status !== 'a_commander') return false
       const ts = o.placed_at || o.updated_at
       if (!ts) return false
       return new Date(ts).getTime() < limit
     })
-  },[supplyOrders])
+  },[filteredSupplyOrders])
 
-  // ── ETA delays (lignes avec ETA dépassé) ─────────────────────────────────
+  // ── ETA delays (lignes avec ETA dépassé — respects filters) ────────────
   const etaDelays = useMemo(()=>{
     const todayStr = new Date().toISOString().split('T')[0]
-    return purchaseLines.filter((l: any) =>
-      l.eta && l.eta < todayStr && l.line_status !== 'livre'
-    )
-  },[purchaseLines])
+    const filteredIds = new Set(inPeriod.map(d=>d.id))
+    return purchaseLines.filter((l: any) => {
+      if (stageFilters.size>0 || statusFilter.size>0 || buFilters.size>0) {
+        const oppId = l.purchase_info?.opportunity_id
+        if (oppId && !filteredIds.has(oppId)) return false
+      }
+      return l.eta && l.eta < todayStr && l.line_status !== 'livre'
+    })
+  },[purchaseLines, inPeriod, stageFilters, statusFilter, buFilters])
 
   // ── Prospect stats ──────────────────────────────────────────────────────
   const prospectStats = useMemo(()=>{
@@ -987,8 +1010,8 @@ export default function Dashboard() {
               deltaLabel={`${margeStats.margePct.toFixed(1)}%`}/>
             <KpiCard label="Deals Won sans fiche" color="amber" icon={<Package className="h-5 w-5"/>}
               href="/tasks"
-              value={String(Math.max(0, wonDeals.length - supplyOrders.length))}
-              sub={`${supplyOrders.length} fiches remplies`}/>
+              value={String(Math.max(0, wonDeals.length - filteredSupplyOrders.length))}
+              sub={`${filteredSupplyOrders.length} fiches remplies`}/>
           </div>
         )}
 
@@ -1089,9 +1112,9 @@ export default function Dashboard() {
         </div>
 
         {/* ══ SUPPLY STATUTS + MARGE PAR BU ══ */}
-        {(supplyOrders.length > 0 || margeStats.buArr.length > 0) && (
+        {(filteredSupplyOrders.length > 0 || margeStats.buArr.length > 0) && (
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {supplyOrders.length > 0 && (
+            {filteredSupplyOrders.length > 0 && (
               <Panel title="📦 Supply Chain — Statuts" sub="Commandes en cours par étape">
                 <div className="grid grid-cols-3 gap-3">
                   {[

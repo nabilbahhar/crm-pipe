@@ -336,6 +336,10 @@ export default function ProspectionPage() {
   const [targetBu, setTargetBu] = useState('')
   const [accountMatch, setAccountMatch] = useState<{ id: string; name: string } | null>(null)
 
+  // Kanban drag & drop
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragOverStatus, setDragOverStatus] = useState<string | null>(null)
+
   useEffect(() => {
     document.title = 'Prospection \u00b7 CRM-PIPE'
     supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null))
@@ -489,6 +493,26 @@ export default function ProspectionPage() {
       last_contact_at: new Date().toISOString().split('T')[0],
     }).eq('id', p.id)
     toast(`${p.company_name} → ${next}`); load()
+  }
+
+  async function handleProspectDrop(targetStatus: string) {
+    setDragOverStatus(null)
+    if (!dragId) return
+    const p = rows.find(r => r.id === dragId)
+    if (!p || p.status === targetStatus) { setDragId(null); return }
+    const update: any = { status: targetStatus }
+    // If moving forward, bump attempts & update last_contact
+    const fromIdx = STATUSES.indexOf(p.status as any)
+    const toIdx = STATUSES.indexOf(targetStatus as any)
+    if (toIdx > fromIdx) {
+      update.attempts = p.attempts + 1
+      update.last_contact_at = new Date().toISOString().split('T')[0]
+    }
+    const { error } = await supabase.from('prospects').update(update).eq('id', p.id)
+    if (error) { setErr(error.message); setDragId(null); return }
+    setDragId(null)
+    toast(`${p.company_name} → ${targetStatus}`)
+    load()
   }
 
   async function addAttempt(p: Prospect) {
@@ -1014,7 +1038,11 @@ export default function ProspectionPage() {
               const cards = filtered.filter(p => p.status === status)
               const st = STATUS_STYLE[status]
               return (
-                <div key={status} className="min-w-[240px] w-[240px] flex-shrink-0">
+                <div key={status}
+                  className={`min-w-[240px] w-[240px] flex-shrink-0 rounded-2xl transition-colors ${dragOverStatus===status?'bg-blue-50 ring-2 ring-blue-300':''}`}
+                  onDragOver={e => { e.preventDefault(); setDragOverStatus(status) }}
+                  onDragLeave={() => setDragOverStatus(null)}
+                  onDrop={e => { e.preventDefault(); handleProspectDrop(status) }}>
                   <div className={`mb-2 flex items-center justify-between rounded-xl border px-3 py-2 ${st.bg} ${st.border}`}>
                     <div className={`flex items-center gap-1.5 text-xs font-bold ${st.text}`}>
                       <span className={`h-2 w-2 rounded-full ${st.dot}`} />{status}
@@ -1027,7 +1055,11 @@ export default function ProspectionPage() {
                       const nextS = STATUS_NEXT[p.status]
                       return (
                         <div key={p.id}
-                          className={`rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-shadow
+                          draggable
+                          onDragStart={() => setDragId(p.id)}
+                          onDragEnd={() => { setDragId(null); setDragOverStatus(null) }}
+                          className={`rounded-xl border bg-white p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing
+                            ${dragId===p.id?'opacity-50 ring-2 ring-blue-400':''}
                             ${overdue ? 'border-red-200' : 'border-slate-100'}`}>
                           <div className="flex items-start justify-between gap-1">
                             <div className="flex items-center gap-1.5 min-w-0">

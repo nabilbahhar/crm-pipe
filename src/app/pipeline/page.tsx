@@ -71,7 +71,7 @@ function StageBadge({ stage }: { stage: string }) {
 function BuBadge({ bu, buLines }: { bu: string | null; buLines?: any }) {
   if (!bu) return <span className="text-slate-400">—</span>
   if (bu === 'MULTI' && Array.isArray(buLines) && buLines.length > 0) {
-    const cartes = [...new Set(buLines.map((l: any) => l.card || l.bu).filter(Boolean))]
+    const cartes = [...new Set(buLines.map((l: any) => l.bu || l.card).filter(Boolean))]
     const label = cartes.join(' + ')
     const tip = buLines.map((l: any) => {
       const amt = Number(l.amount || 0)
@@ -436,27 +436,61 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
 
         {/* Header */}
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="text-2xl font-bold text-slate-900">Pipeline</div>
-            <div className="text-sm text-slate-500">
-              Deals actifs — {rows.filter(r=>r.status==='Open').length} opportunités ouvertes
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-violet-500 text-white shadow-lg">
+              <TrendingUp className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="text-2xl font-black text-slate-900 tracking-tight">Pipeline</div>
+              <div className="text-xs text-slate-500">
+                Suivi visuel & progression — {rows.filter(r=>r.status==='Open').length} deals ouverts · Drag & drop pour avancer
+              </div>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <button onClick={exportExcel} disabled={exporting}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50 disabled:opacity-60">
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm disabled:opacity-60">
               <Download className="h-4 w-4" /> {exporting ? 'Export…' : 'Excel'}
             </button>
-            <button onClick={() => setShowNewDeal(true)}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm text-white hover:bg-slate-800">
-              <Plus className="h-4 w-4" /> Nouveau deal
-            </button>
+            <Link href="/opportunities" className="inline-flex h-9 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors shadow-sm">
+              <Eye className="h-4 w-4" /> Gestion détaillée
+            </Link>
             <button onClick={load} disabled={loading}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">
-              <RefreshCw className={`h-4 w-4 ${loading?'animate-spin':''}`} /> Rafraîchir
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm">
+              <RefreshCw className={`h-4 w-4 ${loading?'animate-spin':''}`} />
             </button>
           </div>
         </div>
+
+        {/* ── Visual Funnel ── */}
+        {stats.totalOpen > 0 && (
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200/80 shadow-sm overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-3 border-b border-slate-100">
+              <div className="h-5 w-1 rounded-full bg-gradient-to-b from-blue-500 to-violet-500 shrink-0"/>
+              <span className="text-sm font-bold text-slate-900">Funnel Pipeline</span>
+              <span className="text-xs text-slate-400">Montant par étape</span>
+            </div>
+            <div className="px-5 py-4">
+              <div className="flex items-end gap-1">
+                {PIPE_STAGES.map(stage => {
+                  const d = stats.bySt[stage] || { count:0, amount:0 }
+                  const maxAmt = Math.max(...PIPE_STAGES.map(s => stats.bySt[s]?.amount || 0), 1)
+                  const pct = Math.max(8, (d.amount / maxAmt) * 100)
+                  const st = STAGE_STYLE[stage] || STAGE_STYLE.Lead
+                  return (
+                    <div key={stage} className="flex-1 flex flex-col items-center gap-1.5 group">
+                      <div className="text-[10px] font-bold text-slate-600 tabular-nums">{fmtAmt(d.amount)}</div>
+                      <div className={`w-full rounded-t-lg transition-all ${st.bg} border ${st.border} group-hover:opacity-80`}
+                        style={{ height: `${pct}px`, minHeight: 8, maxHeight: 100 }} />
+                      <div className={`text-[9px] font-bold text-center leading-tight ${st.text}`}>{stage.replace('Proposal Sent','Proposal')}</div>
+                      <div className="text-[10px] font-semibold text-slate-400">{d.count}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {err  && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>}
         {info && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{info}</div>}

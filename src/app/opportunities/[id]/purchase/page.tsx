@@ -318,7 +318,6 @@ export default function PurchasePage() {
             ref: l.ref||null, designation: l.designation,
             qty: l.qty, pu_vente: l.pu_vente,
             pt_vente: l.pt_vente || l.qty*l.pu_vente, pu_achat: l.pu_achat,
-            fournisseur_id: l.fournisseur_id || null,
             fournisseur: fourn?.name || l.fournisseur || null,
             contact_fournisseur: l.contact_fournisseur || fourn?.contact || null,
             email_fournisseur: l.email_fournisseur || fourn?.email || null,
