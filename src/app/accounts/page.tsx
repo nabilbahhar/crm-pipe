@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
-import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, GitBranch, Download } from 'lucide-react'
+import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, GitBranch, Download, FileText } from 'lucide-react'
 import { mad } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -653,7 +653,7 @@ export default function AccountsPage() {
                         ) : <span className="text-slate-200 text-[10px]">—</span>}
                       </td>
                       <td className="px-5 py-3">
-                        <div className="font-bold text-slate-900">{a.name}</div>
+                        <Link href={`/accounts/${a.id}`} className="font-bold text-slate-900 hover:text-blue-700 hover:underline transition-colors">{a.name}</Link>
                         {primaryContacts[a.id] && (
                           <div className="mt-0.5 flex items-center gap-2 text-[11px] text-slate-400">
                             <span className="font-medium text-slate-500">{primaryContacts[a.id].full_name}</span>
@@ -700,6 +700,10 @@ export default function AccountsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-1.5">
+                          <Link href={`/accounts/${a.id}`}
+                            className="inline-flex h-7 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-colors">
+                            <FileText className="h-3 w-3" /> Fiche
+                          </Link>
                           <Link href={`/pipeline?account=${encodeURIComponent(a.name)}`}
                             className="inline-flex h-7 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors">
                             <GitBranch className="h-3 w-3" /> Pipeline

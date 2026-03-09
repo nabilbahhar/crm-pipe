@@ -15,10 +15,13 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/msword',
   'text/csv',
+  // PowerPoint
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation', // .pptx
+  'application/vnd.ms-powerpoint', // .ppt
 ]
 
 // ─── Security: Whitelist allowed buckets ───────────────────────
-const ALLOWED_BUCKETS = ['deal-files']
+const ALLOWED_BUCKETS = ['deal-files', 'account-files']
 
 // ─── Security: Validate path (no traversal) ───────────────────
 function isPathSafe(path: string): boolean {
@@ -79,7 +82,7 @@ export async function POST(req: NextRequest) {
 
     // Also validate file extension
     const ext = file.name.split('.').pop()?.toLowerCase()
-    const SAFE_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'xlsx', 'xls', 'docx', 'doc', 'csv']
+    const SAFE_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'xlsx', 'xls', 'docx', 'doc', 'csv', 'pptx', 'ppt']
     if (!ext || !SAFE_EXTENSIONS.includes(ext)) {
       return NextResponse.json({ error: 'Extension de fichier non autorisée' }, { status: 400 })
     }
@@ -101,9 +104,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Erreur lors de l\'upload' }, { status: 500 })
     }
 
-    // If opportunity_id provided, also insert into deal_files table
+    // Insert DB record into deal_files or account_files depending on context
     let dbRecord = null
-    if (opportunityId && fileType) {
+    const accountId = formData.get('account_id') as string | null
+
+    if (accountId && fileType) {
+      // Account-level file
+      const { data: row, error: dbErr } = await supabaseServer
+        .from('account_files')
+        .insert({
+          account_id: accountId,
+          file_type: fileType,
+          file_name: file.name,
+          file_url: data.path,
+          uploaded_by: uploadedBy || 'unknown',
+        })
+        .select('id, file_type, file_name, file_url')
+        .single()
+
+      if (dbErr) {
+        console.error('[upload] DB insert error:', dbErr)
+        return NextResponse.json({ error: 'Erreur d\'enregistrement en base' }, { status: 500 })
+      }
+      dbRecord = row
+    } else if (opportunityId && fileType) {
+      // Deal-level file
       const { data: row, error: dbErr } = await supabaseServer
         .from('deal_files')
         .insert({
@@ -182,7 +207,10 @@ export async function DELETE(req: NextRequest) {
 
     // Delete DB records if fileIds provided
     if (fileIds && fileIds.length > 0) {
-      await supabaseServer.from('deal_files').delete().in('id', fileIds)
+      const ALLOWED_TABLES = ['deal_files', 'account_files'] as const
+      const dbTable = (body.dbTable as string) || 'deal_files'
+      const table = ALLOWED_TABLES.includes(dbTable as any) ? dbTable : 'deal_files'
+      await supabaseServer.from(table).delete().in('id', fileIds)
     }
 
     return NextResponse.json({ ok: true })
