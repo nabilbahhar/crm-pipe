@@ -69,7 +69,7 @@ const ACTION_COLOR: Record<string, string> = {
 }
 
 // ─── HTML email builder ───────────────────────────────────────
-function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | null): string {
+function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | null, files?: { file_type: string; file_name: string; url: string }[]): string {
   const client     = deal.accounts?.name || deal.title
   const totalVente = info.purchase_lines.reduce((s,l) => s + (l.pt_vente || l.qty*l.pu_vente), 0)
   const totalAchat = info.purchase_lines.reduce((s,l) => s + l.qty*l.pu_achat, 0)
@@ -209,6 +209,31 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
       </div>
     </div>` : ''}
 
+    <!-- Pièces jointes -->
+    ${(() => {
+      const pj = files?.filter(f => f.url) || []
+      if (pj.length === 0) return ''
+      const typeIcon: Record<string, string> = { bc: '📄', devis: '📋', autre: '📎' }
+      const typeLabel: Record<string, string> = { bc: 'Bon de commande', devis: 'Devis fournisseur', autre: 'Document' }
+      const rows = pj.map(f => `
+        <tr>
+          <td style="padding:8px 16px;border-bottom:1px solid #f1f5f9">
+            <span style="font-size:14px;margin-right:6px">${typeIcon[f.file_type] || '📎'}</span>
+            <span style="font-size:12px;font-weight:600;color:#374151">${f.file_name}</span>
+            <span style="font-size:10px;color:#94a3b8;margin-left:6px">${typeLabel[f.file_type] || f.file_type}</span>
+          </td>
+          <td style="padding:8px 16px;border-bottom:1px solid #f1f5f9;text-align:right">
+            <a href="${f.url}" style="background:#3b82f6;color:#fff;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;text-decoration:none">Télécharger</a>
+          </td>
+        </tr>`).join('')
+      return `<div style="margin-top:14px;border-radius:10px;overflow:hidden;border:1px solid #dbeafe;background:#eff6ff">
+        <div style="padding:12px 20px;border-bottom:1px solid #dbeafe">
+          <span style="font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:0.5px">📎 Pièces jointes (${pj.length})</span>
+        </div>
+        <table width="100%" style="border-collapse:collapse;background:#fff">${rows}</table>
+      </div>`
+    })()}
+
     <!-- Notes -->
     ${info.notes?`<div style="margin-top:14px;border-radius:10px;border:1px solid #fde68a;background:#fffbeb;padding:14px 20px">
       <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:4px">📝 Notes</div>
@@ -232,9 +257,10 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
 }
 
 // ─── Email Modal ──────────────────────────────────────────────
-function EmailModal({ deal, info, onClose, senderEmail }: { deal: Opp; info: PurchaseInfo; onClose: () => void; senderEmail?: string | null }) {
+function EmailModal({ deal, info, onClose, senderEmail, files, fileUrls }: { deal: Opp; info: PurchaseInfo; onClose: () => void; senderEmail?: string | null; files?: DealFile[]; fileUrls?: Record<string, string> }) {
   const [copied, setCopied] = useState(false)
-  const html    = buildEmailHtml(deal, info, senderEmail)
+  const fileItems = (files || []).map(f => ({ ...f, url: fileUrls?.[f.id] || '' }))
+  const html    = buildEmailHtml(deal, info, senderEmail, fileItems)
   const client  = deal.accounts?.name || deal.title
   const today   = new Date().toLocaleDateString('fr-MA', { day:'2-digit', month:'2-digit', year:'numeric' })
   const subject = `Commande ${client}${deal.po_number ? ` – PO ${deal.po_number}` : ''} – ${mad(deal.amount)} – ${today}`
@@ -856,7 +882,7 @@ export default function OpportunityDetailPage() {
       </div>
 
       {showEmail && opp && info && (
-        <EmailModal deal={opp} info={info} onClose={() => setShowEmail(false)} senderEmail={userEmail} />
+        <EmailModal deal={opp} info={info} onClose={() => setShowEmail(false)} senderEmail={userEmail} files={files} fileUrls={fileUrls} />
       )}
     </div>
   )
