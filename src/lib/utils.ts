@@ -28,14 +28,15 @@ export const madFull = (n: number | null | undefined): string => {
 }
 
 /** Montant compact — ex: 1.2M  /  450K  (pour KPI cards, badges) */
-export const fmt = (n: number): string => {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${Math.round(n / 1_000)}K`
-  return String(Math.round(n))
+export const fmt = (n: number | null | undefined): string => {
+  const v = Number(n) || 0
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`
+  if (v >= 1_000) return `${Math.round(v / 1_000)}K`
+  return String(Math.round(v))
 }
 
 /** Pourcentage — ex: 23.5 % */
-export const pct = (n: number): string => `${n.toFixed(1)} %`
+export const pct = (n: number | null | undefined): string => `${(Number(n) || 0).toFixed(1)} %`
 
 // ─── Formatters date ──────────────────────────────────────────────────────────
 
@@ -94,8 +95,6 @@ export const normStatus = (row: {
   if (sg.includes('lost')) return 'Lost'
   return 'Open'
 }
-
-const SBU_KEYS = ['HCI', 'NETWORK', 'STORAGE', 'CYBER', 'SERVICE', 'CSG', 'INFRA'] as const
 
 /** Normalise une BU brute vers son label canonique */
 export const normSBU = (

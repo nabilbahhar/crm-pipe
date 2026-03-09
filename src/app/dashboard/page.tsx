@@ -7,12 +7,12 @@ import {
   ChevronDown, BarChart2, Activity, ArrowUp, ArrowDown,
   CheckCircle2, XCircle, Clock, Flame, Info, Trophy,
   Building2, MapPin, Calendar, Filter, SlidersHorizontal, X,
-  Package, TrendingDown, Percent,
+  Package,
 } from 'lucide-react'
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line,
-  LabelList, FunnelChart, Funnel, ComposedChart, Area,
+  LabelList, ComposedChart, Area,
 } from 'recharts'
 import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget, ownerName } from '@/lib/utils'
 
@@ -400,7 +400,7 @@ export default function Dashboard() {
       pipeVsPrev: prevPipe>0?Math.round((pipeAmt-prevPipe)/prevPipe*100):null,
       wonVsPrev:  prevWon>0?Math.round((wonAmt-prevWon)/prevWon*100):null,
     }
-  },[openDeals,wonDeals,lostDeals,prevOpenDeals,prevWonDeals,deals,year])
+  },[openDeals,wonDeals,lostDeals,prevOpenDeals,prevWonDeals,deals,year,ANNUAL_TARGET])
 
   // ── Quality ─────────────────────────────────────────────────────────────
   const quality = useMemo(()=>({

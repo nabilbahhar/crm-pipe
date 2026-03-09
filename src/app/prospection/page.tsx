@@ -6,7 +6,7 @@ import { authFetch } from '@/lib/authFetch'
 import {
   Plus, RefreshCw, X, Phone, Mail, ChevronRight,
   LayoutGrid, List, Flame, Thermometer, Snowflake, ArrowRightCircle,
-  ArrowUp, ArrowDown, ChevronsUpDown, Download, Users, Trash2, Star,
+  ArrowUp, ArrowDown, ChevronsUpDown, Download, Users, Trash2,
 } from 'lucide-react'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -389,7 +389,7 @@ export default function ProspectionPage() {
     if (dateFrom) r = r.filter(x => (x.created_at || '') >= dateFrom)
     if (dateTo)   r = r.filter(x => (x.created_at || '') <= dateTo + 'T23:59:59')
     return r
-  }, [rows, search, heatFilter, typeFilter, statusFilter, regionFilter, showOverdue])
+  }, [rows, search, heatFilter, typeFilter, statusFilter, regionFilter, showOverdue, dateFrom, dateTo])
 
   type SortKey = 'created_at'|'company_name'|'status'|'heat'|'attempts'|'next_date'|'type'
   const [sortKey, setSortKey] = useState<SortKey>('created_at')

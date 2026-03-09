@@ -1,13 +1,14 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
+import { mad } from '@/lib/utils'
 import Link from 'next/link'
 import {
   Plus, Search, Edit2, Trash2, X, Save, Loader2, Download,
-  Building2, Phone, Mail, MapPin, Tag, TrendingUp,
+  Phone, Mail,
   Package, Users, ChevronUp, ChevronDown, ChevronsUpDown,
-  BarChart2, ShoppingCart, FileText, RefreshCw, ChevronRight, ExternalLink, Star,
+  RefreshCw, ExternalLink, Star,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -34,9 +35,6 @@ const CATEGORIES = [
   'Matériel IT', 'Logiciels', 'Réseau & Infra', 'Périphériques',
   'Fournisseur SSL/Téléphonie', 'Services', 'Autre',
 ]
-
-const mad = (n: number | null | undefined) =>
-  n == null ? '—' : new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n) + ' MAD'
 
 // ─── Modal Edition ────────────────────────────────────────────
 function SupplierModal({
@@ -589,8 +587,8 @@ export default function SuppliersPage() {
                     const marge      = Number(s.avg_marge_pct)
                     const hasOrders  = Number(s.total_orders) > 0
                     return (
-                      <>
-                        <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors cursor-pointer"
+                      <React.Fragment key={s.id}>
+                        <tr className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors cursor-pointer"
                           onClick={() => setExpandedId(isExpanded ? null : s.id)}>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
@@ -701,7 +699,7 @@ export default function SuppliersPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </React.Fragment>
                     )
                   })}
                 </tbody>

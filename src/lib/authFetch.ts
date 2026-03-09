@@ -11,6 +11,8 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
   const headers = new Headers(options.headers)
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
+  } else {
+    console.warn('[authFetch] No session token — request will be unauthenticated:', url)
   }
 
   return fetch(url, { ...options, headers })

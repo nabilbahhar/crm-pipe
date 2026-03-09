@@ -270,7 +270,7 @@ function QuickSearch({ onClose }: { onClose: () => void }) {
     setLoading(true);
     const like = `%${term}%`;
     const [{ data: deals }, { data: accounts }, { data: prospects }] = await Promise.all([
-      supabase.from("opportunities").select("id,title,amount,status,accounts(name)").or(`title.ilike.${like},accounts.name.ilike.${like}`).limit(6),
+      supabase.from("opportunities").select("id,title,amount,status,accounts(name)").ilike("title", like).limit(6),
       supabase.from("accounts").select("id,name,sector,region").ilike("name", like).limit(4),
       supabase.from("prospects").select("id,company_name,contact_name,status").ilike("company_name", like).is("converted_at", null).limit(4),
     ]);

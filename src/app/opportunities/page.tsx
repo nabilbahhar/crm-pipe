@@ -213,6 +213,15 @@ function DealsPageInner() {
     const timer = setTimeout(async () => {
       if (undoCancelled.current) return
       try {
+        // Cascade: supprimer les données liées avant l'opportunité
+        const { data: piRows } = await supabase.from('purchase_info').select('id').eq('opportunity_id', deal.id)
+        const piIds = (piRows || []).map((r: any) => r.id)
+        await Promise.all([
+          supabase.from('deal_files').delete().eq('opportunity_id', deal.id),
+          supabase.from('supply_orders').delete().eq('opportunity_id', deal.id),
+          ...(piIds.length ? [supabase.from('purchase_lines').delete().in('purchase_info_id', piIds)] : []),
+        ])
+        if (piIds.length) await supabase.from('purchase_info').delete().eq('opportunity_id', deal.id)
         const { error } = await supabase.from('opportunities').delete().eq('id', deal.id)
         if (error) throw error
         await logActivity({ action_type: 'delete', entity_type: 'deal', entity_id: deal.id, entity_name: deal.title || '—', detail: `${deal.accounts?.name || ''} · ${mad(deal.amount || 0)}` })
