@@ -87,6 +87,9 @@ export default function ExpensesPage() {
   // Search
   const [search, setSearch] = useState('')
 
+  // Excel export (must be declared before any conditional return — Rules of Hooks)
+  const [exporting, setExporting] = useState(false)
+
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   // ── Init ──────────────────────────────────────────────────
@@ -236,7 +239,8 @@ export default function ExpensesPage() {
           file_url: l.file_url,
           sort_order: i,
         }))
-        await supabase.from('expense_lines').insert(linesToInsert)
+        const { error: lineErr } = await supabase.from('expense_lines').insert(linesToInsert)
+        if (lineErr) throw new Error(lineErr.message)
       }
 
       await logActivity({
@@ -411,7 +415,8 @@ export default function ExpensesPage() {
     if (!confirm(`Supprimer la note de ${MONTH_NAMES[report.month - 1]} ${report.year} ?`)) return
 
     // Delete lines first
-    await supabase.from('expense_lines').delete().eq('expense_report_id', report.id)
+    const { error: lineErr } = await supabase.from('expense_lines').delete().eq('expense_report_id', report.id)
+    if (lineErr) { showToast(`Erreur suppression lignes : ${lineErr.message}`); return }
     const { error } = await supabase.from('expense_reports').delete().eq('id', report.id)
     if (error) { showToast(`Erreur : ${error.message}`); return }
 
@@ -420,8 +425,6 @@ export default function ExpensesPage() {
   }
 
   // ── Excel export ──────────────────────────────────────────
-  const [exporting, setExporting] = useState(false)
-
   async function exportExcel() {
     setExporting(true)
     try {

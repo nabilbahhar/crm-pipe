@@ -458,6 +458,7 @@ export default function TasksPage() {
   const relancesSemaine = useMemo(() => visible.filter(t => t.type === 'relance_semaine'), [visible])
   const achats          = useMemo(() => visible.filter(t => t.type === 'achat_manquant'), [visible])
   const closingRetards  = useMemo(() => visible.filter(t => t.type === 'closing_retard'), [visible])
+  const etaRetards      = useMemo(() => visible.filter(t => t.type === 'eta_retard'), [visible])
 
   // Global counts for KPIs (unfiltered)
   const allRelances = useMemo(() => tasks.filter(t => t.type === 'relance_retard'), [tasks])
@@ -1046,6 +1047,63 @@ export default function TasksPage() {
                               className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                               Voir <ChevronRight className="h-3.5 w-3.5" />
                             </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TaskSection>
+            )}
+
+            {/* ── ETA en retard ── */}
+            {etaRetards.length > 0 && (typeFilter === 'Tous' || typeFilter === 'eta_retard') && (
+              <TaskSection
+                icon={<Package className="h-4 w-4" />}
+                title="ETA en retard"
+                count={etaRetards.length}
+                colorScheme="amber"
+                amount={etaRetards.reduce((s,t)=>s+t.amount,0)}>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/70">
+                      <TH col="title" label="Compte" />
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Ligne · Fournisseur</th>
+                      <TH col="amount" label="Montant" right />
+                      <TH col="daysLate" label="Retard" right />
+                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {etaRetards.map(t => (
+                      <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className={`h-2 w-2 rounded-full shrink-0 ${t.priority === 'high' ? 'bg-red-500' : 'bg-amber-400'}`} />
+                            <span className="font-bold text-slate-900 text-xs">{t.title}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 max-w-[260px]">
+                          <span className="text-xs text-slate-700 truncate block">{t.subtitle}</span>
+                          <span className="text-[10px] text-slate-400">{t.detail}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap text-xs">
+                          {t.amount > 0 ? mad(t.amount) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full
+                            ${t.daysLate > 7 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                            {t.daysLate}j
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-center">
+                            {t.entity_id && (
+                              <button onClick={() => router.push(`/opportunities/${t.entity_id}`)}
+                                className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                                Voir <ChevronRight className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
