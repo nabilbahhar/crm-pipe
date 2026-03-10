@@ -85,9 +85,9 @@ export async function GET(req: NextRequest) {
     const sp = new URL(req.url).searchParams;
 
     const now = new Date();
-    const year = Number(sp.get("year") || now.getFullYear());
-    const month = Number(sp.get("month") || now.getMonth() + 1);
-    const quarter = Number(sp.get("quarter") || Math.ceil(month / 3));
+    const year = Math.max(2020, Math.min(2100, Number(sp.get("year") || now.getFullYear())));
+    const month = Math.max(1, Math.min(12, Number(sp.get("month") || now.getMonth() + 1)));
+    const quarter = Math.max(1, Math.min(4, Number(sp.get("quarter") || Math.ceil(month / 3))));
 
     const kindRaw = (
       sp.get("export") ||

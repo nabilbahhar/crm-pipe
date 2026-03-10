@@ -82,10 +82,10 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
 
-    const year = Number(searchParams.get('year') || new Date().getFullYear())
+    const year = Math.max(2020, Math.min(2100, Number(searchParams.get('year') || new Date().getFullYear())))
     const mode = (searchParams.get('mode') || 'year').toLowerCase() // 'monthly' | 'quarter' | 'year'
-    const month = Number(searchParams.get('month') || 0) // 1..12
-    const q = Number(searchParams.get('q') || 0) // 1..4
+    const month = Math.max(0, Math.min(12, Number(searchParams.get('month') || 0))) // 0 (all) or 1..12
+    const q = Math.max(0, Math.min(4, Number(searchParams.get('q') || 0))) // 0 (all) or 1..4
 
     // 1) fetch opportunities + accounts
     const { data: opps, error: oppErr } = await supabaseServer

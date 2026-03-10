@@ -13,6 +13,10 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
     headers.set('Authorization', `Bearer ${token}`)
   } else {
     console.warn('[authFetch] No session token — request will be unauthenticated:', url)
+    return new Response(JSON.stringify({ error: 'Session expirée. Veuillez vous reconnecter.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    })
   }
 
   return fetch(url, { ...options, headers })

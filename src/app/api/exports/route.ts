@@ -199,7 +199,8 @@ export async function GET(req: NextRequest) {
     ];
 
     const csv = lines.join("\n");
-    const filename = `${periodLabel}.csv`;
+    const safeLabel = periodLabel.replace(/[^a-zA-Z0-9_\-.]/g, '_').slice(0, 200)
+    const filename = `${safeLabel}.csv`;
 
     return new NextResponse(csv, {
       headers: {

@@ -208,10 +208,10 @@ export async function GET(req: NextRequest) {
     if (auth instanceof NextResponse) return auth
 
     const sp = req.nextUrl.searchParams
-    const year = Number(sp.get('year') || new Date().getFullYear())
+    const year = Math.max(2020, Math.min(2100, Number(sp.get('year') || new Date().getFullYear())))
     const mode = (sp.get('mode') as Mode) || 'quarter'
-    const month = sp.get('month') ? Number(sp.get('month')) : null
-    const q = sp.get('q') ? Number(sp.get('q')) : null
+    const month = sp.get('month') ? Math.max(1, Math.min(12, Number(sp.get('month')))) : null
+    const q = sp.get('q') ? Math.max(1, Math.min(4, Number(sp.get('q')))) : null
 
     const { start, end, label } = periodRangeKeys(year, mode, month, q)
 

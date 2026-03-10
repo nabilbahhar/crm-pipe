@@ -71,10 +71,10 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
 
-    const year = Number(searchParams.get("year") || new Date().getFullYear())
+    const year = Math.max(2020, Math.min(2100, Number(searchParams.get("year") || new Date().getFullYear())))
     const mode = (searchParams.get("mode") || "year") as "year" | "month" | "quarter"
-    const month = searchParams.get("month") ? Number(searchParams.get("month")) : null
-    const q = searchParams.get("q") ? Number(searchParams.get("q")) : null
+    const month = searchParams.get("month") ? Math.max(1, Math.min(12, Number(searchParams.get("month")))) : null
+    const q = searchParams.get("q") ? Math.max(1, Math.min(4, Number(searchParams.get("q")))) : null
 
     // 1) Load data
     const { data: opps, error: oppErr } = await supabaseServer.from("opportunities").select("*").limit(5000)

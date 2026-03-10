@@ -26,6 +26,12 @@ export async function POST(req: NextRequest) {
     if (Array.isArray(spec.sheets) && spec.sheets.length > 20) {
       return NextResponse.json({ error: 'Trop de feuilles (max 20)' }, { status: 400 })
     }
+    const MAX_ROWS_PER_SHEET = 10_000
+    for (const s of (spec.sheets || [])) {
+      if (Array.isArray(s.rows) && s.rows.length > MAX_ROWS_PER_SHEET) {
+        return NextResponse.json({ error: `Trop de lignes par feuille (max ${MAX_ROWS_PER_SHEET})` }, { status: 400 })
+      }
+    }
 
     const wb = new ExcelJS.Workbook()
     wb.creator = 'CRM-PIPE'
