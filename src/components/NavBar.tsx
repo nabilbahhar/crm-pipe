@@ -67,15 +67,15 @@ function userName(email: string) {
 
 const ACTION_COLOR: Record<string, string> = {
   create: "#10b981", update: "#3b82f6", delete: "#ef4444", stage: "#f59e0b",
-  won: "#16a34a", lost: "#dc2626", convert: "#8b5cf6",
+  won: "#16a34a", lost: "#dc2626", convert: "#8b5cf6", message: "#0866ff",
 };
 const ACTION_LABEL: Record<string, string> = {
   create: "Ajouté", update: "Modifié", delete: "Supprimé", stage: "Stage →",
-  won: "Won ✓", lost: "Lost ✗", convert: "Converti",
+  won: "Won ✓", lost: "Lost ✗", convert: "Converti", message: "💬 Message",
 };
 
 const ENTITY_ICON: Record<string, string> = {
-  deal: "💼", account: "🏢", prospect: "🎯", contact: "👤", card: "🃏",
+  deal: "💼", account: "🏢", prospect: "🎯", contact: "👤", card: "🃏", message: "💬",
 };
 
 // ── Password modal ────────────────────────────────────────────────────────────
@@ -655,7 +655,7 @@ export default function NavBar() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Real-time: new messages → increment unread badge
+  // Real-time: new messages → increment unread badge + inject into notifications
   useEffect(() => {
     if (!email) return;
     const msgChannel = supabase.channel("team_messages_nav")
@@ -663,6 +663,19 @@ export default function NavBar() {
         const msg = payload.new as any;
         if (msg.sender_email !== email) {
           setUnreadMsgs(prev => prev + 1);
+          // Also inject into notification panel as a fake activity
+          const msgActivity: Activity = {
+            id: `msg-${msg.id}`,
+            user_email: msg.sender_email,
+            action_type: "message",
+            entity_type: "message",
+            entity_id: null,
+            entity_name: (msg.content || "").slice(0, 60) + ((msg.content || "").length > 60 ? "…" : ""),
+            detail: msg.file_name ? `📎 ${msg.file_name}` : null,
+            created_at: msg.created_at,
+          };
+          setActivities(prev => [msgActivity, ...prev.slice(0, 49)]);
+          setUnread(prev => prev + 1);
         }
       }).subscribe();
     return () => { supabase.removeChannel(msgChannel); };
@@ -841,7 +854,9 @@ export default function NavBar() {
                               <b style={{ color: a.user_email === email ? "#2563eb" : "#0f172a" }}>{userName(a.user_email)}</b>
                               {" "}<span style={{ color, fontWeight: 600 }}>{label}</span>
                               {" "}
-                              {a.entity_id && a.entity_type === "deal"
+                              {a.entity_type === "message"
+                                ? <a href="/messages" onClick={() => setShowNotifs(false)} style={{ fontWeight: 500, color: "#0866ff", textDecoration: "none" }}>"{a.entity_name}"</a>
+                                : a.entity_id && a.entity_type === "deal"
                                 ? <a href={`/opportunities/${a.entity_id}`} onClick={() => setShowNotifs(false)} style={{ fontWeight: 600, color: "#0f172a", textDecoration: "underline", textDecorationColor: "#e2e8f0" }}>{a.entity_name}</a>
                                 : <span style={{ fontWeight: 600 }}>{a.entity_name}</span>
                               }
