@@ -596,21 +596,20 @@ export default function NavBar() {
     setTaskCount((relances || 0) + achatCount + (closingRetards || 0));
   }
 
-  // Load user avatar from profile
+  // Load user avatar from profile (safe — never throws)
   async function loadAvatar(userEmail: string) {
     try {
-      const { data, error } = await supabase
+      const res = await supabase
         .from("user_profiles")
         .select("avatar_url")
-        .eq("user_email", userEmail)
-        .limit(1)
-        .single();
-      if (error || !data?.avatar_url) return;
-      const { data: urlData } = await supabase.storage
+        .eq("user_email", userEmail);
+      const row = res?.data?.[0];
+      if (!row?.avatar_url) return;
+      const urlRes = await supabase.storage
         .from("profile-avatars")
-        .createSignedUrl(data.avatar_url, 3600);
-      if (urlData?.signedUrl) setAvatarUrl(urlData.signedUrl);
-    } catch (_e) { /* ignore */ }
+        .createSignedUrl(row.avatar_url, 3600);
+      if (urlRes?.data?.signedUrl) setAvatarUrl(urlRes.data.signedUrl);
+    } catch (_e) { /* silently ignore — avatar is optional */ }
   }
 
   // Load unread messages count
