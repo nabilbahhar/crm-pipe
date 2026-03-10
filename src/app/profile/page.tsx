@@ -134,16 +134,48 @@ export default function ProfilePage() {
     }
   }
 
+  // Compress image client-side before upload
+  function compressImage(file: File, maxSize = 800, quality = 0.8): Promise<File> {
+    return new Promise((resolve, reject) => {
+      // If already small enough (<2MB) and JPEG, skip compression
+      if (file.size <= 2 * 1024 * 1024 && file.type === 'image/jpeg') {
+        resolve(file)
+        return
+      }
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        URL.revokeObjectURL(url)
+        const canvas = document.createElement('canvas')
+        let w = img.width, h = img.height
+        if (w > maxSize || h > maxSize) {
+          if (w > h) { h = Math.round(h * maxSize / w); w = maxSize }
+          else { w = Math.round(w * maxSize / h); h = maxSize }
+        }
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d')!
+        ctx.drawImage(img, 0, 0, w, h)
+        canvas.toBlob(
+          blob => {
+            if (!blob) return reject(new Error('Compression échouée'))
+            const compressed = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' })
+            resolve(compressed)
+          },
+          'image/jpeg',
+          quality
+        )
+      }
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image illisible')) }
+      img.src = url
+    })
+  }
+
   const handleAvatarUpload = async (file: File) => {
     if (!email) return
-    // Validate
+    // Validate format
     const ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
     if (!ALLOWED.includes(file.type)) {
       setErr('Format non supporté. Utilise JPG, PNG, WebP ou GIF.')
-      return
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      setErr('Image trop volumineuse (max 5 MB).')
       return
     }
 
@@ -151,7 +183,9 @@ export default function ProfilePage() {
     setErr(null)
 
     try {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      // Auto-compress large images (no more 5MB limit!)
+      const compressed = await compressImage(file)
+      const safeName = compressed.name.replace(/[^a-zA-Z0-9._-]/g, '_')
       const path = `${email.replace(/[^a-zA-Z0-9]/g, '_')}/${Date.now()}_${safeName}`
 
       // Delete old avatar if exists
@@ -159,9 +193,9 @@ export default function ProfilePage() {
         await supabase.storage.from('profile-avatars').remove([profile.avatar_url])
       }
 
-      // Upload via server route
+      // Upload via server route (compressed file)
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', compressed)
       formData.append('path', path)
       formData.append('bucket', 'profile-avatars')
 
