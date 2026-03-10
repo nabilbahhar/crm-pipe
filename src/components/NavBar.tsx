@@ -507,6 +507,7 @@ export default function NavBar() {
   const [showSearch, setShowSearch] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [unreadMsgs, setUnreadMsgs] = useState(0);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const panelRef    = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const lastReadRef = useRef<string>("");
@@ -595,6 +596,23 @@ export default function NavBar() {
     setTaskCount((relances || 0) + achatCount + (closingRetards || 0));
   }
 
+  // Load user avatar from profile
+  async function loadAvatar(userEmail: string) {
+    try {
+      const { data } = await supabase
+        .from("user_profiles")
+        .select("avatar_url")
+        .eq("user_email", userEmail)
+        .maybeSingle();
+      if (data?.avatar_url) {
+        const { data: urlData } = await supabase.storage
+          .from("profile-avatars")
+          .createSignedUrl(data.avatar_url, 3600);
+        if (urlData?.signedUrl) setAvatarUrl(urlData.signedUrl);
+      }
+    } catch { /* ignore if table doesn't exist yet */ }
+  }
+
   // Load unread messages count
   async function loadUnreadMsgs(userEmail: string) {
     const { count } = await supabase
@@ -612,7 +630,7 @@ export default function NavBar() {
       if (!mounted) return;
       const userEmail = data?.user?.email ?? null;
       setEmail(userEmail);
-      if (userEmail) { await loadLastRead(userEmail); loadTaskCount(); loadUnreadMsgs(userEmail); }
+      if (userEmail) { await loadLastRead(userEmail); loadTaskCount(); loadUnreadMsgs(userEmail); loadAvatar(userEmail); }
     };
     load();
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -889,15 +907,20 @@ export default function NavBar() {
                   style={{
                     width: 40, height: 40, borderRadius: "50%",
                     border: showUserMenu ? "2px solid #0866ff" : "2px solid transparent",
-                    background: "#0f172a", cursor: "pointer",
+                    background: avatarUrl ? "transparent" : "#0f172a", cursor: "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center",
                     padding: 0, transition: "border-color 0.15s, box-shadow 0.15s",
                     boxShadow: showUserMenu ? "0 0 0 2px rgba(8,102,255,0.2)" : "none",
+                    overflow: "hidden",
                   }}
                 >
-                  <span style={{ color: "#fff", fontSize: 15, fontWeight: 700, lineHeight: 1, userSelect: "none" }}>
-                    {userName(email)[0]}
-                  </span>
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    <span style={{ color: "#fff", fontSize: 15, fontWeight: 700, lineHeight: 1, userSelect: "none" }}>
+                      {userName(email)[0]}
+                    </span>
+                  )}
                 </button>
 
                 {showUserMenu && (
@@ -908,8 +931,10 @@ export default function NavBar() {
                   }}>
                     <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #f0f0f0" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#0f172a", color: "#fff", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          {userName(email)[0]}
+                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: avatarUrl ? "transparent" : "#0f172a", color: "#fff", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, overflow: "hidden" }}>
+                          {avatarUrl ? (
+                            <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                          ) : userName(email)[0]}
                         </div>
                         <div>
                           <div style={{ fontSize: 14, fontWeight: 700, color: "#050505" }}>{userName(email)}</div>

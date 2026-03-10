@@ -103,12 +103,27 @@ export default function ProfilePage() {
         updated_at: new Date().toISOString(),
       }
 
-      // Upsert on user_email
+      // Upsert on user_email — try full payload first
       const { error } = await supabase
         .from('user_profiles')
         .upsert(payload, { onConflict: 'user_email' })
 
-      if (error) throw error
+      if (error) {
+        // Fallback: save only base columns if extended columns don't exist yet
+        const basePayload = {
+          user_email: email,
+          full_name: profile.full_name.trim(),
+          phone: profile.phone.trim(),
+          department: profile.department.trim(),
+          bio: profile.bio.trim(),
+          avatar_url: profile.avatar_url,
+          updated_at: new Date().toISOString(),
+        }
+        const { error: err2 } = await supabase
+          .from('user_profiles')
+          .upsert(basePayload, { onConflict: 'user_email' })
+        if (err2) throw err2
+      }
 
       setSuccess(true)
       setTimeout(() => setSuccess(false), 3000)
@@ -166,6 +181,13 @@ export default function ProfilePage() {
       if (urlData?.signedUrl) setAvatarPreview(urlData.signedUrl)
 
       setProfile(p => p ? { ...p, avatar_url: result.path } : p)
+
+      // Auto-save avatar_url to DB immediately (resilient — ignores missing columns)
+      try {
+        await supabase
+          .from('user_profiles')
+          .upsert({ user_email: email, avatar_url: result.path, updated_at: new Date().toISOString() }, { onConflict: 'user_email' })
+      } catch { /* ignore DB errors — avatar is in storage */ }
     } catch (e: any) {
       setErr(`Erreur : ${e?.message || 'inconnue'}`)
     }
