@@ -74,7 +74,7 @@ type Opportunity = {
   bu: string | null; vendor: string | null; multi_bu: boolean | null
   bu_lines: BuLine[] | null; owner_email: string | null
   po_number: string | null; booking_month: string | null
-  description: string | null; notes: string | null
+  notes: string | null
   created_at: string | null
   accounts: { id?: string; name?: string } | null
   purchase_info: PurchaseInfo[] | null
@@ -206,7 +206,7 @@ export default function ProjectsPage() {
         .from('opportunities')
         .select(`
           id, title, amount, status, stage, bu, vendor, multi_bu, bu_lines,
-          owner_email, po_number, booking_month, description, notes, created_at,
+          owner_email, po_number, booking_month, notes, created_at,
           accounts(id, name),
           purchase_info(id, frais_engagement, notes, purchase_lines(*)),
           project_services(*),
@@ -225,7 +225,7 @@ export default function ProjectsPage() {
           .from('opportunities')
           .select(`
             id, title, amount, status, stage, bu, vendor, multi_bu, bu_lines,
-            owner_email, po_number, booking_month, description, notes, created_at,
+            owner_email, po_number, booking_month, notes, created_at,
             accounts(id, name),
             purchase_info(id, frais_engagement, notes, purchase_lines(*))
           `)
