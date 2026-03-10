@@ -24,12 +24,15 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Projets", href: "/projects", children: [
     { label: "Prescription", href: "/projects?tab=prescription" },
     { label: "Déploiement", href: "/projects?tab=deploiement" },
+    { label: "Renouvellements", href: "/renewals" },
   ]},
   { label: "Finance", href: "/invoices", children: [
     { label: "Facturation", href: "/invoices" },
     { label: "Notes de frais", href: "/expenses" },
   ]},
+  { label: "Événements", href: "/events" },
   { label: "Support", href: "/support" },
+  { label: "Messages", href: "/messages" },
   { label: "Tasks", href: "/tasks", badge: true },
   { label: "KPI", href: "/kpi" },
 ];

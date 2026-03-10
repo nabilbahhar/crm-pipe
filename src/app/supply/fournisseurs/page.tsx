@@ -1,15 +1,15 @@
 'use client'
-import React, { useEffect, useRef, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
-import { mad, fmt } from '@/lib/utils'
+import { mad } from '@/lib/utils'
 import Link from 'next/link'
 import {
   Plus, Search, Edit2, Trash2, X, Save, Loader2, Download,
-  Phone, Mail, Package, Users, ChevronUp, ChevronDown, ChevronsUpDown,
+  Phone, Mail, Users, ChevronUp, ChevronDown, ChevronsUpDown,
   RefreshCw, ExternalLink, Star, Building2, BarChart2, TrendingUp,
-  ArrowUp, ArrowDown, ShoppingCart, FileText, Layers, Clock,
-  ChevronRight, MapPin, Hash,
+  ShoppingCart, Layers, Clock, Eye,
+  MapPin,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ function CatBadge({ cat }: { cat: string | null }) {
 }
 
 function MargeBadge({ pct }: { pct: number | null | undefined }) {
-  if (pct == null) return <span className="text-xs text-slate-300">—</span>
+  if (pct == null) return <span className="text-xs text-slate-300">--</span>
   const v = Number(pct)
   const cls = v >= 20 ? 'bg-emerald-100 text-emerald-700' : v >= 10 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-600'
   return <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-bold ${cls}`}>{v.toFixed(1)}%</span>
@@ -493,7 +493,7 @@ function SupplierDetail({
 }
 
 // ─── Main Page ────────────────────────────────────────────────
-type SortKey = 'name' | 'total_orders' | 'total_achat_ht' | 'last_order_date' | 'avg_marge_pct'
+type SortKey = 'name' | 'total_orders' | 'total_achat_ht'
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers]   = useState<Supplier[]>([])
@@ -503,7 +503,6 @@ export default function SuppliersPage() {
   const [modal, setModal]           = useState<Partial<Supplier> | null | false>(false)
   const [deleting, setDeleting]     = useState<string | null>(null)
   const [search, setSearch]         = useState('')
-  const [catFilter, setCatFilter]   = useState('Toutes')
   const [sortKey, setSortKey]       = useState<SortKey>('total_achat_ht')
   const [sortDir, setSortDir]       = useState<'asc' | 'desc'>('desc')
   const [contactsModal, setContactsModal] = useState<Supplier | null>(null)
@@ -579,10 +578,8 @@ export default function SuppliersPage() {
   // Filter
   const filtered = useMemo(() => rows.filter(r => {
     const q = search.toLowerCase()
-    const matchQ = !q || r.name.toLowerCase().includes(q) || r.contact?.toLowerCase().includes(q) || r.category?.toLowerCase().includes(q)
-    const matchC = catFilter === 'Toutes' || r.category === catFilter
-    return matchQ && matchC
-  }), [rows, search, catFilter])
+    return !q || r.name.toLowerCase().includes(q) || r.contact?.toLowerCase().includes(q) || r.category?.toLowerCase().includes(q) || r.address?.toLowerCase().includes(q) || r.email?.toLowerCase().includes(q)
+  }), [rows, search])
 
   // Sort
   const sorted = useMemo(() => [...filtered].sort((a, b) => {
@@ -603,12 +600,6 @@ export default function SuppliersPage() {
   }
 
   const selectedRow = selectedId ? sorted.find(s => s.id === selectedId) || null : null
-
-  // Unique categories for filter
-  const catOptions = useMemo(() => {
-    const cats = [...new Set(rows.map(r => r.category).filter((c): c is string => Boolean(c)))]
-    return ['Toutes', ...cats.sort()]
-  }, [rows])
 
   const [exporting, setExporting] = useState(false)
   async function exportExcel() {
@@ -774,26 +765,12 @@ export default function SuppliersPage() {
           </div>
         )}
 
-        {/* ── Search & Filters ── */}
+        {/* ── Search ── */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-[200px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-300" />
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un fournisseur…"
               className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 shadow-sm" />
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {catOptions.slice(0, 8).map(c => (
-              <button key={c} onClick={() => setCatFilter(c)}
-                className={`h-8 rounded-xl px-3 text-xs font-semibold transition-all
-                  ${catFilter === c ? 'bg-slate-900 text-white shadow-sm' : 'border border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
-                {c === 'Toutes' ? 'Toutes' : c}
-              </button>
-            ))}
-            {catOptions.length > 8 && catFilter !== 'Toutes' && !catOptions.slice(0, 8).includes(catFilter) && (
-              <span className="inline-flex h-8 items-center rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white shadow-sm">
-                {catFilter}
-              </span>
-            )}
           </div>
           <div className="text-xs font-semibold text-slate-400">{sorted.length} résultat{sorted.length > 1 ? 's' : ''}</div>
         </div>
@@ -817,40 +794,36 @@ export default function SuppliersPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm" style={{ minWidth: selectedId ? 700 : 900 }}>
+                <table className="w-full text-sm" style={{ minWidth: selectedId ? 650 : 850 }}>
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/80">
                       <th onClick={() => toggleSort('name')} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer hover:text-slate-600 select-none">
                         <span className="inline-flex items-center gap-1">Fournisseur <SortIcon k="name" /></span>
                       </th>
-                      {!selectedId && <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Catégorie</th>}
-                      <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Contact</th>
+                      {!selectedId && <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Domaine</th>}
+                      <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Email</th>
+                      <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Téléphone</th>
                       <th onClick={() => toggleSort('total_orders')} className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer hover:text-slate-600 select-none">
                         <span className="inline-flex items-center gap-1">Cmd <SortIcon k="total_orders" /></span>
                       </th>
                       <th onClick={() => toggleSort('total_achat_ht')} className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer hover:text-slate-600 select-none">
-                        <span className="inline-flex items-center gap-1">Vol. achat <SortIcon k="total_achat_ht" /></span>
+                        <span className="inline-flex items-center gap-1">Montant <SortIcon k="total_achat_ht" /></span>
                       </th>
-                      <th onClick={() => toggleSort('avg_marge_pct')} className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer hover:text-slate-600 select-none">
-                        <span className="inline-flex items-center gap-1">Marge <SortIcon k="avg_marge_pct" /></span>
-                      </th>
-                      {!selectedId && (
-                        <th onClick={() => toggleSort('last_order_date')} className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400 cursor-pointer hover:text-slate-600 select-none">
-                          <span className="inline-flex items-center gap-1">Dern. cmd <SortIcon k="last_order_date" /></span>
-                        </th>
-                      )}
-                      <th className="px-4 py-3 w-[100px]" />
+                      <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Contacts</th>
+                      <th className="px-4 py-3 w-[120px]" />
                     </tr>
                   </thead>
                   <tbody>
                     {sorted.map(s => {
                       const hasOrders = Number(s.total_orders) > 0
                       const isSelected = selectedId === s.id
+                      const cc = contactCounts[s.id] || 0
                       return (
                         <tr key={s.id}
                           onClick={() => setSelectedId(isSelected ? null : s.id)}
                           className={`border-b border-slate-50 transition-colors cursor-pointer
                             ${isSelected ? 'bg-blue-50/60 ring-1 ring-inset ring-blue-200' : 'hover:bg-slate-50/60'}`}>
+                          {/* Nom + Région */}
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2.5">
                               <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold
@@ -858,74 +831,63 @@ export default function SuppliersPage() {
                                 {s.name.slice(0, 2).toUpperCase()}
                               </div>
                               <div className="min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-semibold text-slate-900 text-sm truncate">{s.name}</span>
-                                  {hasOrders && (
-                                    <Link href={`/supply?vendor=${encodeURIComponent(s.name)}`}
-                                      onClick={e => e.stopPropagation()} title="Voir commandes"
-                                      className="inline-flex h-5 w-5 items-center justify-center rounded-md text-slate-300 hover:bg-blue-50 hover:text-blue-500 transition-colors">
-                                      <ExternalLink className="h-3 w-3" />
-                                    </Link>
-                                  )}
-                                </div>
+                                <span className="font-semibold text-slate-900 text-sm truncate block">{s.name}</span>
                                 {s.address && <div className="text-[11px] text-slate-400 truncate max-w-[200px]">{s.address}</div>}
                               </div>
                             </div>
                           </td>
+                          {/* Domaine / Spécialité (category) */}
                           {!selectedId && (
                             <td className="px-4 py-3">
-                              <CatBadge cat={s.category} />
+                              {s.category ? <span className="text-xs text-slate-600">{s.category}</span> : <span className="text-xs text-slate-300">--</span>}
                             </td>
                           )}
+                          {/* Email */}
                           <td className="px-4 py-3">
-                            <div className="text-xs font-medium text-slate-700">{s.contact || <span className="text-slate-300">—</span>}</div>
-                            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                              {s.email && (
-                                <a href={`mailto:${s.email}`} onClick={e => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 rounded-md bg-blue-50 border border-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 hover:bg-blue-100 transition-colors">
-                                  <Mail className="h-2.5 w-2.5" />{s.email.length > 22 ? s.email.slice(0, 20) + '…' : s.email}
-                                </a>
-                              )}
-                              {s.tel && (
-                                <a href={`tel:${s.tel}`} onClick={e => e.stopPropagation()}
-                                  className="inline-flex items-center gap-1 rounded-md bg-emerald-50 border border-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 hover:bg-emerald-100 transition-colors">
-                                  <Phone className="h-2.5 w-2.5" />{s.tel}
-                                </a>
-                              )}
-                              {(contactCounts[s.id] || 0) > 0 && (
-                                <button onClick={e => { e.stopPropagation(); setContactsModal(s) }}
-                                  className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 hover:bg-blue-200 transition-colors"
-                                  title={`${contactCounts[s.id]} contact(s)`}>
-                                  +{contactCounts[s.id]}
-                                </button>
-                              )}
-                            </div>
+                            {s.email ? (
+                              <a href={`mailto:${s.email}`} onClick={e => e.stopPropagation()}
+                                className="text-xs text-blue-600 hover:underline truncate block max-w-[180px]">
+                                {s.email}
+                              </a>
+                            ) : <span className="text-xs text-slate-300">--</span>}
                           </td>
+                          {/* Téléphone */}
+                          <td className="px-4 py-3">
+                            {s.tel ? (
+                              <a href={`tel:${s.tel}`} onClick={e => e.stopPropagation()}
+                                className="text-xs text-slate-700 hover:text-emerald-600 transition-colors">
+                                {s.tel}
+                              </a>
+                            ) : <span className="text-xs text-slate-300">--</span>}
+                          </td>
+                          {/* Commandes */}
                           <td className="px-4 py-3 text-right">
                             {hasOrders ? <span className="font-bold text-slate-800 tabular-nums">{s.total_orders}</span>
-                              : <span className="text-slate-300 text-xs">—</span>}
+                              : <span className="text-slate-300 text-xs">--</span>}
                           </td>
+                          {/* Montant achat */}
                           <td className="px-4 py-3 text-right">
                             {hasOrders ? <span className="font-semibold text-slate-700 tabular-nums">{mad(s.total_achat_ht || 0)}</span>
-                              : <span className="text-slate-300 text-xs">—</span>}
+                              : <span className="text-slate-300 text-xs">--</span>}
                           </td>
-                          <td className="px-4 py-3 text-right">
-                            <MargeBadge pct={hasOrders ? s.avg_marge_pct : null} />
+                          {/* Contacts count badge */}
+                          <td className="px-4 py-3 text-center">
+                            {cc > 0 ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                                <Users className="h-3 w-3" />{cc}
+                              </span>
+                            ) : <span className="text-xs text-slate-300">0</span>}
                           </td>
-                          {!selectedId && (
-                            <td className="px-4 py-3 text-right text-xs text-slate-400 tabular-nums">
-                              {s.last_order_date ? new Date(s.last_order_date).toLocaleDateString('fr-MA') : <span className="text-slate-200">—</span>}
-                            </td>
-                          )}
+                          {/* Actions: Fiche (eye), Edit (pencil), Delete (trash) */}
                           <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                             <div className="flex items-center justify-end gap-1">
-                              <button onClick={() => setContactsModal(s)}
+                              <button onClick={() => setSelectedId(s.id)}
                                 className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-colors"
-                                title="Contacts">
-                                <Users className="h-3.5 w-3.5" />
+                                title="Fiche détail">
+                                <Eye className="h-3.5 w-3.5" />
                               </button>
                               <button onClick={() => setModal(s)}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200 transition-colors"
                                 title="Modifier">
                                 <Edit2 className="h-3.5 w-3.5" />
                               </button>

@@ -27,6 +27,8 @@ type PurchaseLine = {
   fournisseur_id: string | null; fournisseur?: string
   contact_fournisseur?: string; email_fournisseur?: string; tel_fournisseur?: string
   warranty_months?: number; license_months?: number
+  warranty_expiry?: string; license_expiry?: string
+  selected_contact_ids?: string[]
 }
 type DBFile = { id?: string; file_type: string; file_name: string; file_url?: string }
 
@@ -42,6 +44,8 @@ const emptyLine = (): PurchaseLine => ({
   ref: '', designation: '', qty: 1, pu_vente: 0, pt_vente: 0, pu_achat: 0,
   fournisseur_id: null, contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '',
   warranty_months: 0, license_months: 0,
+  warranty_expiry: '', license_expiry: '',
+  selected_contact_ids: [],
 })
 
 // ─── Format Excel : 57.500,00 MAD ────────────────────────────
@@ -201,6 +205,9 @@ export default function PurchasePage() {
           tel_fournisseur: l.tel_fournisseur || '',
           warranty_months: l.warranty_months || 0,
           license_months: l.license_months || 0,
+          warranty_expiry: l.warranty_expiry || '',
+          license_expiry: l.license_expiry || '',
+          selected_contact_ids: l.selected_contact_ids ? (typeof l.selected_contact_ids === 'string' ? JSON.parse(l.selected_contact_ids) : l.selected_contact_ids) : [],
         })))
         setExtracted(true)
         setLoading(false)
@@ -299,15 +306,29 @@ export default function PurchasePage() {
     setErr(null)
     // Pour save partiel : on filtre les lignes sans désignation (on ne bloque pas)
     const validLines = lines.filter(l => l.designation.trim())
-    // Save partiel : ok même sans lignes (peut juste uploader les fichiers)
-    if (!partial && validLines.length === 0) {
-      setErr('Ajoute au moins une ligne avec une désignation.'); return
-    }
-    // Pour save complet : validations strictes (marge faible = info seulement, pas bloquant)
+
+    // "Enregistrer" (partial) : sauvegarde sans validation stricte
+    // "Placer commande" (!partial) : validations strictes
     if (!partial) {
+      if (validLines.length === 0) {
+        setErr('Ajoute au moins une ligne avec une désignation.'); return
+      }
       if (!hasBcClient) { setErr('BC Client est obligatoire pour finaliser.'); return }
       if (!hasDevis)    { setErr('Devis Compucom est obligatoire pour finaliser.'); return }
       if (!totalMatch)  { setErr(`Total (${mad(totalVente)}) ≠ montant deal (${mad(dealAmount)}). Écart : ${mad(Math.abs(totalDiff))}`); return }
+      // Validate each line: designation, qty, pu_vente, supplier are mandatory
+      const lineErrors: string[] = []
+      validLines.forEach((l, idx) => {
+        const n = idx + 1
+        if (!l.designation.trim()) lineErrors.push(`Ligne ${n} : désignation manquante`)
+        if (!l.qty || l.qty <= 0) lineErrors.push(`Ligne ${n} : quantité invalide`)
+        if (!l.pu_vente || l.pu_vente <= 0) lineErrors.push(`Ligne ${n} : PU vente manquant`)
+        if (!l.fournisseur_id) lineErrors.push(`Ligne ${n} : fournisseur non sélectionné`)
+      })
+      if (lineErrors.length > 0) {
+        setErr(`Champs obligatoires manquants :\n${lineErrors.join(' · ')}`)
+        return
+      }
     }
 
     setSaving(true)
@@ -345,6 +366,9 @@ export default function PurchasePage() {
             tel_fournisseur: l.tel_fournisseur || fourn?.tel || null,
             warranty_months: l.warranty_months || null,
             license_months: l.license_months || null,
+            warranty_expiry: l.warranty_expiry || null,
+            license_expiry: l.license_expiry || null,
+            selected_contact_ids: l.selected_contact_ids?.length ? JSON.stringify(l.selected_contact_ids) : null,
           }
         })
       )
@@ -663,7 +687,7 @@ export default function PurchasePage() {
           )}
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full" style={{ minWidth: 1200 }}>
+            <table className="w-full" style={{ minWidth: 1340 }}>
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50">
                   {[
@@ -675,8 +699,8 @@ export default function PurchasePage() {
                     { l:'PU Achat ★', w:120, r:true, amber:true },
                     { l:'PT Achat',   w:130, r:true  },
                     { l:'Marge',      w:80,  r:true  },
-                    { l:'Garantie',   w:80,  r:true  },
-                    { l:'Licence',    w:80,  r:true  },
+                    { l:'Fin garantie', w:130, r:false },
+                    { l:'Fin licence', w:130, r:false },
                     { l:'Fournisseur / Contact',w:260, r:false },
                     { l:'',           w:40,  r:false },
                   ].map(({ l, w, r, amber }, i) => (
@@ -700,12 +724,12 @@ export default function PurchasePage() {
                       </td>
                       <td className="px-4 py-3">
                         <textarea value={l.designation}
-                          onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
-                          onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                          onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=Math.max(e.target.scrollHeight, 72)+'px' }}
+                          onFocus={e => { e.target.style.height='auto'; e.target.style.height=Math.max(e.target.scrollHeight, 72)+'px' }}
                           placeholder="Description du produit *"
-                          rows={1}
+                          rows={3}
                           className={`${inp} resize-none overflow-hidden leading-snug py-2.5 ${!l.designation.trim()?'border-red-300 bg-red-50 focus:border-red-400':''}`}
-                          style={{ minHeight: 40 }} />
+                          style={{ minHeight: 72 }} />
                       </td>
                       <td className="px-4 py-3">
                         <input type="number" min={1} value={Number(l.qty) || 1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
@@ -736,15 +760,17 @@ export default function PurchasePage() {
                           </span>
                         ) : <span className="text-slate-300 text-sm">—</span>}
                       </td>
-                      {/* Garantie (mois) */}
+                      {/* Fin garantie (mois/année) — optionnel */}
                       <td className="px-4 py-3">
-                        <input type="number" min={0} value={l.warranty_months||''} onChange={e => updateLine(i,'warranty_months',Number(e.target.value)||0)}
-                          placeholder="mois" className={`${inp} text-right text-xs`} style={{ minWidth: 70 }} />
+                        <input type="month" value={l.warranty_expiry || ''}
+                          onChange={e => updateLine(i, 'warranty_expiry', e.target.value)}
+                          className={`${inp} text-xs`} style={{ minWidth: 120 }} />
                       </td>
-                      {/* Licence (mois) */}
+                      {/* Fin licence (mois/année) — optionnel */}
                       <td className="px-4 py-3">
-                        <input type="number" min={0} value={l.license_months||''} onChange={e => updateLine(i,'license_months',Number(e.target.value)||0)}
-                          placeholder="mois" className={`${inp} text-right text-xs`} style={{ minWidth: 70 }} />
+                        <input type="month" value={l.license_expiry || ''}
+                          onChange={e => updateLine(i, 'license_expiry', e.target.value)}
+                          className={`${inp} text-xs`} style={{ minWidth: 120 }} />
                       </td>
                       <td className="px-4 py-3">
                         <div className="space-y-2">
@@ -752,19 +778,15 @@ export default function PurchasePage() {
                           <div className="flex gap-1.5">
                             <select value={l.fournisseur_id||''} onChange={e => {
                               const fid = e.target.value || null
-                              updateLine(i, 'fournisseur_id', fid)
-                              if (fid) {
-                                const fourn = fourns.find(f => f.id === fid)
-                                if (fourn) {
-                                  updateLine(i, 'contact_fournisseur', fourn.contact || '')
-                                  updateLine(i, 'email_fournisseur', fourn.email || '')
-                                  updateLine(i, 'tel_fournisseur', fourn.tel || '')
-                                }
-                              } else {
-                                updateLine(i, 'contact_fournisseur', '')
-                                updateLine(i, 'email_fournisseur', '')
-                                updateLine(i, 'tel_fournisseur', '')
-                              }
+                              // Set supplier + clear contacts in one state update
+                              setLines(prev => prev.map((ln, idx) => idx !== i ? ln : {
+                                ...ln,
+                                fournisseur_id: fid,
+                                selected_contact_ids: [],
+                                contact_fournisseur: '',
+                                email_fournisseur: '',
+                                tel_fournisseur: '',
+                              }))
                             }}
                               className={`h-10 flex-1 rounded-lg border px-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-50
                                 ${l.fournisseur_id?'border-slate-300 bg-white text-slate-800 font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
@@ -776,47 +798,66 @@ export default function PurchasePage() {
                               <Plus className="h-4 w-4" />
                             </button>
                           </div>
-                          {/* Contact selector */}
+                          {/* Contact selector — checkboxes for multiple contacts */}
                           {l.fournisseur_id && (() => {
                             const contacts = supplierContacts.filter(c => c.supplier_id === l.fournisseur_id)
                             const fourn = fourns.find(f => f.id === l.fournisseur_id)
-                            const options: { label: string; contact: string; email: string; tel: string }[] = []
-                            if (fourn?.contact) options.push({ label: `${fourn.contact} (principal)`, contact: fourn.contact, email: fourn.email || '', tel: fourn.tel || '' })
-                            contacts.forEach(c => options.push({ label: `${c.contact_name}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
+                            const options: { id: string; label: string; contact: string; email: string; tel: string }[] = []
+                            if (fourn?.contact) options.push({ id: `main_${fourn.id}`, label: `${fourn.contact} (principal)`, contact: fourn.contact, email: fourn.email || '', tel: fourn.tel || '' })
+                            contacts.forEach(c => options.push({ id: c.id, label: `${c.contact_name}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
+                            const selectedIds = l.selected_contact_ids || []
+                            const toggleContact = (optId: string) => {
+                              setLines(prev => prev.map((ln, idx) => {
+                                if (idx !== i) return ln
+                                const curIds = ln.selected_contact_ids || []
+                                const isSelected = curIds.includes(optId)
+                                const newIds = isSelected
+                                  ? curIds.filter((sid: string) => sid !== optId)
+                                  : [...curIds, optId]
+                                const contactNames = newIds.map(sid => options.find(o => o.id === sid)?.contact).filter(Boolean).join(', ')
+                                const emails = newIds.map(sid => options.find(o => o.id === sid)?.email).filter(Boolean).join(', ')
+                                const tels = newIds.map(sid => options.find(o => o.id === sid)?.tel).filter(Boolean).join(', ')
+                                return {
+                                  ...ln,
+                                  selected_contact_ids: newIds,
+                                  contact_fournisseur: contactNames,
+                                  email_fournisseur: emails,
+                                  tel_fournisseur: tels,
+                                }
+                              }))
+                            }
                             return (
                               <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2 space-y-1.5">
                                 <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                                  <span>👤</span> Contact fournisseur
+                                  <span>👤</span> Contacts fournisseur {selectedIds.length > 0 && <span className="ml-1 rounded-full bg-blue-500 text-white px-1.5 py-0 text-[9px]">{selectedIds.length}</span>}
                                 </div>
                                 {options.length >= 1 ? (
-                                  <select value={l.contact_fournisseur || ''} onChange={e => {
-                                    const opt = options.find(o => o.contact === e.target.value)
-                                    if (opt) {
-                                      updateLine(i, 'contact_fournisseur', opt.contact)
-                                      updateLine(i, 'email_fournisseur', opt.email)
-                                      updateLine(i, 'tel_fournisseur', opt.tel)
-                                    } else {
-                                      updateLine(i, 'contact_fournisseur', '')
-                                      updateLine(i, 'email_fournisseur', '')
-                                      updateLine(i, 'tel_fournisseur', '')
-                                    }
-                                  }}
-                                    className={`h-8 w-full rounded-md border px-2 text-xs font-medium outline-none transition
-                                      ${l.contact_fournisseur ? 'border-blue-300 bg-white text-slate-800' : 'border-blue-200 bg-white text-slate-400'}`}>
-                                    <option value="">Choisir le contact…</option>
-                                    {options.map((o, j) => <option key={j} value={o.contact}>{o.label}</option>)}
-                                  </select>
+                                  <div className="space-y-1 max-h-[140px] overflow-y-auto">
+                                    {options.map((opt) => {
+                                      const checked = selectedIds.includes(opt.id)
+                                      return (
+                                        <label key={opt.id}
+                                          className={`flex items-start gap-2 rounded-md px-2 py-1.5 cursor-pointer transition text-xs
+                                            ${checked ? 'bg-blue-100 border border-blue-300' : 'bg-white border border-blue-100 hover:bg-blue-50'}`}>
+                                          <input type="checkbox" checked={checked}
+                                            onChange={() => toggleContact(opt.id)}
+                                            className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 accent-blue-600" />
+                                          <div className="flex-1 min-w-0">
+                                            <div className="font-semibold text-slate-700 truncate">{opt.label}</div>
+                                            {(opt.email || opt.tel) && (
+                                              <div className="text-[10px] text-slate-400 truncate">
+                                                {opt.email}{opt.email && opt.tel ? ' · ' : ''}{opt.tel}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
                                 ) : (
                                   <input value={l.contact_fournisseur || ''} onChange={e => updateLine(i, 'contact_fournisseur', e.target.value)}
                                     placeholder="Nom du contact…"
                                     className="h-8 w-full rounded-md border border-blue-200 bg-white px-2 text-xs outline-none focus:border-blue-400 transition" />
-                                )}
-                                {l.contact_fournisseur && (l.email_fournisseur || l.tel_fournisseur) && (
-                                  <div className="text-[10px] text-slate-500 leading-relaxed pl-0.5">
-                                    {l.email_fournisseur && <span>{l.email_fournisseur}</span>}
-                                    {l.email_fournisseur && l.tel_fournisseur && <span> · </span>}
-                                    {l.tel_fournisseur && <span>{l.tel_fournisseur}</span>}
-                                  </div>
                                 )}
                               </div>
                             )
@@ -973,10 +1014,10 @@ export default function PurchasePage() {
               Annuler
             </button>
 
-            {/* Partial save — always available as long as lines have designations */}
-            <button onClick={() => handleSave(true)} disabled={saving || success || lines.every(l => !l.designation.trim())}
+            {/* Partial save (Enregistrer) — always available, no strict validation */}
+            <button onClick={() => handleSave(true)} disabled={saving || success}
               className="flex h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition disabled:opacity-40">
-              <Save className="h-4 w-4" /> Sauvegarder (partiel)
+              <Save className="h-4 w-4" /> Enregistrer
             </button>
 
             {/* Full save = "Placer la commande" — toujours disponible si BC + Devis + totalMatch */}

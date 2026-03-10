@@ -7,7 +7,7 @@ import { logActivity } from '@/lib/logActivity'
 import {
   mad, madFull, fmt, fmtDate,
   EXPENSE_STATUS_CFG, type ExpenseStatus,
-  isAE, ownerName, COMPUCOM_EMAILS,
+  isAE, ownerName,
 } from '@/lib/utils'
 import { buildExpenseEmail } from '@/lib/emailTemplates'
 import {
@@ -205,6 +205,51 @@ export default function ExpensesPage() {
   }
 
   const formTotal = formLines.reduce((s, l) => s + (Number(l.amount_ttc) || 0), 0)
+
+  // ── Auto-save as brouillon (for new reports needing an ID) ──
+  async function autoSaveAsBrouillon(): Promise<string | null> {
+    if (!userEmail) return null
+    try {
+      const total = formLines.reduce((s, l) => s + (Number(l.amount_ttc) || 0), 0)
+      const { data, error } = await supabase.from('expense_reports').insert({
+        user_email: userEmail,
+        month: formMonth,
+        year: formYear,
+        status: 'brouillon' as ExpenseStatus,
+        total_ttc: total,
+        notes: formNotes || null,
+        submitted_at: null,
+      }).select('id').single()
+
+      if (error || !data) throw new Error(error?.message || 'Erreur creation')
+
+      // Insert existing lines so they are persisted
+      if (formLines.length > 0) {
+        const linesToInsert = formLines.map((l, i) => ({
+          expense_report_id: data.id,
+          date: l.date,
+          description: l.description,
+          amount_ttc: Number(l.amount_ttc) || 0,
+          file_name: l.file_name,
+          file_url: l.file_url,
+          sort_order: i,
+        }))
+        await supabase.from('expense_lines').insert(linesToInsert)
+      }
+
+      await logActivity({
+        action_type: 'create',
+        entity_type: 'expense' as any,
+        entity_name: `Note ${formMonth}/${formYear}`,
+      })
+
+      setEditingId(data.id)
+      return data.id
+    } catch (e: any) {
+      showToast(`Erreur auto-save : ${e?.message || 'inconnue'}`)
+      return null
+    }
+  }
 
   // ── File upload ───────────────────────────────────────────
   async function handleFileUpload(idx: number, file: File, reportId: string) {
@@ -467,6 +512,28 @@ export default function ExpensesPage() {
     setTimeout(() => setToast(null), 3000)
   }
 
+  // ── HTML to plain text for mailto ────────────────────────
+  function htmlToPlainText(html: string): string {
+    const tmp = document.createElement('div')
+    tmp.innerHTML = html
+    // Replace <br> and block-level elements with newlines
+    tmp.querySelectorAll('br').forEach(el => el.replaceWith('\n'))
+    tmp.querySelectorAll('tr').forEach(el => el.append('\n'))
+    tmp.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li').forEach(el => el.append('\n'))
+    tmp.querySelectorAll('td, th').forEach(el => el.append('\t'))
+    return (tmp.textContent || tmp.innerText || '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  }
+
+  // ── Open mailto with body ──────────────────────────────────
+  function openOutlookMailto() {
+    if (!emailModal) return
+    const plainText = htmlToPlainText(emailModal.html)
+    const mailto = `mailto:h.benramdane@compucom.ma?cc=${encodeURIComponent('a.lahkim@compucom.ma')}&subject=${encodeURIComponent(emailModal.subject)}&body=${encodeURIComponent(plainText)}`
+    window.open(mailto, '_blank')
+  }
+
   // ── Email copy ────────────────────────────────────────────
   async function copyEmailHtml() {
     if (!emailModal) return
@@ -652,19 +719,22 @@ export default function ExpensesPage() {
                                 <input type="file" ref={el => { fileRefs.current[lineKey] = el }}
                                   className="hidden"
                                   accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.xlsx,.xls,.docx,.doc,.csv,.pptx,.ppt"
-                                  onChange={e => {
+                                  onChange={async e => {
                                     const f = e.target.files?.[0]
                                     if (!f) return
-                                    // Need a report ID for upload path. If editing, use that ID.
-                                    // If new, we upload after first save. For now, queue upload.
+                                    e.target.value = ''
+
                                     if (editingId) {
                                       handleFileUpload(idx, f, editingId)
                                     } else {
-                                      // Store file reference for post-save upload
-                                      // For new reports, we save as draft first then upload
-                                      showToast('Enregistrez d\'abord la note pour ajouter des PJ')
+                                      // Auto-save as brouillon to get a reportId, then upload
+                                      showToast('Enregistrement de la note...')
+                                      const newId = await autoSaveAsBrouillon()
+                                      if (newId) {
+                                        showToast('Upload du fichier...')
+                                        handleFileUpload(idx, f, newId)
+                                      }
                                     }
-                                    e.target.value = ''
                                   }} />
                                 <button onClick={() => fileRefs.current[lineKey]?.click()}
                                   className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-semibold text-slate-500 hover:bg-slate-50 transition-colors">
@@ -977,7 +1047,7 @@ export default function ExpensesPage() {
               <div className="flex-1 min-w-0">
                 <div className="font-bold text-slate-900 text-sm">Email note de frais</div>
                 <div className="text-xs text-slate-400 truncate">
-                  A : {COMPUCOM_EMAILS.hanane} &middot; CC : {COMPUCOM_EMAILS.achraf}
+                  A : h.benramdane@compucom.ma &middot; CC : a.lahkim@compucom.ma
                 </div>
               </div>
               <button onClick={() => { setEmailModal(null); setCopied(false) }}
@@ -998,21 +1068,17 @@ export default function ExpensesPage() {
             </div>
             <div className="shrink-0 border-t border-slate-100 px-5 py-4 space-y-2.5">
               <div className="flex flex-wrap gap-2.5">
-                <button onClick={() => {
-                  const subject = encodeURIComponent(emailModal.subject)
-                  const mailto = `mailto:${COMPUCOM_EMAILS.hanane}?cc=${encodeURIComponent(COMPUCOM_EMAILS.achraf)}&subject=${subject}`
-                  window.location.href = mailto
-                }}
+                <button onClick={openOutlookMailto}
                   className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-xs font-bold text-white hover:bg-slate-800 transition-colors">
-                  <ExternalLink className="h-3.5 w-3.5" /> Etape 1 - Ouvrir Outlook
+                  <ExternalLink className="h-3.5 w-3.5" /> Ouvrir dans Outlook
                 </button>
                 <button onClick={copyEmailHtml}
                   className={`flex h-9 items-center gap-2 rounded-xl border px-4 text-xs font-bold transition-colors ${copied ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'}`}>
-                  {copied ? <><Check className="h-3.5 w-3.5" /> Copie !</> : <><Copy className="h-3.5 w-3.5" /> Etape 2 - Copier le HTML</>}
+                  {copied ? <><Check className="h-3.5 w-3.5" /> Copie !</> : <><Copy className="h-3.5 w-3.5" /> Copier le HTML</>}
                 </button>
               </div>
               <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-xs text-slate-500 leading-relaxed">
-                <strong className="text-slate-700">Mode d&apos;emploi :</strong> Ouvrir Outlook &rarr; cliquer dans le corps &rarr; Ctrl+V &rarr; Envoyer
+                <strong className="text-slate-700">A :</strong> h.benramdane@compucom.ma &middot; <strong className="text-slate-700">CC :</strong> a.lahkim@compucom.ma
               </div>
             </div>
           </div>

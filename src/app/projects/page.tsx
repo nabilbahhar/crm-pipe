@@ -11,6 +11,7 @@ import {
   PROJECT_SERVICE_STATUS_CFG, type ProjectServiceStatus,
   LINE_STATUS_CFG,
   ownerName, COMPUCOM_EMAILS,
+  hasPrestation,
 } from '@/lib/utils'
 import { buildKaderEmail } from '@/lib/emailTemplates'
 import {
@@ -87,22 +88,7 @@ type Tab = 'prescription' | 'deploiement'
 const PRESCRIPTION_ORDER: PrescriptionStatus[] = ['en_attente', 'en_cours', 'prescrit', 'soutenu']
 const SERVICE_STATUS_ORDER: ProjectServiceStatus[] = ['planifie', 'en_cours', 'termine', 'bloque']
 
-/** Returns true if this deal has Service/Prestation in its BUs */
-function hasServiceBU(opp: Opportunity): boolean {
-  // Direct BU check
-  if (opp.bu) {
-    const upper = opp.bu.toUpperCase()
-    if (upper.includes('SERVICE') || upper.includes('PRESTATION')) return true
-  }
-  // Multi-BU check
-  if (opp.multi_bu && Array.isArray(opp.bu_lines) && opp.bu_lines.length > 0) {
-    return opp.bu_lines.some(l => {
-      const b = (l.bu || l.card || '').toUpperCase()
-      return b.includes('SERVICE') || b.includes('PRESTATION')
-    })
-  }
-  return false
-}
+/* hasPrestation is now imported from @/lib/utils */
 
 /** Extracts all BU labels from a deal */
 function getBUs(opp: Opportunity): string[] {
@@ -264,7 +250,7 @@ export default function ProjectsPage() {
   const prescriptionDeals = useMemo(() => {
     return deals.filter(d => {
       if (normStatus(d) !== 'Open') return false
-      if (!hasServiceBU(d)) return false
+      if (!hasPrestation(d)) return false
       if (q) {
         const name = d.accounts?.name || d.title || ''
         if (!name.toLowerCase().includes(q) && !d.title.toLowerCase().includes(q)) return false
@@ -276,7 +262,7 @@ export default function ProjectsPage() {
   const deploymentDeals = useMemo(() => {
     return deals.filter(d => {
       if (normStatus(d) !== 'Won') return false
-      if (!hasServiceBU(d)) return false
+      if (!hasPrestation(d)) return false
       if (q) {
         const name = d.accounts?.name || d.title || ''
         if (!name.toLowerCase().includes(q) && !d.title.toLowerCase().includes(q)) return false

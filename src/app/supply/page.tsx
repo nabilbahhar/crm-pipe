@@ -106,6 +106,7 @@ export default function SupplyPage() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [buFilter, setBuFilter] = useState('Tous')
   const [vendorFilter, setVendorFilter] = useState('Tous')
+  const [busyLines, setBusyLines] = useState<Set<string>>(new Set())
 
   function showToast(msg: string) {
     if (toastTimer.current) clearTimeout(toastTimer.current)
@@ -136,21 +137,26 @@ export default function SupplyPage() {
 
   async function load() {
     setLoading(true); setErr(null)
-    const { data, error } = await supabase
-      .from('supply_orders')
-      .select(`
-        *,
-        opportunities (
-          id, title, amount, po_number, po_date, bu, vendor,
-          accounts(name),
-          purchase_info(id, frais_engagement, payment_terms, notes, purchase_lines(*))
-        )
-      `)
-      .order('created_at', { ascending: false })
+    try {
+      const { data, error } = await supabase
+        .from('supply_orders')
+        .select(`
+          *,
+          opportunities (
+            id, title, amount, po_number, po_date, bu, vendor,
+            accounts(name),
+            purchase_info(id, frais_engagement, payment_terms, notes, purchase_lines(*))
+          )
+        `)
+        .order('created_at', { ascending: false })
 
-    if (error) { setErr(error.message); setLoading(false); return }
-    setOrders((data || []) as Order[])
-    setLoading(false)
+      if (error) { setErr(error.message); return }
+      setOrders((data || []) as Order[])
+    } catch (e: any) {
+      setErr(e?.message || 'Erreur réseau lors du chargement')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const buOptions = useMemo(() =>
@@ -190,62 +196,87 @@ export default function SupplyPage() {
   }, [filtered])
 
   async function changeStatus(order: Order, newStatus: SupplyStatus) {
-    if (newStatus === order.status) return
+    if (newStatus === order.status || updating) return
     setUpdating(order.id)
 
-    const now = new Date().toISOString()
-    const timestamps: Record<string, string> = {
-      place: 'placed_at', commande: 'ordered_at',
-      en_stock: 'received_at', livre: 'delivered_at', facture: 'invoiced_at',
+    try {
+      const now = new Date().toISOString()
+      const timestamps: Record<string, string> = {
+        place: 'placed_at', commande: 'ordered_at',
+        en_stock: 'received_at', livre: 'delivered_at', facture: 'invoiced_at',
+      }
+      const tsField = timestamps[newStatus]
+      const oldLabel = STATUS_CONFIG[order.status]?.label || order.status
+      const newLabel = STATUS_CONFIG[newStatus]?.label || newStatus
+
+      const { error } = await supabase.from('supply_orders').update({
+        status: newStatus,
+        ...(tsField ? { [tsField]: now } : {}),
+        updated_by: userEmail,
+        updated_at: now,
+      }).eq('id', order.id)
+
+      if (error) { showToast('Erreur mise à jour statut'); return }
+
+      logActivity({
+        action_type: 'update',
+        entity_type: 'deal',
+        entity_id: order.opportunity_id,
+        entity_name: order.opportunities?.title || '—',
+        detail: `Supply: ${oldLabel} → ${newLabel}`,
+      })
+
+      showToast(`${order.opportunities?.accounts?.name || 'Commande'} → ${newLabel}`)
+      await load()
+    } finally {
+      setUpdating(null)
     }
-    const tsField = timestamps[newStatus]
-    const oldLabel = STATUS_CONFIG[order.status]?.label || order.status
-    const newLabel = STATUS_CONFIG[newStatus]?.label || newStatus
-
-    await supabase.from('supply_orders').update({
-      status: newStatus,
-      ...(tsField ? { [tsField]: now } : {}),
-      updated_by: userEmail,
-      updated_at: now,
-    }).eq('id', order.id)
-
-    logActivity({
-      action_type: 'update',
-      entity_type: 'deal',
-      entity_id: order.opportunity_id,
-      entity_name: order.opportunities?.title || '—',
-      detail: `Supply: ${oldLabel} → ${newLabel}`,
-    })
-
-    showToast(`${order.opportunities?.accounts?.name || 'Commande'} → ${newLabel}`)
-    setUpdating(null)
-    load()
   }
 
   async function updateLineStatus(lineId: string, newStatus: LineStatus, orderTitle: string) {
-    const now = new Date().toISOString()
-    await supabase.from('purchase_lines').update({
-      line_status: newStatus,
-    }).eq('id', lineId)
-    showToast(`Ligne → ${LINE_STATUS_CFG[newStatus]?.label || newStatus}`)
-    load()
+    if (busyLines.has(lineId)) return
+    setBusyLines(prev => new Set(prev).add(lineId))
+    try {
+      const { error } = await supabase.from('purchase_lines').update({
+        line_status: newStatus,
+      }).eq('id', lineId)
+      if (error) { showToast('Erreur mise à jour ligne'); return }
+      showToast(`Ligne → ${LINE_STATUS_CFG[newStatus]?.label || newStatus}`)
+      await load()
+    } finally {
+      setBusyLines(prev => { const n = new Set(prev); n.delete(lineId); return n })
+    }
   }
 
   async function updateLineEta(lineId: string, eta: string) {
-    await supabase.from('purchase_lines').update({
-      eta: eta || null,
-      eta_updated_at: new Date().toISOString(),
-    }).eq('id', lineId)
-    showToast('ETA mise à jour')
-    load()
+    if (busyLines.has(lineId)) return
+    setBusyLines(prev => new Set(prev).add(lineId))
+    try {
+      const { error } = await supabase.from('purchase_lines').update({
+        eta: eta || null,
+        eta_updated_at: new Date().toISOString(),
+      }).eq('id', lineId)
+      if (error) { showToast('Erreur mise à jour ETA'); return }
+      showToast('ETA mise à jour')
+      await load()
+    } finally {
+      setBusyLines(prev => { const n = new Set(prev); n.delete(lineId); return n })
+    }
   }
 
   async function updateLineNote(lineId: string, note: string) {
-    await supabase.from('purchase_lines').update({
-      status_note: note || null,
-    }).eq('id', lineId)
-    showToast('Note ligne mise à jour')
-    load()
+    if (busyLines.has(lineId)) return
+    setBusyLines(prev => new Set(prev).add(lineId))
+    try {
+      const { error } = await supabase.from('purchase_lines').update({
+        status_note: note || null,
+      }).eq('id', lineId)
+      if (error) { showToast('Erreur mise à jour note'); return }
+      showToast('Note ligne mise à jour')
+      await load()
+    } finally {
+      setBusyLines(prev => { const n = new Set(prev); n.delete(lineId); return n })
+    }
   }
 
   function generateSupplyEmail(order: Order) {
@@ -583,11 +614,11 @@ export default function SupplyPage() {
                                 <td className="px-4 py-3 text-center">
                                   <select
                                     value={order.status}
-                                    disabled={updating === order.id}
+                                    disabled={!!updating}
                                     onChange={e => changeStatus(order, e.target.value as SupplyStatus)}
                                     className={`h-8 rounded-xl border px-2 text-xs font-bold outline-none transition-colors cursor-pointer
                                       ${STATUS_CONFIG[order.status].bg} ${STATUS_CONFIG[order.status].border} ${STATUS_CONFIG[order.status].color}
-                                      disabled:opacity-40`}>
+                                      disabled:opacity-40 disabled:cursor-not-allowed`}>
                                     {ALL_STATUSES.map(s => (
                                       <option key={s} value={s}>{STATUS_CONFIG[s].icon} {STATUS_CONFIG[s].label}</option>
                                     ))}
@@ -653,8 +684,9 @@ export default function SupplyPage() {
                                                 <td className="px-3 py-2 text-center">
                                                   <select
                                                     value={line.line_status || 'pending'}
+                                                    disabled={busyLines.has(line.id)}
                                                     onChange={e => updateLineStatus(line.id, e.target.value as LineStatus, opp?.title || '')}
-                                                    className={`h-7 rounded-lg border px-1.5 text-[10px] font-bold outline-none cursor-pointer
+                                                    className={`h-7 rounded-lg border px-1.5 text-[10px] font-bold outline-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed
                                                       ${lsCfg.bg} ${lsCfg.border} ${lsCfg.color}`}>
                                                     {LINE_STATUS_ORDER.map(ls => (
                                                       <option key={ls} value={ls}>{LINE_STATUS_CFG[ls].icon} {LINE_STATUS_CFG[ls].label}</option>
@@ -665,8 +697,9 @@ export default function SupplyPage() {
                                                   <input
                                                     type="date"
                                                     value={line.eta ? line.eta.slice(0, 10) : ''}
+                                                    disabled={busyLines.has(line.id)}
                                                     onChange={e => updateLineEta(line.id, e.target.value)}
-                                                    className="h-7 rounded-lg border border-slate-200 px-1.5 text-[10px] outline-none focus:border-blue-300"
+                                                    className="h-7 rounded-lg border border-slate-200 px-1.5 text-[10px] outline-none focus:border-blue-300 disabled:opacity-40 disabled:cursor-not-allowed"
                                                   />
                                                   {line.eta_updated_at && (
                                                     <div className="text-[9px] text-slate-400 mt-0.5">maj {fmtDate(line.eta_updated_at)}</div>

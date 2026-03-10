@@ -64,6 +64,7 @@ export default function SupportPage() {
   const [fAssigned, setFAssigned] = useState('')
   const [fNotes, setFNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  const [dealSearch, setDealSearch] = useState('')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUserEmail(data.user?.email || ''))
@@ -139,12 +140,22 @@ export default function SupportPage() {
     return list
   }, [tickets, statusFilter, typeFilter, search])
 
+  // ─── Filtered deals for searchable ComboBox ───────────────
+  const filteredDeals = useMemo(() => {
+    if (!dealSearch.trim()) return deals
+    const q = dealSearch.toLowerCase()
+    return deals.filter(d =>
+      (d.title || '').toLowerCase().includes(q) ||
+      (d.accounts?.name || '').toLowerCase().includes(q)
+    )
+  }, [deals, dealSearch])
+
   // ─── CRUD ──────────────────────────────────────────────────
   function openCreate() {
-    setEditId(null); setFDeal(''); setFTitle(''); setFDesc(''); setFType('sav'); setFPriority('normal'); setFAssigned(''); setFNotes(''); setShowModal(true)
+    setEditId(null); setFDeal(''); setDealSearch(''); setFTitle(''); setFDesc(''); setFType('sav'); setFPriority('normal'); setFAssigned(''); setFNotes(''); setShowModal(true)
   }
   function openEdit(t: Ticket) {
-    setEditId(t.id); setFDeal(t.opportunity_id || ''); setFTitle(t.title); setFDesc(t.description || ''); setFType(t.type); setFPriority(t.priority); setFAssigned(t.assigned_to || ''); setFNotes(t.notes || ''); setShowModal(true)
+    setEditId(t.id); setFDeal(t.opportunity_id || ''); setDealSearch(''); setFTitle(t.title); setFDesc(t.description || ''); setFType(t.type); setFPriority(t.priority); setFAssigned(t.assigned_to || ''); setFNotes(t.notes || ''); setShowModal(true)
   }
 
   async function save() {

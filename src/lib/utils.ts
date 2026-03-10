@@ -96,7 +96,7 @@ export const normStatus = (row: {
   return 'Open'
 }
 
-/** Normalise une BU brute vers son label canonique */
+/** Normalise une BU brute vers son label canonique (SBU = sous-BU) */
 export const normSBU = (
   raw: any
 ): 'HCI' | 'Network' | 'Storage' | 'Cyber' | 'Service' | 'CSG' | 'MULTI' | 'Other' => {
@@ -107,9 +107,50 @@ export const normSBU = (
   if (u.includes('NETWORK')) return 'Network'
   if (u.includes('STORAGE')) return 'Storage'
   if (u.includes('CYBER')) return 'Cyber'
-  if (u.includes('SERVICE')) return 'Service'
+  if (u.includes('SERVICE') || u.includes('PRESTATION')) return 'Service'
   if (u.includes('HCI') || u.includes('INFRA')) return 'HCI'
   return 'Other'
+}
+
+/** Les 3 BUs principales de Compucom */
+export type MainBU = 'CSG' | 'Infrastructure' | 'Cyber Sécurité'
+
+/** Normalise vers la BU principale (3 BUs) */
+export const normMainBU = (raw: any): MainBU | 'MULTI' | null => {
+  const sbu = normSBU(raw)
+  if (sbu === 'CSG') return 'CSG'
+  if (sbu === 'HCI' || sbu === 'Network' || sbu === 'Storage') return 'Infrastructure'
+  if (sbu === 'Cyber') return 'Cyber Sécurité'
+  if (sbu === 'MULTI') return 'MULTI'
+  return null
+}
+
+/** Map SBU → BU parent */
+export const SBU_TO_BU: Record<string, MainBU> = {
+  HCI: 'Infrastructure', Network: 'Infrastructure', Storage: 'Infrastructure',
+  Cyber: 'Cyber Sécurité', CSG: 'CSG',
+}
+
+/** Couleurs par BU principale */
+export const MAIN_BU_COLORS: Record<string, { color: string; bg: string; border: string }> = {
+  CSG:                { color: '#f59e0b', bg: 'bg-amber-50',  border: 'border-amber-200'  },
+  Infrastructure:     { color: '#6366f1', bg: 'bg-indigo-50', border: 'border-indigo-200' },
+  'Cyber Sécurité':   { color: '#ef4444', bg: 'bg-red-50',    border: 'border-red-200'    },
+}
+
+/** Vérifie si un deal a une carte Prestation dans ses bu_lines */
+export function hasPrestation(opp: { bu?: string | null; multi_bu?: boolean | null; bu_lines?: any[] | null }): boolean {
+  const u = String(opp.bu || '').toUpperCase()
+  if (u.includes('SERVICE') || u.includes('PRESTATION')) return true
+  if (opp.multi_bu && Array.isArray(opp.bu_lines)) {
+    return opp.bu_lines.some(l => {
+      const b = String(l.bu || '').toUpperCase()
+      const c = String(l.card || '').toUpperCase()
+      return b.includes('SERVICE') || b.includes('PRESTATION') ||
+             c.includes('SERVICE') || c.includes('PRESTATION')
+    })
+  }
+  return false
 }
 
 // ─── Couleurs métier ──────────────────────────────────────────────────────────

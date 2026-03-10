@@ -749,7 +749,6 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                     const thisM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
                     const isUrgent = r.booking_month===thisM
                     const isPast = r.booking_month&&r.booking_month<thisM&&r.status==='Open'
-                    const nextS = STAGE_NEXT[r.stage]
                     const vendorLabel = r.multi_bu&&Array.isArray(r.bu_lines)&&r.bu_lines.length>0
                       ? r.bu_lines.map((l:any)=>l.card).filter(Boolean).join(', ')||r.vendor||'—'
                       : r.vendor||'—'
@@ -796,21 +795,15 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Link href={`/opportunities/${r.id}`}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-slate-500 hover:bg-slate-100">
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-slate-500 hover:bg-slate-100" title="Voir détails">
                               <Eye className="h-3.5 w-3.5" />
                             </Link>
-                            {r.status!=='Won'&&r.status!=='Lost'&&nextS && (
-                              <button onClick={()=>advanceStage(r)}
-                                className="inline-flex h-8 items-center gap-1 rounded-lg border bg-slate-900 px-2 text-xs text-white hover:bg-slate-700">
-                                <ChevronRight className="h-3.5 w-3.5" />{nextS==='Won'?'Won ✓':nextS}
-                              </button>
-                            )}
                             <button onClick={() => setEditRow(r)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-slate-500 hover:bg-slate-100">
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-slate-500 hover:bg-slate-100" title="Modifier">
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
                             <button onClick={() => deleteDeal(r)}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-red-300 hover:bg-red-50 hover:text-red-600">
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border text-red-300 hover:bg-red-50 hover:text-red-600" title="Supprimer">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -862,7 +855,6 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                       const thisM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`
                       const isUrgent = r.booking_month===thisM
                       const isPast = r.booking_month&&r.booking_month<thisM&&r.status==='Open'
-                      const nextS = STAGE_NEXT[r.stage]
                       return (
                         <div key={r.id}
                           draggable
@@ -910,21 +902,15 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
                               </span>
                             )}
                             <Link href={`/opportunities/${r.id}`}
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100">
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100" title="Voir">
                               <Eye className="h-3 w-3" />
                             </Link>
-                            {r.status!=='Won'&&r.status!=='Lost'&&nextS && (
-                              <button onClick={()=>advanceStage(r)}
-                                className="flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-lg border bg-slate-900 text-[11px] text-white hover:bg-slate-700">
-                                <ChevronRight className="h-3 w-3" />{nextS==='Won'?'Won ✓':nextS}
-                              </button>
-                            )}
                             <button onClick={() => setEditRow(r)}
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100">
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100" title="Modifier">
                               <Pencil className="h-3 w-3" />
                             </button>
                             <button onClick={() => deleteDeal(r)}
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-red-300 hover:bg-red-50 hover:text-red-500">
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-red-300 hover:bg-red-50 hover:text-red-500" title="Supprimer">
                               <Trash2 className="h-3 w-3" />
                             </button>
                           </div>

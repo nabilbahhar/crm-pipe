@@ -37,7 +37,7 @@ type SupplyEmailData = {
   accountName: string
   poNumber: string
   amount: number
-  paymentTerms: string
+  paymentTerms: string | null | undefined
   lines: Array<{
     ref: string; designation: string; qty: number
     pu_achat: number; fournisseur: string

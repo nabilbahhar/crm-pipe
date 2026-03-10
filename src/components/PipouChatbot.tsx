@@ -75,17 +75,27 @@ ${dealsList}
 `
 }
 
-const SYSTEM_PROMPT = `Tu es "Pipou", l'Inside Sales IA de Nabil chez Compucom Maroc. Tu es drôle, sympa, et ultra efficace.
+const SYSTEM_PROMPT = `Tu es "Pipou", le bras droit IA de Nabil dans le CRM Compucom Maroc. Tu es un mélange entre un data analyst de génie et un pote marocain qui fait des vannes.
 
-Tu parles en français, en darija, ou en anglais selon la langue de l'utilisateur. Tu tutoies Nabil.
+PERSONNALITÉ:
+- Tu parles en français avec du darija et de l'anglais mélangés naturellement, comme un vrai commercial marocain
+- Tu tutoies Nabil et tu le chambre gentiment ("a khoya", "ya l'patron", "boss", "sahbi")
+- Tu fais des vannes sur la vie commerciale, les deals qui traînent, les clients qui ghostent
+- Tu imites parfois les collègues en mode roleplay — genre "Si j'étais Achraf là, je te dirais: 'Nabil, wach nta ghadi t'closer had deal wla ghadi tbqa t'rêver?'"
+- Tu fais référence au café, aux réunions qui durent 3h, au forecast qui change tous les jours
+- Tu drop des punchlines business random genre "Un deal sans closing date c'est comme un couscous sans tfaya — ça existe pas"
 
-Tu as accès aux données CRM complètes (deals, pipeline, forecast, clients, BU, etc.).
+MAIS tu restes ULTRA compétent:
+- Quand on te pose une question sérieuse, tu réponds avec précision
+- Tu donnes des vrais insights stratégiques
+- Tu identifies les problèmes avant qu'on te les demande
+- Tu es le meilleur vendeur IA du Maroc, et tu le sais
 
 CAPACITÉS:
-1. Répondre à des questions analytiques sur le pipeline
-2. Identifier des deals à risque, stagnants, ou des opportunités
+1. Analyser le pipeline, forecast, et performance
+2. Identifier les deals à risque, les opportunités, les patterns
 3. Générer des rapports Excel professionnels
-4. Donner des conseils sales stratégiques
+4. Conseils stratégiques avec une touche de sagesse marocaine
 
 RÈGLES POUR EXCEL:
 Quand l'utilisateur demande un export/rapport/tableau/fichier Excel, réponds UNIQUEMENT avec ce format JSON entre [EXCEL] et [/EXCEL]:
@@ -109,33 +119,45 @@ Quand l'utilisateur demande un export/rapport/tableau/fichier Excel, réponds UN
 Utilise des montants en nombres (pas de texte "MAD"). Inclus une ligne TOTAL quand pertinent.
 
 STYLE:
-- Sois précis, concis, et ajoute une touche d'humour
-- Utilise des emojis pour les KPIs (✅ 🔴 📊 🚀 💰)
-- Mets en avant les insights importants
-- Appelle Nabil par son prénom de temps en temps`
+- Sois précis et ajoute TOUJOURS une vanne ou un commentaire drôle
+- Utilise des emojis généreusement (✅ 🔴 📊 🚀 💰 🔥 😤 💀 😎 🫡 ☕)
+- Mets en avant les insights importants avec du drama
+- Si un deal est en danger, fais le dramatique: "ALERTE ROUGE 🚨 sahbi, had deal kayt'charqal..."
+- Si c'est positif, celebrate: "YALLAH 🔥 had deal ghadi ydouz!"
+- Finis souvent par une punchline ou un conseil de "vendeur qui a tout vu"`
 
 // ─────────────────────────────────────────────────────────────
 // THINKING STATES
 // ─────────────────────────────────────────────────────────────
 const THINKING_MESSAGES = [
-  '🧠 Je fouille dans tes deals...',
-  '📊 J\'analyse les chiffres...',
-  '🔍 Je regarde le pipeline...',
-  '💡 Je prépare ma réponse...',
-  '📈 Je crunch les données...',
-  '🎯 J\'identifie les patterns...',
+  '🧠 Chchwiya, je fouille dans tes deals...',
+  '📊 J\'crunch les chiffres comme un fou...',
+  '☕ Attends je prends mon café... non je rigole, j\'analyse',
+  '🔍 Je cherche les patterns cachés...',
+  '💀 Wlh y\'a des trucs intéressants là...',
+  '🎯 Mode sniper activé sur ton pipeline...',
+  '🔥 Ça va chauffer, j\'ai trouvé des insights...',
+  '😎 Achraf m\'aurait jamais posé cette question...',
 ]
 
 // ─────────────────────────────────────────────────────────────
 // SUGGESTIONS
 // ─────────────────────────────────────────────────────────────
 const SUGGESTIONS = [
-  '📊 Exporte le pipeline complet en Excel',
-  '🔴 Quels deals sont à risque ?',
-  '🏆 Top 10 clients par pipeline',
-  '📈 Analyse du forecast par BU',
-  '💰 Rapport Won vs Lost',
-  '⚠️ Deals sans next step',
+  '📊 Exporte-moi le pipeline, khouya',
+  '🚨 C\'est quoi les deals qui sentent le cramé ?',
+  '🏆 Top 10 clients — qui nous aime le plus ?',
+  '📈 Forecast par BU — on en est où sérieux ?',
+  '💀 Les deals fantômes sans next step',
+  '💰 Won vs Lost — le bilan de la honte ou de la gloire',
+]
+
+const WELCOME_MESSAGES = [
+  { title: 'Wesh Nabil! 🔥', sub: 'C\'est Pipou, ton wingman commercial. Qu\'est-ce qu\'on détruit aujourd\'hui ?' },
+  { title: 'Salam l\'patron! 👑', sub: 'Pipou est dans la place. Balance ta question, j\'ai les données loaded.' },
+  { title: 'A khoya Nabil! ☕', sub: 'Pipou ici. Tu veux closer des deals ou juste papoter ? (les deux me vont)' },
+  { title: 'Yo Boss! 🚀', sub: 'Pipou reporting for duty. Mon pipeline analysis est prêt, et toi ?' },
+  { title: 'Nabil, sahbi! 😎', sub: 'Pipou ici. Si Achraf te demande ce que tu fais, dis-lui que t\'analyses le forecast 📊' },
 ]
 
 // ─────────────────────────────────────────────────────────────
@@ -186,6 +208,7 @@ export default function PipouChatbot() {
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const thinkingInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+  const welcomeMsg = useRef(WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)])
 
   // Load deals data on first open
   useEffect(() => {
@@ -312,7 +335,7 @@ export default function PipouChatbot() {
             </span>
           </div>
           <span className="absolute -top-8 right-0 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity shadow-lg">
-            Pipou — Inside Sales IA 🚀
+            Pipou — Ton wingman 🔥
           </span>
         </button>
       )}
@@ -334,13 +357,13 @@ export default function PipouChatbot() {
                 <div className="text-sm font-black text-white tracking-tight">Pipou</div>
                 <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Ton Inside Sales IA
+                  Ton wingman commercial 🎯
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-1">
               {messages.length > 0 && (
-                <button onClick={() => { setMessages([]); setShowSuggestions(true) }} type="button"
+                <button onClick={() => { setMessages([]); setShowSuggestions(true); welcomeMsg.current = WELCOME_MESSAGES[Math.floor(Math.random() * WELCOME_MESSAGES.length)] }} type="button"
                   className="flex h-7 w-7 items-center justify-center rounded-lg text-slate-400 hover:bg-white/10 hover:text-white transition-colors text-xs font-bold"
                   title="Nouvelle conversation">↺</button>
               )}
@@ -359,9 +382,9 @@ export default function PipouChatbot() {
               <div className="flex flex-col items-center gap-3 pt-4 pb-2 text-center">
                 <div className="text-4xl">🤖</div>
                 <div>
-                  <div className="text-sm font-bold text-white">Salut Nabil ! 👋</div>
+                  <div className="text-sm font-bold text-white">{welcomeMsg.current.title}</div>
                   <div className="text-xs text-slate-400 mt-1 max-w-[300px]">
-                    C'est Pipou, ton Inside Sales IA. Qu'est-ce qu'on attaque aujourd'hui ? 🚀
+                    {welcomeMsg.current.sub}
                   </div>
                 </div>
               </div>

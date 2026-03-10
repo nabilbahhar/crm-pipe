@@ -704,10 +704,6 @@ export default function AccountsPage() {
                             className="inline-flex h-7 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200 transition-colors">
                             <FileText className="h-3 w-3" /> Fiche
                           </Link>
-                          <Link href={`/pipeline?account=${encodeURIComponent(a.name)}`}
-                            className="inline-flex h-7 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors">
-                            <GitBranch className="h-3 w-3" /> Pipeline
-                          </Link>
                           <Btn size="sm" variant="ghost" onClick={() => openEdit(a)}>
                             <Pencil className="h-3.5 w-3.5" /> Modifier
                           </Btn>

@@ -24,7 +24,7 @@ const ALLOWED_TYPES = [
 const ALLOWED_BUCKETS = ['deal-files', 'account-files', 'expense-files', 'profile-avatars']
 
 // ─── Security: Whitelist file_type values for DB records ────────
-const ALLOWED_FILE_TYPES = ['devis', 'bon_commande', 'facture', 'photo', 'autre', 'bc_client', 'bc_fournisseur', 'bon_livraison', 'pv_reception', 'contrat', 'avatar']
+const ALLOWED_FILE_TYPES = ['devis', 'devis_compucom', 'bon_commande', 'facture', 'photo', 'autre', 'bc_client', 'bc_fournisseur', 'bon_livraison', 'pv_reception', 'contrat', 'avatar']
 
 // ─── Security: Validate path (no traversal) ───────────────────
 function isPathSafe(path: string): boolean {
