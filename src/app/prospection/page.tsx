@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
+import { logActivity } from '@/lib/logActivity'
 import {
   Plus, RefreshCw, X, Phone, Mail, ChevronRight,
   LayoutGrid, List, Flame, Thermometer, Snowflake, ArrowRightCircle,
   ArrowUp, ArrowDown, ChevronsUpDown, Download, Users, Trash2,
+  CheckCircle2, Building2,
 } from 'lucide-react'
+import Toast from '@/components/Toast'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type ProspectContact = {
@@ -295,7 +298,7 @@ export default function ProspectionPage() {
   const [rows, setRows]     = useState<Prospect[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr]       = useState<string | null>(null)
-  const [info, setInfo]     = useState<string | null>(null)
+  const [info, setInfo]     = useState<{ msg: string; ok: boolean } | null>(null)
   const [view, setView]     = useState<'list' | 'kanban'>('list')
   const [userEmail, setUserEmail] = useState<string | null>(null)
 
@@ -336,6 +339,20 @@ export default function ProspectionPage() {
   const [targetBu, setTargetBu] = useState('')
   const [accountMatch, setAccountMatch] = useState<{ id: string; name: string } | null>(null)
 
+  // Qualify modal
+  const [qualifyP, setQualifyP] = useState<Prospect | null>(null)
+  const [qualifyForm, setQualifyForm] = useState({
+    nom_compte: '', secteur: '', ville: '',
+    contact_nom: '', contact_email: '', contact_tel: '',
+  })
+  const [qualifySaving, setQualifySaving] = useState(false)
+  const [qualifyErr, setQualifyErr] = useState<string | null>(null)
+
+  const SECTEUR_OPTIONS = [
+    'IT', 'Banque/Finance', 'Industrie', 'Telecom', 'Distribution',
+    'Services', 'Energie', 'Public', 'Sante', 'Autre',
+  ] as const
+
   // Kanban drag & drop
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverStatus, setDragOverStatus] = useState<string | null>(null)
@@ -370,7 +387,7 @@ export default function ProspectionPage() {
   }
   useEffect(() => { load() }, [])
 
-  function toast(msg: string) { setInfo(msg); setTimeout(() => setInfo(null), 3500) }
+  function toast(msg: string, ok = true) { setInfo({ msg, ok }) }
 
   // Distinct sectors & regions for autocomplete
   const sectorSuggestions = useMemo(() => [...new Set(rows.map(r => r.sector).filter(Boolean) as string[])].sort(), [rows])
@@ -485,16 +502,128 @@ export default function ProspectionPage() {
     finally { setExporting(false) }
   }
 
+  function openQualify(p: Prospect) {
+    // Pre-fill qualify form from prospect data
+    const primaryContact = contactsMap[p.id]?.find(c => c.is_primary) || contactsMap[p.id]?.[0]
+    setQualifyP(p)
+    setQualifyForm({
+      nom_compte: p.company_name || '',
+      secteur: p.sector || '',
+      ville: p.region || '',
+      contact_nom: primaryContact?.full_name || p.contact_name || '',
+      contact_email: primaryContact?.email || p.contact_email || '',
+      contact_tel: primaryContact?.phone || p.contact_phone || '',
+    })
+    setQualifyErr(null)
+    setQualifySaving(false)
+  }
+
+  async function confirmQualify() {
+    if (!qualifyP) return
+    setQualifyErr(null)
+
+    // Validation
+    if (!qualifyForm.nom_compte.trim()) { setQualifyErr('Le nom du compte est obligatoire.'); return }
+    if (!qualifyForm.secteur.trim()) { setQualifyErr('Le secteur d\'activite est obligatoire.'); return }
+    if (!qualifyForm.ville.trim()) { setQualifyErr('La ville est obligatoire.'); return }
+    if (!qualifyForm.contact_nom.trim()) { setQualifyErr('Le nom du contact principal est obligatoire.'); return }
+
+    // Check duplicate account
+    const dupAcc = allAccounts.find(a =>
+      a.name.trim().toLowerCase() === qualifyForm.nom_compte.trim().toLowerCase()
+    )
+    if (dupAcc) {
+      setQualifyErr(`Le compte "${dupAcc.name}" existe deja. Utilisez "Convertir" pour lier ce prospect a un compte existant.`)
+      return
+    }
+
+    setQualifySaving(true)
+    try {
+      // 1. Create account
+      const { data: newAccount, error: accErr } = await supabase
+        .from('accounts')
+        .insert({
+          name: qualifyForm.nom_compte.trim(),
+          segment: qualifyForm.secteur.trim(),
+          sector: 'Prive',
+          region: qualifyForm.ville.trim(),
+        })
+        .select('id')
+        .single()
+
+      if (accErr || !newAccount) {
+        setQualifySaving(false)
+        setQualifyErr(accErr?.message || 'Erreur lors de la creation du compte.')
+        return
+      }
+
+      // 2. Create primary contact on the account
+      if (qualifyForm.contact_nom.trim()) {
+        await supabase.from('account_contacts').insert({
+          account_id: newAccount.id,
+          full_name: qualifyForm.contact_nom.trim(),
+          email: qualifyForm.contact_email.trim() || null,
+          phone: qualifyForm.contact_tel.trim() || null,
+          role: null,
+          is_primary: true,
+        })
+      }
+
+      // 3. Update prospect: status = Qualifie, link to account
+      const { error: prospErr } = await supabase.from('prospects').update({
+        status: 'Qualifi\u00e9 \u2713',
+        converted_to_account_id: newAccount.id,
+        converted_at: new Date().toISOString(),
+        attempts: qualifyP.attempts + 1,
+        last_contact_at: new Date().toISOString().split('T')[0],
+      }).eq('id', qualifyP.id)
+
+      if (prospErr) {
+        setQualifySaving(false)
+        setQualifyErr(prospErr.message)
+        return
+      }
+
+      // 4. Log activity
+      await logActivity({
+        action_type: 'convert',
+        entity_type: 'prospect',
+        entity_id: qualifyP.id,
+        entity_name: qualifyP.company_name,
+        detail: `Qualifie et converti en compte : ${qualifyForm.nom_compte.trim()}`,
+      })
+
+      // 5. Refresh allAccounts
+      const { data: freshAccounts } = await supabase.from('accounts').select('id,name,sector,segment')
+      if (freshAccounts) setAllAccounts(freshAccounts)
+
+      setQualifySaving(false)
+      setQualifyP(null)
+      toast(`${qualifyP.company_name} qualifie et compte "${qualifyForm.nom_compte.trim()}" cree`)
+      load()
+    } catch (e: any) {
+      setQualifySaving(false)
+      setQualifyErr(e?.message || 'Erreur inattendue.')
+    }
+  }
+
   async function advanceStatus(p: Prospect) {
     const next = STATUS_NEXT[p.status]
     if (!next) return
+
+    // Intercept: if next status is "Qualifie", open qualify modal instead
+    if (next === 'Qualifi\u00e9 \u2713') {
+      openQualify(p)
+      return
+    }
+
     try {
       const { error } = await supabase.from('prospects').update({
         status: next, attempts: p.attempts + 1,
         last_contact_at: new Date().toISOString().split('T')[0],
       }).eq('id', p.id)
       if (error) { setErr(error.message); return }
-      toast(`${p.company_name} → ${next}`); load()
+      toast(`${p.company_name} \u2192 ${next}`); load()
     } catch (e: any) { setErr(e.message || 'Erreur advanceStatus') }
   }
 
@@ -503,6 +632,14 @@ export default function ProspectionPage() {
     if (!dragId) return
     const p = rows.find(r => r.id === dragId)
     if (!p || p.status === targetStatus) { setDragId(null); return }
+
+    // Intercept: if target is "Qualifie", open qualify modal
+    if (targetStatus === 'Qualifi\u00e9 \u2713') {
+      setDragId(null)
+      openQualify(p)
+      return
+    }
+
     const update: any = { status: targetStatus }
     // If moving forward, bump attempts & update last_contact
     const fromIdx = STATUSES.indexOf(p.status as any)
@@ -514,7 +651,7 @@ export default function ProspectionPage() {
     const { error } = await supabase.from('prospects').update(update).eq('id', p.id)
     if (error) { setErr(error.message); setDragId(null); return }
     setDragId(null)
-    toast(`${p.company_name} → ${targetStatus}`)
+    toast(`${p.company_name} \u2192 ${targetStatus}`)
     load()
   }
 
@@ -595,6 +732,18 @@ export default function ProspectionPage() {
         for (const old of oldContacts) {
           if (!existingIds.includes(old.id)) {
             await supabase.from('prospect_contacts').delete().eq('id', old.id)
+          }
+        }
+        // Update existing contacts (in case user edited them inline)
+        for (const c of modalContacts) {
+          if (!c.id.startsWith('new_')) {
+            await supabase.from('prospect_contacts').update({
+              full_name: c.full_name.trim(),
+              email: c.email || null,
+              phone: c.phone || null,
+              role: c.role || null,
+              is_primary: c.is_primary,
+            }).eq('id', c.id)
           }
         }
         // Insert new contacts
@@ -725,7 +874,7 @@ export default function ProspectionPage() {
         </div>
 
         {err  && <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>}
-        {info && <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{info}</div>}
+        {info && <Toast message={info.msg} type={info.ok ? 'success' : 'error'} onClose={() => setInfo(null)} />}
 
         {/* KPIs */}
         <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1009,14 +1158,20 @@ export default function ProspectionPage() {
                         <td className="px-4 py-3 text-xs text-slate-400">{p.source || '—'}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {nextS && (
+                            {nextS && nextS !== 'Qualifi\u00e9 \u2713' && (
                               <button onClick={() => advanceStatus(p)}
                                 className="inline-flex h-7 items-center gap-1 rounded-lg border bg-slate-900 px-2 text-[11px] text-white hover:bg-slate-700">
                                 <ChevronRight className="h-3.5 w-3.5" />
-                                {nextS === 'Qualifié ✓' ? '✓ Qualifier' : nextS}
+                                {nextS}
                               </button>
                             )}
-                            {p.status === 'Qualifié ✓' && !p.converted_at && (
+                            {nextS === 'Qualifi\u00e9 \u2713' && (
+                              <button onClick={() => advanceStatus(p)}
+                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-emerald-400 bg-emerald-600 px-2.5 text-[11px] text-white hover:bg-emerald-700 shadow-sm">
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Qualifier
+                              </button>
+                            )}
+                            {p.status === 'Qualifi\u00e9 \u2713' && !p.converted_at && (
                               <button onClick={() => openConvert(p)}
                                 className="inline-flex h-7 items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 text-[11px] text-emerald-700 hover:bg-emerald-100">
                                 <ArrowRightCircle className="h-3.5 w-3.5" /> Convertir
@@ -1094,10 +1249,15 @@ export default function ProspectionPage() {
                             </div>
                           )}
                           <div className="mt-2 flex items-center gap-1.5 border-t pt-2">
-                            {nextS ? (
+                            {nextS && nextS !== 'Qualifi\u00e9 \u2713' ? (
                               <button onClick={() => advanceStatus(p)}
                                 className="flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-lg border bg-slate-900 text-[11px] text-white hover:bg-slate-700">
-                                <ChevronRight className="h-3 w-3" />{nextS === 'Qualifié ✓' ? 'Qualifier' : nextS}
+                                <ChevronRight className="h-3 w-3" />{nextS}
+                              </button>
+                            ) : nextS === 'Qualifi\u00e9 \u2713' ? (
+                              <button onClick={() => advanceStatus(p)}
+                                className="flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-lg border border-emerald-400 bg-emerald-600 text-[11px] text-white hover:bg-emerald-700">
+                                <CheckCircle2 className="h-3 w-3" /> Qualifier
                               </button>
                             ) : (!p.converted_at && (
                               <button onClick={() => openConvert(p)}
@@ -1302,30 +1462,32 @@ export default function ProspectionPage() {
                 {modalContacts.length > 0 && (
                   <div className="space-y-2">
                     {modalContacts.map((c, i) => (
-                      <div key={c.id} className="flex items-center gap-2 rounded-xl border border-blue-100 bg-white px-3 py-2">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-slate-800 truncate">{c.full_name}</span>
-                            {c.role && <span className="text-[10px] text-slate-400">· {c.role}</span>}
-                          </div>
-                          <div className="flex items-center gap-3 mt-0.5">
-                            {c.phone && (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-blue-600">
-                                <Phone className="h-2.5 w-2.5" />{c.phone}
-                              </span>
-                            )}
-                            {c.email && (
-                              <span className="inline-flex items-center gap-1 text-[11px] text-blue-600">
-                                <Mail className="h-2.5 w-2.5" />{c.email}
-                              </span>
-                            )}
+                      <div key={c.id} className="rounded-xl border border-blue-100 bg-white px-3 py-2.5 space-y-2">
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <input value={c.full_name}
+                            onChange={e => setModalContacts(prev => prev.map((x, j) => j === i ? { ...x, full_name: e.target.value } : x))}
+                            placeholder="Nom *"
+                            className="h-8 w-full rounded-lg border border-blue-100 bg-blue-50/30 px-2.5 text-sm font-semibold text-slate-800 outline-none focus:border-blue-300" />
+                          <input value={c.role || ''}
+                            onChange={e => setModalContacts(prev => prev.map((x, j) => j === i ? { ...x, role: e.target.value || null } : x))}
+                            placeholder="Role"
+                            className="h-8 w-full rounded-lg border border-blue-100 bg-blue-50/30 px-2.5 text-sm text-slate-600 outline-none focus:border-blue-300" />
+                          <input value={c.phone || ''}
+                            onChange={e => setModalContacts(prev => prev.map((x, j) => j === i ? { ...x, phone: e.target.value || null } : x))}
+                            placeholder="Telephone"
+                            className="h-8 w-full rounded-lg border border-blue-100 bg-blue-50/30 px-2.5 text-sm text-slate-600 outline-none focus:border-blue-300" />
+                          <div className="flex gap-2">
+                            <input value={c.email || ''}
+                              onChange={e => setModalContacts(prev => prev.map((x, j) => j === i ? { ...x, email: e.target.value || null } : x))}
+                              placeholder="Email"
+                              className="h-8 flex-1 rounded-lg border border-blue-100 bg-blue-50/30 px-2.5 text-sm text-slate-600 outline-none focus:border-blue-300" />
+                            <button type="button"
+                              onClick={() => setModalContacts(prev => prev.filter((_, j) => j !== i))}
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-100 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </div>
-                        <button type="button"
-                          onClick={() => setModalContacts(prev => prev.filter((_, j) => j !== i))}
-                          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-red-100 text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
                       </div>
                     ))}
                   </div>
@@ -1470,6 +1632,140 @@ export default function ProspectionPage() {
               <button onClick={() => setConvertP(null)}
                 className="h-10 rounded-xl border px-5 text-sm font-medium hover:bg-slate-50">Annuler</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── QUALIFY MODAL ─────────────────────────────────────────────── */}
+      {qualifyP && (
+        <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
+          style={{ paddingTop: 'env(safe-area-inset-top)' }}
+          onClick={e => { if (e.target === e.currentTarget) setQualifyP(null) }}>
+          <div className="flex w-full max-w-lg flex-col rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl"
+            style={{ maxHeight: 'calc(100dvh - 72px)' }}>
+
+            {/* Header */}
+            <div className="flex shrink-0 items-center justify-between rounded-t-3xl bg-gradient-to-r from-emerald-700 to-emerald-500 px-6 py-5 sm:rounded-t-2xl">
+              <div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-5 w-5 text-white" />
+                  <h2 className="text-base font-bold text-white">Qualifier le prospect</h2>
+                </div>
+                <p className="mt-0.5 text-xs text-emerald-100">
+                  Creer le compte client pour <strong>{qualifyP.company_name}</strong>
+                </p>
+              </div>
+              <button onClick={() => setQualifyP(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+              {qualifyErr && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                  {qualifyErr}
+                </div>
+              )}
+
+              {/* Section: Compte */}
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  <Building2 className="inline h-3 w-3 mr-1" />Informations du compte
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <div className="mb-1 text-xs font-medium text-slate-600">Nom du compte *</div>
+                    <input type="text"
+                      value={qualifyForm.nom_compte}
+                      onChange={e => setQualifyForm(f => ({ ...f, nom_compte: e.target.value }))}
+                      placeholder="Nom de la societe"
+                      className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400" />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-slate-600">Secteur d'activite *</div>
+                    <select
+                      value={qualifyForm.secteur}
+                      onChange={e => setQualifyForm(f => ({ ...f, secteur: e.target.value }))}
+                      className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400">
+                      <option value="">Choisir le secteur...</option>
+                      {SECTEUR_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-slate-600">Ville *</div>
+                    <input type="text"
+                      value={qualifyForm.ville}
+                      onChange={e => setQualifyForm(f => ({ ...f, ville: e.target.value }))}
+                      placeholder="Casablanca, Rabat..."
+                      className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Contact principal */}
+              <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                  <Users className="inline h-3 w-3 mr-1" />Contact principal
+                </div>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <div className="mb-1 text-xs font-medium text-slate-600">Nom *</div>
+                    <input type="text"
+                      value={qualifyForm.contact_nom}
+                      onChange={e => setQualifyForm(f => ({ ...f, contact_nom: e.target.value }))}
+                      placeholder="Prenom Nom"
+                      className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400" />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-slate-600">Email</div>
+                    <input type="email"
+                      value={qualifyForm.contact_email}
+                      onChange={e => setQualifyForm(f => ({ ...f, contact_email: e.target.value }))}
+                      placeholder="contact@societe.ma"
+                      className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400" />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs font-medium text-slate-600">Telephone</div>
+                    <input type="tel"
+                      value={qualifyForm.contact_tel}
+                      onChange={e => setQualifyForm(f => ({ ...f, contact_tel: e.target.value }))}
+                      placeholder="+212 6 00 00 00 00"
+                      className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Info summary */}
+              <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600 shrink-0" />
+                  <div className="text-xs text-emerald-700 leading-relaxed">
+                    En validant, le prospect <strong>{qualifyP.company_name}</strong> passera au statut
+                    <strong> Qualifie</strong> et un nouveau compte client sera cree dans le CRM
+                    avec les informations ci-dessus.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 bg-white px-6 py-4">
+              <button onClick={() => setQualifyP(null)}
+                className="h-10 rounded-xl border border-slate-200 px-5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                Annuler
+              </button>
+              <button onClick={confirmQualify} disabled={qualifySaving}
+                className="flex h-10 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors sm:flex-none">
+                {qualifySaving
+                  ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />Qualification...</>
+                  : <><CheckCircle2 className="h-4 w-4" /> Qualifier et creer le compte</>
+                }
+              </button>
+            </div>
+
           </div>
         </div>
       )}

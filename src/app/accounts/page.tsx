@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
 import { Search, ExternalLink, Users, Building2, MapPin, RefreshCw, Plus, X, Pencil, Trash2, Star, Phone, Mail, ChevronDown, ArrowUp, ArrowDown, ChevronsUpDown, GitBranch, Download, FileText } from 'lucide-react'
-import { mad } from '@/lib/utils'
+import { mad, normMainBU, MAIN_BU_COLORS } from '@/lib/utils'
+import Toast from '@/components/Toast'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie } from 'recharts'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AccountRow = { id: string; name: string; sector: string|null; segment: string|null; region: string|null; created_at: string|null }
@@ -96,8 +98,9 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<AccountRow[]>([])
   const [loading, setLoading]   = useState(true)
   const [err, setErr]           = useState<string|null>(null)
-  const [toast, setToast]       = useState<string|null>(null)
+  const [toast, setToast]       = useState<{ msg: string; ok: boolean }|null>(null)
   const [dealCounts, setDealCounts]   = useState<Record<string, number>>({})
+  const [accountBUs, setAccountBUs]   = useState<Record<string, string[]>>({})
   const [wonAmtMap, setWonAmtMap]     = useState<Record<string, number>>({})
   const [lastDealMap, setLastDealMap] = useState<Record<string, string>>({})
   const [primaryContacts, setPrimaryContacts] = useState<Record<string, ContactRow>>({})
@@ -107,6 +110,7 @@ export default function AccountsPage() {
   const [segFilter, setSegFilter] = useState('Tous')
   const [regFilter, setRegFilter] = useState('Tous')
   const [sectorFilter, setSectorFilter] = useState('Tous')
+  const [buFilter, setBuFilter] = useState('Tous')
 
   // Add form
   const [aName, setAName]       = useState('')
@@ -138,7 +142,7 @@ export default function AccountsPage() {
   // Confirm
   const [confirm, setConfirm] = useState({ open: false, title: '', msg: '', danger: false, confirmLabel: '', onConfirm: () => {} })
 
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000) }
+  const showToast = (msg: string, ok = true) => { setToast({ msg, ok }) }
   const uniqueSectors = useMemo(() => [...new Set(accounts.map(a => a.segment).filter(Boolean) as string[])].sort(), [accounts])
 
   // Date filters
@@ -157,7 +161,7 @@ export default function AccountsPage() {
     try {
       const [{ data: acc, error: e1 }, { data: opps }, { data: ctcs }] = await Promise.all([
         supabase.from('accounts').select('id,name,sector,segment,region,created_at').order('name'),
-        supabase.from('opportunities').select('account_id,status,amount,booking_month,created_at'),
+        supabase.from('opportunities').select('account_id,status,amount,booking_month,created_at,bu'),
         supabase.from('account_contacts').select('id,account_id,full_name,email,phone,role,is_primary').eq('is_primary', true),
       ])
       if (e1) throw e1
@@ -172,6 +176,7 @@ export default function AccountsPage() {
       const counts: Record<string, number>  = {}
       const wonAmt: Record<string, number>  = {}
       const lastDeal: Record<string, string> = {}
+      const buMap: Record<string, Set<string>> = {}
 
       for (const d of opps || []) {
         const aid = d.account_id; if (!aid) continue
@@ -182,11 +187,20 @@ export default function AccountsPage() {
         // Last deal date (booking_month or created_at, keep most recent)
         const dateKey = d.booking_month || (d.created_at || '').slice(0, 7)
         if (dateKey && (!lastDeal[aid] || dateKey > lastDeal[aid])) lastDeal[aid] = dateKey
+        // BU tracking
+        const mainBu = normMainBU(d.bu)
+        if (mainBu) {
+          if (!buMap[aid]) buMap[aid] = new Set()
+          buMap[aid].add(mainBu)
+        }
       }
 
       setDealCounts(counts)
       setWonAmtMap(wonAmt)
       setLastDealMap(lastDeal)
+      const buResult: Record<string, string[]> = {}
+      for (const [aid, set] of Object.entries(buMap)) buResult[aid] = [...set]
+      setAccountBUs(buResult)
     } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
     finally { setLoading(false) }
   }
@@ -330,10 +344,11 @@ export default function AccountsPage() {
       (segFilter === 'Tous' || a.sector === segFilter) &&
       (regFilter === 'Tous' || a.region === regFilter) &&
       (sectorFilter === 'Tous' || a.segment === sectorFilter) &&
+      (buFilter === 'Tous' || (accountBUs[a.id] || []).includes(buFilter)) &&
       (!dateFrom || (a.created_at || '') >= dateFrom) &&
       (!dateTo   || (a.created_at || '') <= dateTo + 'T23:59:59')
     )
-  }, [accounts, search, segFilter, regFilter, sectorFilter, dateFrom, dateTo])
+  }, [accounts, search, segFilter, regFilter, sectorFilter, buFilter, dateFrom, dateTo, accountBUs])
 
   const sorted = useMemo(() => {
     const dir = sortDir === 'asc' ? 1 : -1
@@ -440,7 +455,7 @@ export default function AccountsPage() {
         </div>
 
         {/* ── TOAST / ERR ── */}
-        {toast && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{toast}</div>}
+        {toast && <Toast message={toast.msg} type={toast.ok ? 'success' : 'error'} onClose={() => setToast(null)} />}
         {err && <div className="whitespace-pre-line rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
 
         {/* ── KPI STRIP ── */}
@@ -464,39 +479,85 @@ export default function AccountsPage() {
           </div>
         )}
 
-        {/* ── BARS SECTEUR / RÉGION ── */}
-        {stats.total > 0 && (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5">
-              <div className="mb-3 text-sm font-bold text-slate-900">Top secteurs d'activité</div>
-              <div className="space-y-2.5">
-                {stats.topSectors.map(([sec, cnt]) => (
-                  <div key={sec} className="flex items-center gap-3">
-                    <div className="w-36 truncate text-xs text-slate-700 font-medium" title={sec}>{sec}</div>
-                    <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                      <div className="h-full rounded-full bg-slate-800 transition-all" style={{ width: `${Math.round(cnt/stats.total*100)}%` }} />
-                    </div>
-                    <div className="w-6 text-right text-xs font-semibold text-slate-600">{cnt}</div>
-                  </div>
-                ))}
+        {/* ── CHARTS SECTEUR / RÉGION ── */}
+        {stats.total > 0 && (() => {
+          const SECTOR_COLORS = ['#1e293b', '#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#64748b']
+          const REGION_COLORS = ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#ef4444']
+          const sectorData = stats.topSectors.map(([name, value]) => ({ name, value }))
+          const regionData = stats.topRegs.map(([name, value]) => ({ name, value }))
+          return (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-2xl bg-white ring-1 ring-slate-100 shadow-sm p-4">
+                <div className="mb-2 text-xs font-bold text-slate-700">Top secteurs d'activité</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={sectorData} layout="vertical" margin={{ top: 0, right: 12, bottom: 0, left: 4 }}>
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
+                      formatter={(v: any) => [`${v} compte${Number(v) > 1 ? 's' : ''}`, '']} />
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={20}>
+                      {sectorData.map((_entry, idx) => (
+                        <Cell key={idx} fill={SECTOR_COLORS[idx % SECTOR_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="rounded-2xl bg-white ring-1 ring-slate-100 shadow-sm p-4">
+                <div className="mb-2 text-xs font-bold text-slate-700">Répartition par région</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={regionData} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
+                      formatter={(v: any) => [`${v} compte${Number(v) > 1 ? 's' : ''}`, '']} />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                      {regionData.map((_entry, idx) => (
+                        <Cell key={idx} fill={REGION_COLORS[idx % REGION_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
-            <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-5">
-              <div className="mb-3 text-sm font-bold text-slate-900">Répartition par région</div>
-              <div className="space-y-2.5">
-                {stats.topRegs.map(([reg, cnt]) => (
-                  <div key={reg} className="flex items-center gap-3">
-                    <div className="w-36 text-xs text-slate-700 font-medium">{reg}</div>
-                    <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                      <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${Math.round(cnt/stats.total*100)}%` }} />
-                    </div>
-                    <div className="w-6 text-right text-xs font-semibold text-slate-600">{cnt}</div>
-                  </div>
-                ))}
-              </div>
+          )
+        })()}
+
+        {/* ── TOP 10 COMPTES PAR CA WON ── */}
+        {accounts.length > 0 && (() => {
+          const top10 = [...accounts]
+            .filter(a => (wonAmtMap[a.id] || 0) > 0)
+            .sort((a, b) => (wonAmtMap[b.id] || 0) - (wonAmtMap[a.id] || 0))
+            .slice(0, 10)
+            .map(a => ({
+              name: a.name.length > 18 ? a.name.slice(0, 18) + '…' : a.name,
+              fullName: a.name,
+              ca: wonAmtMap[a.id] || 0,
+              deals: dealCounts[a.id] || 0,
+            }))
+          if (top10.length === 0) return null
+          const BAR_COLORS = ['#1e293b', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#f59e0b', '#10b981', '#ef4444', '#64748b']
+          return (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Top 10 comptes par CA Won</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={top10} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+                  <XAxis dataKey="name" tick={{ fontSize: 9 }} axisLine={false} tickLine={false} interval={0} angle={-20} textAnchor="end" height={50} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} axisLine={false} tickLine={false}
+                    tickFormatter={(v: any) => v >= 1_000_000 ? `${(v/1_000_000).toFixed(1)}M` : v >= 1_000 ? `${(v/1_000).toFixed(0)}K` : `${v}`} />
+                  <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                    formatter={(v: any) => [mad(Number(v)), 'CA Won']}
+                    labelFormatter={(_label: any, payload: any) => payload?.[0]?.payload?.fullName || _label} />
+                  <Bar dataKey="ca" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                    {top10.map((_entry, idx) => (
+                      <Cell key={idx} fill={BAR_COLORS[idx % BAR_COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* ── ADD FORM ── */}
         {showAddForm && (
@@ -589,10 +650,18 @@ export default function AccountsPage() {
               </select>
             )}
 
+            <select value={buFilter} onChange={e => setBuFilter(e.target.value)}
+              className="h-9 rounded-xl border border-slate-200 bg-slate-50 px-2.5 text-xs font-semibold text-slate-600 outline-none">
+              <option value="Tous">BU: Tous</option>
+              <option value="CSG">CSG</option>
+              <option value="Infrastructure">Infrastructure</option>
+              <option value="Cyber Sécurité">Cyber Sécurité</option>
+            </select>
+
             <div className="ml-auto flex items-center gap-2 text-xs text-slate-400">
               {filtered.length} / {accounts.length} comptes
-              {(search || segFilter !== 'Tous' || regFilter !== 'Tous' || sectorFilter !== 'Tous' || dateFrom || dateTo) && (
-                <button onClick={() => { setSearch(''); setSegFilter('Tous'); setRegFilter('Tous'); setSectorFilter('Tous'); setDateFrom(''); setDateTo('') }}
+              {(search || segFilter !== 'Tous' || regFilter !== 'Tous' || sectorFilter !== 'Tous' || buFilter !== 'Tous' || dateFrom || dateTo) && (
+                <button onClick={() => { setSearch(''); setSegFilter('Tous'); setRegFilter('Tous'); setSectorFilter('Tous'); setBuFilter('Tous'); setDateFrom(''); setDateTo('') }}
                   className="text-blue-600 hover:underline font-semibold">Réinitialiser</button>
               )}
             </div>

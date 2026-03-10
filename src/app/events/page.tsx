@@ -8,6 +8,7 @@ import {
   Search, RefreshCw, Eye, ChevronDown, UserCheck, UserPlus,
   CheckCircle2, Clock, PlayCircle, CalendarCheck,
 } from 'lucide-react'
+import Toast from '@/components/Toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type EventType = 'UTD' | 'Workshop' | 'Conference' | 'Salon'
@@ -439,14 +440,7 @@ export default function EventsPage() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100/80">
 
       {/* ── Toast ─────────────────────────────────────────────────────────── */}
-      {toast && (
-        <div className="fixed top-4 right-4 z-[300] animate-in slide-in-from-top-2 duration-300">
-          <div className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-medium text-white shadow-lg">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-            {toast}
-          </div>
-        </div>
-      )}
+      {toast && <Toast message={toast} type="success" onClose={() => setToast(null)} />}
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white">

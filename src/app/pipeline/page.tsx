@@ -9,6 +9,7 @@ import { authFetch } from '@/lib/authFetch'
 import { logActivity } from '@/lib/logActivity'
 import { mad, fmt, STAGE_CFG as STAGE_STYLE, BU_BADGE_CLS as BU_COLOR, ownerName } from '@/lib/utils'
 import { RefreshCw, Plus, Pencil, Eye, ChevronRight, TrendingUp, Target, Award, Clock, List, LayoutGrid, Trash2, X, AlertTriangle, Download } from 'lucide-react'
+import Toast from '@/components/Toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type DealRow = {
@@ -112,7 +113,7 @@ function PipelineContent() {
   const [rows, setRows]         = useState<DealRow[]>([])
   const [loading, setLoading]   = useState(true)
   const [err, setErr]           = useState<string | null>(null)
-  const [info, setInfo]         = useState<string | null>(null)
+  const [info, setInfo]         = useState<{ msg: string; ok: boolean } | null>(null)
   const [view, setView]         = useState<'list' | 'kanban'>('list')
 
   // Filters — accountFilter initialisé depuis ?account= si présent
@@ -149,7 +150,7 @@ function PipelineContent() {
   }
   useEffect(() => { load() }, [])
 
-  function toast(msg: string) { setInfo(msg); setTimeout(() => setInfo(null), 3000) }
+  function toast(msg: string, ok = true) { setInfo({ msg, ok }) }
 
   async function advanceStage(deal: DealRow) {
     const next = STAGE_NEXT[deal.stage]; if (!next) return
@@ -493,7 +494,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
         )}
 
         {err  && <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>}
-        {info && <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{info}</div>}
+        {info && <Toast message={info.msg} type={info.ok ? 'success' : 'error'} onClose={() => setInfo(null)} />}
 
         {/* Bandeau filtre compte actif (depuis Comptes) */}
         {accountFilter !== 'Tous' && searchParams.get('account') && (

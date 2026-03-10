@@ -13,7 +13,7 @@ import {
 import { logActivity } from '@/lib/logActivity'
 
 // ─── Import depuis utils ──────────────────────────────────────────────────────
-import { mad, fmt, normStatus, STAGE_CFG, BU_BADGE_CLS, ownerName } from '@/lib/utils'
+import { mad, fmt, normStatus, normMainBU, normSBU, STAGE_CFG, BU_BADGE_CLS, MAIN_BU_COLORS, ownerName } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type SupplyStatus = 'a_commander' | 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'
@@ -175,6 +175,7 @@ function DealsPageInner() {
   const [statusFilter, setStatusFilter]   = useState<typeof STATUS_ALL[number]>(STATUS_ALL.includes(initStatus) ? initStatus : 'Tous')
   const [stageFilter, setStageFilter]     = useState(initStage)
   const [buFilter, setBuFilter]           = useState(initBU)
+  const [mainBuFilter, setMainBuFilter]   = useState('Tous')
   const [showFilters, setShowFilters]     = useState(initStage !== 'Tous' || initBU !== 'Tous' || initOwner !== 'Tous')
   const [supplyFilter, setSupplyFilter]   = useState<'Tous' | 'avec_supply' | 'sans_supply'>('Tous')
   const [dateFrom, setDateFrom]           = useState('')
@@ -311,6 +312,7 @@ function DealsPageInner() {
       if (statusFilter !== 'Tous' && status !== statusFilter) return false
       if (stageFilter  !== 'Tous' && d.stage !== stageFilter) return false
       if (buFilter     !== 'Tous' && bu !== buFilter) return false
+      if (mainBuFilter !== 'Tous' && normMainBU(d.bu) !== mainBuFilter) return false
       if (supplyFilter === 'avec_supply'  && getSupplyStatus(d) === null) return false
       if (supplyFilter === 'sans_supply'  && (status !== 'Won' || getSupplyStatus(d) !== null)) return false
       if (ownerFilter  !== 'Tous' && (d.owner_email||'') !== ownerFilter) return false

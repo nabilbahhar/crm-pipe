@@ -11,6 +11,7 @@ import {
   ShoppingCart, Layers, Clock, Eye,
   MapPin,
 } from 'lucide-react'
+import Toast from '@/components/Toast'
 
 // ─── Types ────────────────────────────────────────────────────
 type Supplier = {
@@ -508,7 +509,7 @@ export default function SuppliersPage() {
   const [contactsModal, setContactsModal] = useState<Supplier | null>(null)
   const [contactCounts, setContactCounts] = useState<Record<string, number>>({})
   const [selectedId, setSelectedId] = useState<string | null>(null)
-  const [info, setInfo]             = useState<string | null>(null)
+  const [info, setInfo]             = useState<{ msg: string; ok: boolean } | null>(null)
 
   useEffect(() => {
     document.title = 'Fournisseurs · CRM-PIPE'
@@ -516,7 +517,7 @@ export default function SuppliersPage() {
     loadAll()
   }, [])
 
-  function toast(msg: string) { setInfo(msg); setTimeout(() => setInfo(null), 3000) }
+  function toast(msg: string, ok = true) { setInfo({ msg, ok }) }
 
   async function loadAll() {
     setLoading(true)
@@ -689,11 +690,7 @@ export default function SuppliersPage() {
         </div>
 
         {/* ── Toast ── */}
-        {info && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 flex items-center gap-2">
-            ✓ {info}
-          </div>
-        )}
+        {info && <Toast message={info.msg} type={info.ok ? 'success' : 'error'} onClose={() => setInfo(null)} />}
 
         {/* ── KPIs ── */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">

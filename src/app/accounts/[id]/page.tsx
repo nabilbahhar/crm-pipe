@@ -12,6 +12,7 @@ import {
   Clock, Paperclip, MessageSquare, Save, Edit2, RefreshCw,
   File as FileIcon, Presentation, BarChart2, Activity,
 } from 'lucide-react'
+import Toast from '@/components/Toast'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type AccountRow = { id: string; name: string; sector: string | null; segment: string | null; region: string | null; created_at: string | null }
@@ -299,11 +300,7 @@ export default function AccountDetailPage() {
       <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
 
         {/* ─── Toast ─────────────────────────────────────────────── */}
-        {toast && (
-          <div className="fixed bottom-6 left-1/2 z-[300] -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-medium text-white shadow-lg">
-            {toast}
-          </div>
-        )}
+        {toast && <Toast message={toast} type="success" onClose={() => setToast(null)} />}
 
         {/* ─── Confirm dialog ────────────────────────────────────── */}
         <ConfirmDialog open={confirm.open} title={confirm.title} msg={confirm.msg} danger={confirm.danger} confirmLabel={confirm.confirmLabel} onConfirm={confirm.onConfirm} onCancel={() => setConfirm(c => ({ ...c, open: false }))} />

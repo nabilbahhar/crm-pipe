@@ -15,6 +15,7 @@ import {
   Check, Copy, ExternalLink, Trash2, Upload, FileText,
   Receipt, ChevronDown, Paperclip,
 } from 'lucide-react'
+import Toast from '@/components/Toast'
 
 // ─── Types ────────────────────────────────────────────────────
 type ExpenseLine = {
@@ -62,7 +63,7 @@ export default function ExpensesPage() {
   const [reports, setReports]     = useState<ExpenseReport[]>([])
   const [loading, setLoading]     = useState(true)
   const [err, setErr]             = useState<string | null>(null)
-  const [toast, setToast]         = useState<string | null>(null)
+  const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
 
   // Form state
   const [mode, setMode]           = useState<'list' | 'form'>('list')
@@ -507,9 +508,8 @@ export default function ExpensesPage() {
   }
 
   // ── Toast helper ──────────────────────────────────────────
-  function showToast(msg: string) {
-    setToast(msg)
-    setTimeout(() => setToast(null), 3000)
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok })
   }
 
   // ── HTML to plain text for mailto ────────────────────────
@@ -1086,11 +1086,7 @@ export default function ExpensesPage() {
       )}
 
       {/* ═══════════════════ TOAST ═══════════════════ */}
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[300] -translate-x-1/2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-xl">
-          {toast}
-        </div>
-      )}
+      {toast && <Toast message={toast.msg} type={toast.ok ? 'success' : 'error'} onClose={() => setToast(null)} />}
     </div>
   )
 }

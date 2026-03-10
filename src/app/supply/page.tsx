@@ -8,9 +8,12 @@ import {
   SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus,
   LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus,
   COMPUCOM_EMAILS, ownerName,
+  normMainBU, MAIN_BU_COLORS,
 } from '@/lib/utils'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { buildSupplyEmail } from '@/lib/emailTemplates'
 import PurchaseModal from '@/components/PurchaseModal'
+import Toast from '@/components/Toast'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { RefreshCw, Package, ChevronRight, ChevronDown, Search, AlertCircle, Download, Clock, Mail, Copy, ExternalLink, X } from 'lucide-react'
@@ -102,20 +105,14 @@ export default function SupplyPage() {
   const [purchaseDeal, setPurchaseDeal] = useState<any | null>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [emailHtml, setEmailHtml] = useState<string | null>(null)
-  const [toast, setToast] = useState<string | null>(null)
-  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
   const [buFilter, setBuFilter] = useState('Tous')
   const [vendorFilter, setVendorFilter] = useState('Tous')
   const [busyLines, setBusyLines] = useState<Set<string>>(new Set())
 
-  function showToast(msg: string) {
-    if (toastTimer.current) clearTimeout(toastTimer.current)
-    setToast(msg)
-    toastTimer.current = setTimeout(() => setToast(null), 3000)
+  function showToast(msg: string, ok = true) {
+    setToast({ msg, ok })
   }
-
-  // Cleanup toast timer on unmount
-  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current) }, [])
 
   function toggleExpand(id: string) {
     setExpandedRows(prev => {
@@ -159,9 +156,10 @@ export default function SupplyPage() {
     }
   }
 
-  const buOptions = useMemo(() =>
-    [...new Set(orders.map(o => o.opportunities?.bu || '').filter(Boolean))].sort()
-  , [orders])
+  const buOptions = useMemo(() => {
+    const bus = orders.map(o => normMainBU(o.opportunities?.bu) || '').filter(Boolean)
+    return [...new Set(bus)].sort()
+  }, [orders])
 
   const vendorOptions = useMemo(() =>
     [...new Set(orders.map(o => o.opportunities?.vendor || '').filter(Boolean))].sort()
@@ -176,7 +174,7 @@ export default function SupplyPage() {
         && !(o.opportunities?.po_number || '').toLowerCase().includes(q)
         && !(o.supply_notes || '').toLowerCase().includes(q)) return false
       if (statusFilter !== 'Tous' && o.status !== statusFilter) return false
-      if (buFilter !== 'Tous' && (o.opportunities?.bu || '') !== buFilter) return false
+      if (buFilter !== 'Tous' && (normMainBU(o.opportunities?.bu) || '') !== buFilter) return false
       if (vendorFilter !== 'Tous' && (o.opportunities?.vendor || '') !== vendorFilter) return false
       return true
     })
@@ -216,7 +214,7 @@ export default function SupplyPage() {
         updated_at: now,
       }).eq('id', order.id)
 
-      if (error) { showToast('Erreur mise à jour statut'); return }
+      if (error) { showToast('Erreur mise à jour statut', false); return }
 
       logActivity({
         action_type: 'update',
@@ -240,7 +238,7 @@ export default function SupplyPage() {
       const { error } = await supabase.from('purchase_lines').update({
         line_status: newStatus,
       }).eq('id', lineId)
-      if (error) { showToast('Erreur mise à jour ligne'); return }
+      if (error) { showToast('Erreur mise à jour ligne', false); return }
       showToast(`Ligne → ${LINE_STATUS_CFG[newStatus]?.label || newStatus}`)
       await load()
     } finally {
@@ -256,7 +254,7 @@ export default function SupplyPage() {
         eta: eta || null,
         eta_updated_at: new Date().toISOString(),
       }).eq('id', lineId)
-      if (error) { showToast('Erreur mise à jour ETA'); return }
+      if (error) { showToast('Erreur mise à jour ETA', false); return }
       showToast('ETA mise à jour')
       await load()
     } finally {
@@ -271,7 +269,7 @@ export default function SupplyPage() {
       const { error } = await supabase.from('purchase_lines').update({
         status_note: note || null,
       }).eq('id', lineId)
-      if (error) { showToast('Erreur mise à jour note'); return }
+      if (error) { showToast('Erreur mise à jour note', false); return }
       showToast('Note ligne mise à jour')
       await load()
     } finally {
@@ -435,6 +433,37 @@ export default function SupplyPage() {
           })}
         </div>
 
+        {/* Mini chart — Supply par statut (horizontal bar) */}
+        {orders.length > 0 && (() => {
+          const SUPPLY_HEX: Record<string, string> = {
+            a_commander: '#f59e0b', place: '#3b82f6', commande: '#8b5cf6',
+            en_stock: '#f97316', livre: '#10b981', facture: '#64748b',
+          }
+          const chartData = SUPPLY_STATUS_ORDER.map(s => ({
+            name: SUPPLY_STATUS_CFG[s].label,
+            value: grouped[s].length,
+            fill: SUPPLY_HEX[s] || '#94a3b8',
+          }))
+          return (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Commandes par statut</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={chartData} layout="vertical" margin={{ top: 0, right: 16, bottom: 0, left: 4 }}>
+                  <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis dataKey="name" type="category" width={90} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                    formatter={(v: any) => [`${v} commande${Number(v) > 1 ? 's' : ''}`, '']} />
+                  <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={24}>
+                    {chartData.map((entry, idx) => (
+                      <Cell key={idx} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )
+        })()}
+
         {/* Toolbar */}
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3 shadow-sm">
@@ -443,13 +472,13 @@ export default function SupplyPage() {
               placeholder="Compte, vendor, PO…"
               className="w-44 bg-transparent text-sm outline-none placeholder:text-slate-400" />
           </div>
-          {buOptions.length > 1 && (
-            <select value={buFilter} onChange={e => setBuFilter(e.target.value)}
-              className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
-              <option value="Tous">BU: Tous</option>
-              {buOptions.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-          )}
+          <select value={buFilter} onChange={e => setBuFilter(e.target.value)}
+            className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
+            <option value="Tous">BU: Tous</option>
+            <option value="CSG">CSG</option>
+            <option value="Infrastructure">Infrastructure</option>
+            <option value="Cyber Sécurité">Cyber Sécurité</option>
+          </select>
           {vendorOptions.length > 1 && (
             <select value={vendorFilter} onChange={e => setVendorFilter(e.target.value)}
               className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
@@ -797,13 +826,7 @@ export default function SupplyPage() {
       )}
 
       {/* Toast */}
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 z-[300] -translate-x-1/2 animate-in slide-in-from-bottom-4">
-          <div className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-lg">
-            {toast}
-          </div>
-        </div>
-      )}
+      {toast && <Toast message={toast.msg} type={toast.ok ? 'success' : 'error'} onClose={() => setToast(null)} />}
     </div>
   )
 }

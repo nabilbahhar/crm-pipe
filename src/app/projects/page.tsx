@@ -5,14 +5,15 @@ import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
 import { logActivity } from '@/lib/logActivity'
 import {
-  mad, fmt, fmtDate, normStatus, normSBU,
-  BU_BADGE_CLS, SBU_COLORS,
+  mad, fmt, fmtDate, normStatus, normSBU, normMainBU,
+  BU_BADGE_CLS, SBU_COLORS, MAIN_BU_COLORS,
   PRESCRIPTION_STATUS_CFG, type PrescriptionStatus,
   PROJECT_SERVICE_STATUS_CFG, type ProjectServiceStatus,
   LINE_STATUS_CFG,
   ownerName, COMPUCOM_EMAILS,
   hasPrestation,
 } from '@/lib/utils'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { buildKaderEmail } from '@/lib/emailTemplates'
 import {
   RefreshCw, Search, Download, ChevronDown, ChevronUp,
@@ -173,6 +174,7 @@ export default function ProjectsPage() {
   const [err, setErr] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [buFilter, setBuFilter] = useState('Tous')
 
   // Prescription inline edit states
   const [editingPresales, setEditingPresales] = useState<string | null>(null)
@@ -251,25 +253,33 @@ export default function ProjectsPage() {
     return deals.filter(d => {
       if (normStatus(d) !== 'Open') return false
       if (!hasPrestation(d)) return false
+      if (buFilter !== 'Tous') {
+        const mainBu = normMainBU(d.bu)
+        if (mainBu !== buFilter) return false
+      }
       if (q) {
         const name = d.accounts?.name || d.title || ''
         if (!name.toLowerCase().includes(q) && !d.title.toLowerCase().includes(q)) return false
       }
       return true
     })
-  }, [deals, q])
+  }, [deals, q, buFilter])
 
   const deploymentDeals = useMemo(() => {
     return deals.filter(d => {
       if (normStatus(d) !== 'Won') return false
       if (!hasPrestation(d)) return false
+      if (buFilter !== 'Tous') {
+        const mainBu = normMainBU(d.bu)
+        if (mainBu !== buFilter) return false
+      }
       if (q) {
         const name = d.accounts?.name || d.title || ''
         if (!name.toLowerCase().includes(q) && !d.title.toLowerCase().includes(q)) return false
       }
       return true
     })
-  }, [deals, q])
+  }, [deals, q, buFilter])
 
   // ─── KPI computations ───────────────────────────────────────
 
@@ -621,8 +631,8 @@ export default function ProjectsPage() {
           ))}
         </div>
 
-        {/* ── Search ── */}
-        <div className="flex items-center gap-2">
+        {/* ── Search + BU filter ── */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3 shadow-sm">
             <Search className="h-3.5 w-3.5 text-slate-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
@@ -634,7 +644,60 @@ export default function ProjectsPage() {
               </button>
             )}
           </div>
+          <select value={buFilter} onChange={e => setBuFilter(e.target.value)}
+            className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
+            <option value="Tous">BU: Tous</option>
+            <option value="CSG">CSG</option>
+            <option value="Infrastructure">Infrastructure</option>
+            <option value="Cyber Sécurité">Cyber Sécurité</option>
+          </select>
         </div>
+
+        {/* ── Mini pie chart — Projets par BU ── */}
+        {deals.length > 0 && (() => {
+          const buMap: Record<string, number> = {}
+          const serviceDeals = deals.filter(d => hasPrestation(d))
+          serviceDeals.forEach(d => {
+            const bu = normMainBU(d.bu) || 'Autre'
+            buMap[bu] = (buMap[bu] || 0) + 1
+          })
+          const pieData = Object.entries(buMap)
+            .filter(([, v]) => v > 0)
+            .map(([name, value]) => ({
+              name, value,
+              fill: MAIN_BU_COLORS[name]?.color || '#94a3b8',
+            }))
+          if (pieData.length === 0) return null
+          return (
+            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 mb-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Projets Service par Main BU</h3>
+              <div className="flex items-center gap-6">
+                <ResponsiveContainer width={180} height={200}>
+                  <PieChart>
+                    <Pie data={pieData} dataKey="value" nameKey="name"
+                      cx="50%" cy="50%" outerRadius={75} innerRadius={38}
+                      strokeWidth={2} stroke="#fff">
+                      {pieData.map((entry, idx) => (
+                        <Cell key={idx} fill={entry.fill} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}
+                      formatter={(v: any, name: any) => [`${v} projet${Number(v) > 1 ? 's' : ''}`, name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-col gap-2">
+                  {pieData.map(d => (
+                    <div key={d.name} className="flex items-center gap-2">
+                      <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: d.fill }} />
+                      <span className="text-xs font-semibold text-slate-700">{d.name}</span>
+                      <span className="text-xs text-slate-400">{d.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ── Loading ── */}
         {loading ? (
