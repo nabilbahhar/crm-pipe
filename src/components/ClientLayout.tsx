@@ -29,6 +29,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
       if (isAuth && pathname === '/login') {
         router.replace('/dashboard')
       }
+    }).catch((err) => {
+      console.warn('ClientLayout getSession error:', err)
+      setChecking(false)
+      if (!isPublic) router.replace('/login')
     })
 
     // Écouter les changements d'auth en temps réel

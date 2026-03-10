@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { Bell, X, ChevronDown, KeyRound, LogOut, Search, User, MessageSquare, ListChecks } from "lucide-react";
+import { ownerName } from "@/lib/utils";
 
 type NavItem = { label: string; href: string; badge?: boolean; children?: { label: string; href: string }[] }
 
@@ -60,9 +61,7 @@ function timeAgo(iso: string) {
 }
 
 function userName(email: string) {
-  if (email === "nabil.imdh@gmail.com") return "Nabil";
-  if (email === "s.chitachny@compucom.ma") return "Salim";
-  return email.split("@")[0];
+  return ownerName(email);
 }
 
 const ACTION_COLOR: Record<string, string> = {
@@ -287,26 +286,33 @@ function QuickSearch({ onClose }: { onClose: () => void }) {
 
   async function search(term: string) {
     setLoading(true);
-    const like = `%${term}%`;
-    const [{ data: deals }, { data: accounts }, { data: prospects }] = await Promise.all([
-      supabase.from("opportunities").select("id,title,amount,status,accounts(name)").ilike("title", like).limit(6),
-      supabase.from("accounts").select("id,name,sector,region").ilike("name", like).limit(4),
-      supabase.from("prospects").select("id,company_name,contact_name,status").ilike("company_name", like).is("converted_at", null).limit(4),
-    ]);
-    const res: SearchResult[] = [];
-    for (const d of deals || []) {
-      const acName = (d as any).accounts?.name || '';
-      res.push({ type: 'deal', id: d.id, title: d.title || '—', sub: `${acName} · ${d.status} · ${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(d.amount || 0)} MAD` });
+    try {
+      const escaped = term.replace(/[%_\\]/g, '\\$&');
+      const like = `%${escaped}%`;
+      const [{ data: deals }, { data: accounts }, { data: prospects }] = await Promise.all([
+        supabase.from("opportunities").select("id,title,amount,status,accounts(name)").ilike("title", like).limit(6),
+        supabase.from("accounts").select("id,name,sector,region").ilike("name", like).limit(4),
+        supabase.from("prospects").select("id,company_name,contact_name,status").ilike("company_name", like).is("converted_at", null).limit(4),
+      ]);
+      const res: SearchResult[] = [];
+      for (const d of deals || []) {
+        const acName = (d as any).accounts?.name || '';
+        res.push({ type: 'deal', id: d.id, title: d.title || '—', sub: `${acName} · ${d.status} · ${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(d.amount || 0)} MAD` });
+      }
+      for (const a of accounts || []) {
+        res.push({ type: 'account', id: a.id, title: a.name, sub: [a.sector, a.region].filter(Boolean).join(' · ') || 'Compte' });
+      }
+      for (const p of prospects || []) {
+        res.push({ type: 'prospect', id: p.id, title: p.company_name, sub: `${p.contact_name} · ${p.status}` });
+      }
+      setResults(res);
+      setSelected(0);
+    } catch (err) {
+      console.warn('QuickSearch error:', err);
+      setResults([]);
+    } finally {
+      setLoading(false);
     }
-    for (const a of accounts || []) {
-      res.push({ type: 'account', id: a.id, title: a.name, sub: [a.sector, a.region].filter(Boolean).join(' · ') || 'Compte' });
-    }
-    for (const p of prospects || []) {
-      res.push({ type: 'prospect', id: p.id, title: p.company_name, sub: `${p.contact_name} · ${p.status}` });
-    }
-    setResults(res);
-    setSelected(0);
-    setLoading(false);
   }
 
   function go(r: SearchResult) {
@@ -629,7 +635,7 @@ export default function NavBar() {
       if (!mounted) return;
       const userEmail = data?.user?.email ?? null;
       setEmail(userEmail);
-      if (userEmail) { await loadLastRead(userEmail); loadTaskCount(); loadUnreadMsgs(userEmail); loadAvatar(userEmail); }
+      if (userEmail) { await loadLastRead(userEmail); loadTaskCount().catch(e => console.warn('loadTaskCount error:', e)); loadUnreadMsgs(userEmail).catch(e => console.warn('loadUnreadMsgs error:', e)); loadAvatar(userEmail); }
     };
     load();
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
