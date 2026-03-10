@@ -599,18 +599,18 @@ export default function NavBar() {
   // Load user avatar from profile
   async function loadAvatar(userEmail: string) {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("user_profiles")
         .select("avatar_url")
         .eq("user_email", userEmail)
-        .maybeSingle();
-      if (data?.avatar_url) {
-        const { data: urlData } = await supabase.storage
-          .from("profile-avatars")
-          .createSignedUrl(data.avatar_url, 3600);
-        if (urlData?.signedUrl) setAvatarUrl(urlData.signedUrl);
-      }
-    } catch { /* ignore if table doesn't exist yet */ }
+        .limit(1)
+        .single();
+      if (error || !data?.avatar_url) return;
+      const { data: urlData } = await supabase.storage
+        .from("profile-avatars")
+        .createSignedUrl(data.avatar_url, 3600);
+      if (urlData?.signedUrl) setAvatarUrl(urlData.signedUrl);
+    } catch (_e) { /* ignore */ }
   }
 
   // Load unread messages count

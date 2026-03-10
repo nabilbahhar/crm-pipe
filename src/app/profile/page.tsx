@@ -221,7 +221,7 @@ export default function ProfilePage() {
         await supabase
           .from('user_profiles')
           .upsert({ user_email: email, avatar_url: result.path, updated_at: new Date().toISOString() }, { onConflict: 'user_email' })
-      } catch { /* ignore DB errors — avatar is in storage */ }
+      } catch (_e) { /* ignore DB errors — avatar is in storage */ }
     } catch (e: any) {
       setErr(`Erreur : ${e?.message || 'inconnue'}`)
     }
