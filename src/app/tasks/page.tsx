@@ -129,7 +129,10 @@ export default function TasksPage() {
 
   useEffect(() => { document.title = 'Tâches · CRM-PIPE'; load() }, [])
 
+  const loadingRef = { current: false }
   async function load() {
+    if (loadingRef.current) return
+    loadingRef.current = true
     setLoading(true); setErr(null)
     try {
       const year = new Date().getFullYear()
@@ -140,6 +143,8 @@ export default function TasksPage() {
         loadWarranties(), loadLicenses(), loadDRs(), loadOverdueInvoices(),
       ])
       setTasks([...a, ...b, ...c, ...d, ...e])
+      if (wonRes.error) console.warn('tasks wonRes error:', wonRes.error.message)
+      if (openRes.error) console.warn('tasks openRes error:', openRes.error.message)
       setWonYTD((wonRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
       setOpenPipeline((openRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
       setWarranties(warr)
@@ -147,7 +152,7 @@ export default function TasksPage() {
       setDrs(drItems)
       setOverdueInvoices(invItems)
     } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
-    finally { setLoading(false) }
+    finally { setLoading(false); loadingRef.current = false }
   }
 
   // ── Relances ────────────────────────────────────────────────
@@ -211,10 +216,11 @@ export default function TasksPage() {
     if (error) throw error
     if (!won?.length) return []
 
-    const { data: infos } = await supabase
+    const { data: infos, error: infosErr } = await supabase
       .from('purchase_info')
       .select('opportunity_id, purchase_lines(id, pu_achat, fournisseur, designation)')
       .in('opportunity_id', won.map((d: any) => d.id))
+    if (infosErr) console.warn('loadAchats purchase_info error:', infosErr.message)
 
     const infoMap = new Map<string, { total: number; complete: number }>()
     ;(infos || []).forEach((info: any) => {

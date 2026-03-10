@@ -287,10 +287,13 @@ export default function Dashboard() {
     return [`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`]
   },[view,year,quarter,month])
 
+  const loadingRef = { current: false }
   const load = async () => {
+    if (loadingRef.current) return
+    loadingRef.current = true
     setLoading(true); setErr(null)
     try {
-      const [{ data: opps, error: e1 }, { data: accs, error: e2 }, { data: pLines }, { data: sOrders }, { data: prosp }] = await Promise.all([
+      const [{ data: opps, error: e1 }, { data: accs, error: e2 }, { data: pLines, error: e3 }, { data: sOrders, error: e4 }, { data: prosp, error: e5 }] = await Promise.all([
         supabase.from('opportunities').select('*, accounts(name,sector,segment,region)').order('created_at',{ascending:false}).limit(5000),
         supabase.from('accounts').select('id,name,sector,segment,region'),
         supabase.from('purchase_lines').select('*, purchase_info(opportunity_id)'),
@@ -298,20 +301,25 @@ export default function Dashboard() {
         supabase.from('prospects').select('id,status,heat,converted_at,created_at').is('converted_at', null),
       ])
       if (e1) throw e1; if (e2) throw e2
+      if (e3) console.warn('purchase_lines error:', e3.message)
+      if (e4) console.warn('supply_orders error:', e4.message)
+      if (e5) console.warn('prospects error:', e5.message)
       setRows(opps||[]); setAccounts(accs||[])
       setPurchaseLines(pLines||[]); setSupplyOrders(sOrders||[])
       setProspects(prosp||[])
       // Load invoices and deal registrations (may not exist yet)
       try {
-        const [{ data: inv }, { data: drs }] = await Promise.all([
+        const [{ data: inv, error: invErr }, { data: drs, error: drErr }] = await Promise.all([
           supabase.from('invoices').select('*'),
           supabase.from('deal_registrations').select('*'),
         ])
+        if (invErr) console.warn('invoices load error:', invErr.message)
+        if (drErr) console.warn('deal_registrations load error:', drErr.message)
         setInvoices(inv || [])
         setDealRegs(drs || [])
-      } catch {} // tables may not exist yet
+      } catch (err) { console.warn('invoices/deal_regs load error:', err) }
     } catch(e:any) { setErr(e?.message||'Erreur') }
-    finally { setLoading(false) }
+    finally { setLoading(false); loadingRef.current = false }
   }
   useEffect(()=>{ load() },[])
 
@@ -542,6 +550,18 @@ export default function Dashboard() {
     })
   },[deals,year,stageFilters,statusFilter,buFilters])
 
+  // ── Pre-build lookup maps (O(1) instead of O(n) find) ──────────────────
+  const accountMap = useMemo(() => {
+    const m = new Map<string, any>()
+    for (const a of accounts) m.set(a.id, a)
+    return m
+  }, [accounts])
+  const rowMap = useMemo(() => {
+    const m = new Map<string, any>()
+    for (const r of rows) if (r.id) m.set(r.id, r)
+    return m
+  }, [rows])
+
   // ── Top Clients ──────────────────────────────────────────────────────────
   const topClients = useMemo(()=>{
     const map=new Map<string,{client:string;accountId:string|null;csg:number;cirs:number;total:number;deals:number;region:string}>()
@@ -549,12 +569,12 @@ export default function Dashboard() {
       const key=d.account_name; const cur=map.get(key)||{client:key,accountId:d.account_id,csg:0,cirs:0,total:0,deals:0,region:'—'}
       for(const ln of d.lines){if(ln.group==='CSG')cur.csg+=ln.amount;else cur.cirs+=ln.amount};cur.total=cur.csg+cur.cirs;cur.deals++
       // region from accounts
-      const acc=accounts.find(a=>a.id===d.account_id)
+      const acc=d.account_id?accountMap.get(d.account_id):undefined
       if (acc?.region) cur.region=acc.region
       map.set(key,cur)
     }
     return [...map.values()].sort((a,b)=>b.total-a.total).slice(0,5)
-  },[scopeDeals,accounts])
+  },[scopeDeals,accountMap])
 
   // ── Top Vendors ──────────────────────────────────────────────────────────
   const topVendors = useMemo(()=>{
@@ -572,25 +592,25 @@ export default function Dashboard() {
   const byRegion = useMemo(()=>{
     const map=new Map<string,{region:string;total:number;count:number}>()
     for (const d of scopeDeals) {
-      const acc=accounts.find(a=>a.id===d.account_id)
+      const acc=d.account_id?accountMap.get(d.account_id):undefined
       const region=acc?.region||d.raw?.accounts?.region||'Non renseigné'
       const cur=map.get(region)||{region,total:0,count:0}
       cur.total+=d.amount; cur.count++; map.set(region,cur)
     }
     return [...map.values()].sort((a,b)=>b.total-a.total)
-  },[scopeDeals,accounts])
+  },[scopeDeals,accountMap])
 
   // ── Sector breakdown ─────────────────────────────────────────────────────
   const bySector = useMemo(()=>{
     const map=new Map<string,{sector:string;total:number;count:number}>()
     for (const d of scopeDeals) {
-      const acc=accounts.find(a=>a.id===d.account_id)
+      const acc=d.account_id?accountMap.get(d.account_id):undefined
       const sector=acc?.segment||d.raw?.accounts?.segment||'Non renseigné'
       const cur=map.get(sector)||{sector,total:0,count:0}
       cur.total+=d.amount; cur.count++; map.set(sector,cur)
     }
     return [...map.values()].sort((a,b)=>b.total-a.total).slice(0,8)
-  },[scopeDeals,accounts])
+  },[scopeDeals,accountMap])
 
   // ── Late bookings ────────────────────────────────────────────────────────
   const late = useMemo(()=>
@@ -617,7 +637,7 @@ export default function Dashboard() {
       if (!oppId) continue
       // Only include lines whose deal passes the current filters
       if (!filteredIds.has(oppId)) continue
-      const opp = rows.find(r => r.id === oppId)
+      const opp = rowMap.get(oppId)
       if (!opp) continue
       const ptVente = Number(ln.pt_vente) || (Number(ln.qty||1) * Number(ln.pu_vente||0))
       const ptAchat = Number(ln.qty||1) * Number(ln.pu_achat||0)
@@ -653,7 +673,7 @@ export default function Dashboard() {
     }))
 
     return { totalVente, totalAchat, margeBrute, margePct, buArr, trendMarge }
-  },[purchaseLines, rows, year, inPeriod])
+  },[purchaseLines, rowMap, year, inPeriod])
 
   // ── Supply status counts (respects filters via inPeriod) ────────────────
   const filteredSupplyOrders = useMemo(()=>{
