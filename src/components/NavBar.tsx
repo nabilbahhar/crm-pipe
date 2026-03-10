@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import { Bell, X, ChevronDown, KeyRound, LogOut, Search, User } from "lucide-react";
+import { Bell, X, ChevronDown, KeyRound, LogOut, Search, User, MessageSquare, ListChecks } from "lucide-react";
 
 type NavItem = { label: string; href: string; badge?: boolean; children?: { label: string; href: string }[] }
 
@@ -32,8 +32,6 @@ const NAV_ITEMS: NavItem[] = [
   ]},
   { label: "Événements", href: "/events" },
   { label: "Support", href: "/support" },
-  { label: "Messages", href: "/messages" },
-  { label: "Tasks", href: "/tasks", badge: true },
   { label: "KPI", href: "/kpi" },
 ];
 
@@ -508,6 +506,7 @@ export default function NavBar() {
   const [taskCount, setTaskCount]   = useState(0);
   const [showSearch, setShowSearch] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [unreadMsgs, setUnreadMsgs] = useState(0);
   const panelRef    = useRef<HTMLDivElement>(null);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const lastReadRef = useRef<string>("");
@@ -596,6 +595,16 @@ export default function NavBar() {
     setTaskCount((relances || 0) + achatCount + (closingRetards || 0));
   }
 
+  // Load unread messages count
+  async function loadUnreadMsgs(userEmail: string) {
+    const { count } = await supabase
+      .from("team_messages")
+      .select("id", { count: "exact", head: true })
+      .neq("sender_email", userEmail)
+      .is("read_at", null);
+    setUnreadMsgs(count || 0);
+  }
+
   useEffect(() => {
     let mounted = true;
     const load = async () => {
@@ -603,7 +612,7 @@ export default function NavBar() {
       if (!mounted) return;
       const userEmail = data?.user?.email ?? null;
       setEmail(userEmail);
-      if (userEmail) { await loadLastRead(userEmail); loadTaskCount(); }
+      if (userEmail) { await loadLastRead(userEmail); loadTaskCount(); loadUnreadMsgs(userEmail); }
     };
     load();
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -645,6 +654,19 @@ export default function NavBar() {
       }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // Real-time: new messages → increment unread badge
+  useEffect(() => {
+    if (!email) return;
+    const msgChannel = supabase.channel("team_messages_nav")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "team_messages" }, (payload) => {
+        const msg = payload.new as any;
+        if (msg.sender_email !== email) {
+          setUnreadMsgs(prev => prev + 1);
+        }
+      }).subscribe();
+    return () => { supabase.removeChannel(msgChannel); };
+  }, [email]);
 
   async function openNotifs() {
     setShowNotifs(true); setUnread(0);
@@ -715,112 +737,79 @@ export default function NavBar() {
             })}
           </nav>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
 
-            {/* ── Quick Search ── */}
+            {/* ── Quick Search (compact) ── */}
             <button
               onClick={() => setShowSearch(true)}
+              title={`Recherche (${modKey}+K)`}
               style={{
-                display: "flex", alignItems: "center", gap: 6,
-                height: 34, padding: "0 10px", borderRadius: 10,
-                border: "1px solid #e2e8f0", background: "#f8fafc",
-                cursor: "pointer", fontSize: 12, color: "#94a3b8",
+                width: 40, height: 40, borderRadius: "50%",
+                border: "none", background: "#e4e6eb",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                transition: "background 0.15s",
               }}
+              onMouseEnter={e => (e.currentTarget.style.background = "#d8dadf")}
+              onMouseLeave={e => (e.currentTarget.style.background = "#e4e6eb")}
             >
-              <Search style={{ width: 14, height: 14 }} />
-              <span>Recherche</span>
-              <kbd style={{ fontSize: 10, background: '#e2e8f0', borderRadius: 4, padding: '1px 5px', fontFamily: 'monospace', fontWeight: 600, color: '#64748b' }}>{modKey}+K</kbd>
+              <Search style={{ width: 18, height: 18, color: "#050505" }} />
             </button>
 
-            {/* ── User menu ── */}
-            {email && (
-              <div style={{ position: "relative" }} ref={userMenuRef}>
-                <button
-                  onClick={() => setShowUserMenu(v => !v)}
-                  style={{
-                    display: "flex", alignItems: "center", gap: 6,
-                    height: 34, padding: "0 10px", borderRadius: 10,
-                    border: "1px solid #e2e8f0", background: showUserMenu ? "#f1f5f9" : "#fff",
-                    cursor: "pointer", fontSize: 13, fontWeight: 500, color: "#475569",
-                  }}
-                >
-                  <div style={{ width: 24, height: 24, borderRadius: "50%", background: "#0f172a", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    {userName(email)[0]}
-                  </div>
-                  {userName(email)}
-                  <ChevronDown style={{ width: 12, height: 12, color: "#94a3b8", transform: showUserMenu ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
-                </button>
+            {/* ── Messages (Facebook-style circle) ── */}
+            <Link href="/messages" title="Messages"
+              style={{
+                position: "relative", width: 40, height: 40, borderRadius: "50%",
+                border: "none", background: path === "/messages" ? "#e7f3ff" : "#e4e6eb",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                textDecoration: "none", transition: "background 0.15s",
+              }}
+              onMouseEnter={e => { if (path !== "/messages") e.currentTarget.style.background = "#d8dadf" }}
+              onMouseLeave={e => { if (path !== "/messages") e.currentTarget.style.background = "#e4e6eb" }}
+            >
+              <MessageSquare style={{ width: 18, height: 18, color: path === "/messages" ? "#0866ff" : "#050505" }} />
+              {unreadMsgs > 0 && (
+                <span style={{ position: "absolute", top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, background: "#e41e3f", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }}>
+                  {unreadMsgs > 9 ? "9+" : unreadMsgs}
+                </span>
+              )}
+            </Link>
 
-                {showUserMenu && (
-                  <div style={{
-                    position: "absolute", top: 42, right: 0, width: 200,
-                    background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14,
-                    boxShadow: "0 8px 30px rgba(0,0,0,0.10)", overflow: "hidden", zIndex: 200,
-                  }}>
-                    <div style={{ padding: "10px 14px 8px", borderBottom: "1px solid #f1f5f9" }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>{userName(email)}</div>
-                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{email}</div>
-                    </div>
-                    <div style={{ padding: "6px" }}>
-                      <Link
-                        href="/profile"
-                        onClick={() => setShowUserMenu(false)}
-                        style={{
-                          width: "100%", display: "flex", alignItems: "center", gap: 9,
-                          padding: "9px 10px", borderRadius: 9, border: "none",
-                          background: "none", cursor: "pointer", fontSize: 13,
-                          color: "#374151", fontWeight: 500, textAlign: "left",
-                          textDecoration: "none",
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "#f8fafc")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
-                      >
-                        <User style={{ width: 14, height: 14, color: "#64748b" }} />
-                        Mon profil
-                      </Link>
-                      <button
-                        onClick={() => { setShowUserMenu(false); setShowPwdModal(true); }}
-                        style={{
-                          width: "100%", display: "flex", alignItems: "center", gap: 9,
-                          padding: "9px 10px", borderRadius: 9, border: "none",
-                          background: "none", cursor: "pointer", fontSize: 13,
-                          color: "#374151", fontWeight: 500, textAlign: "left",
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "#f8fafc")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
-                      >
-                        <KeyRound style={{ width: 14, height: 14, color: "#64748b" }} />
-                        Changer le mot de passe
-                      </button>
-                      <button
-                        onClick={logout}
-                        style={{
-                          width: "100%", display: "flex", alignItems: "center", gap: 9,
-                          padding: "9px 10px", borderRadius: 9, border: "none",
-                          background: "none", cursor: "pointer", fontSize: 13,
-                          color: "#dc2626", fontWeight: 500, textAlign: "left",
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "#fef2f2")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
-                      >
-                        <LogOut style={{ width: 14, height: 14, color: "#dc2626" }} />
-                        Déconnexion
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* ── Tasks (Facebook-style circle) ── */}
+            <Link href="/tasks" title="Tâches"
+              style={{
+                position: "relative", width: 40, height: 40, borderRadius: "50%",
+                border: "none", background: path === "/tasks" ? "#fff3e0" : "#e4e6eb",
+                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                textDecoration: "none", transition: "background 0.15s",
+              }}
+              onMouseEnter={e => { if (path !== "/tasks") e.currentTarget.style.background = "#d8dadf" }}
+              onMouseLeave={e => { if (path !== "/tasks") e.currentTarget.style.background = "#e4e6eb" }}
+            >
+              <ListChecks style={{ width: 18, height: 18, color: path === "/tasks" ? "#e65100" : "#050505" }} />
+              {taskCount > 0 && (
+                <span style={{ position: "absolute", top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, background: "#e65100", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }}>
+                  {taskCount > 9 ? "9+" : taskCount}
+                </span>
+              )}
+            </Link>
 
-            {/* ── Notifications ── */}
+            {/* ── Notifications (Facebook-style circle) ── */}
             <div style={{ position: "relative" }} ref={panelRef}>
               <button
                 onClick={openNotifs}
-                style={{ position: "relative", width: 36, height: 36, borderRadius: 10, border: "1px solid #e2e8f0", background: showNotifs ? "#f1f5f9" : "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}
+                title="Notifications"
+                style={{
+                  position: "relative", width: 40, height: 40, borderRadius: "50%",
+                  border: "none", background: showNotifs ? "#e7f3ff" : "#e4e6eb",
+                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={e => { if (!showNotifs) e.currentTarget.style.background = "#d8dadf" }}
+                onMouseLeave={e => { if (!showNotifs) e.currentTarget.style.background = "#e4e6eb" }}
               >
-                <Bell style={{ width: 16, height: 16, color: "#475569" }} />
+                <Bell style={{ width: 18, height: 18, color: showNotifs ? "#0866ff" : "#050505" }} />
                 {unread > 0 && (
-                  <span style={{ position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 9, background: "#ef4444", color: "#fff", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", border: "2px solid #fff" }}>
+                  <span style={{ position: "absolute", top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, background: "#e41e3f", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }}>
                     {unread > 9 ? "9+" : unread}
                   </span>
                 )}
@@ -875,6 +864,101 @@ export default function NavBar() {
                 </div>
               )}
             </div>
+
+            {/* ── User Avatar (Facebook-style circle) ── */}
+            {email && (
+              <div style={{ position: "relative" }} ref={userMenuRef}>
+                <button
+                  onClick={() => setShowUserMenu(v => !v)}
+                  title={userName(email)}
+                  style={{
+                    width: 40, height: 40, borderRadius: "50%",
+                    border: showUserMenu ? "2px solid #0866ff" : "2px solid transparent",
+                    background: "#0f172a", cursor: "pointer",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: 0, transition: "border-color 0.15s, box-shadow 0.15s",
+                    boxShadow: showUserMenu ? "0 0 0 2px rgba(8,102,255,0.2)" : "none",
+                  }}
+                >
+                  <span style={{ color: "#fff", fontSize: 15, fontWeight: 700, lineHeight: 1, userSelect: "none" }}>
+                    {userName(email)[0]}
+                  </span>
+                </button>
+
+                {showUserMenu && (
+                  <div style={{
+                    position: "absolute", top: 48, right: 0, width: 240,
+                    background: "#fff", borderRadius: 12,
+                    boxShadow: "0 2px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)", overflow: "hidden", zIndex: 200,
+                  }}>
+                    <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #f0f0f0" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#0f172a", color: "#fff", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {userName(email)[0]}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "#050505" }}>{userName(email)}</div>
+                          <div style={{ fontSize: 12, color: "#65676b", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 160 }}>{email}</div>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ padding: "4px 8px" }}>
+                      <Link
+                        href="/profile"
+                        onClick={() => setShowUserMenu(false)}
+                        style={{
+                          width: "100%", display: "flex", alignItems: "center", gap: 10,
+                          padding: "10px 8px", borderRadius: 8, border: "none",
+                          background: "none", cursor: "pointer", fontSize: 14,
+                          color: "#050505", fontWeight: 500, textAlign: "left",
+                          textDecoration: "none",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "#f2f2f2")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                      >
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#e4e6eb", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <User style={{ width: 16, height: 16, color: "#050505" }} />
+                        </div>
+                        Mon profil
+                      </Link>
+                      <button
+                        onClick={() => { setShowUserMenu(false); setShowPwdModal(true); }}
+                        style={{
+                          width: "100%", display: "flex", alignItems: "center", gap: 10,
+                          padding: "10px 8px", borderRadius: 8, border: "none",
+                          background: "none", cursor: "pointer", fontSize: 14,
+                          color: "#050505", fontWeight: 500, textAlign: "left",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "#f2f2f2")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                      >
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#e4e6eb", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <KeyRound style={{ width: 16, height: 16, color: "#050505" }} />
+                        </div>
+                        Mot de passe
+                      </button>
+                      <div style={{ height: 1, background: "#f0f0f0", margin: "4px 0" }} />
+                      <button
+                        onClick={logout}
+                        style={{
+                          width: "100%", display: "flex", alignItems: "center", gap: 10,
+                          padding: "10px 8px", borderRadius: 8, border: "none",
+                          background: "none", cursor: "pointer", fontSize: 14,
+                          color: "#050505", fontWeight: 500, textAlign: "left",
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "#f2f2f2")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "none")}
+                      >
+                        <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#e4e6eb", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <LogOut style={{ width: 16, height: 16, color: "#050505" }} />
+                        </div>
+                        Déconnexion
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
           </div>
         </div>
