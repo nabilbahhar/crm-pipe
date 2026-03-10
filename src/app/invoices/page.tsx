@@ -709,6 +709,20 @@ function InvoiceFormModal({
   const [notes, setNotes]                   = useState(invoice?.notes || '')
   const [saving, setSaving]                 = useState(false)
 
+  // Auto-generate invoice number for new invoices
+  useEffect(() => {
+    if (isEdit) return
+    async function generateNumber() {
+      const year = new Date().getFullYear()
+      const { count } = await supabase
+        .from('invoices')
+        .select('id', { count: 'exact', head: true })
+      const next = (count ?? 0) + 1
+      setInvoiceNumber(`FAC-${year}-${String(next).padStart(3, '0')}`)
+    }
+    generateNumber()
+  }, [isEdit])
+
   // Derived client name
   const selectedDeal = useMemo(() => wonDeals.find(d => d.id === selectedDealId), [wonDeals, selectedDealId])
   const clientName = selectedDeal?.accounts?.name || invoice?.opportunities?.accounts?.name || ''
