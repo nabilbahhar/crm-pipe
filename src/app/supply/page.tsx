@@ -307,10 +307,11 @@ export default function SupplyPage() {
   }
 
   async function saveNote(orderId: string) {
-    await supabase.from('supply_orders').update({
+    const { error } = await supabase.from('supply_orders').update({
       supply_notes: noteText,
       updated_at: new Date().toISOString(),
     }).eq('id', orderId)
+    if (error) { alert('Erreur: ' + error.message); return }
     setNoteOpen(null)
     load()
   }

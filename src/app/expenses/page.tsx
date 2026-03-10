@@ -224,9 +224,10 @@ export default function ExpensesPage() {
 
       if (error || !data) throw new Error(error?.message || 'Erreur creation')
 
-      // Insert existing lines so they are persisted
-      if (formLines.length > 0) {
-        const linesToInsert = formLines.map((l, i) => ({
+      // Insert existing lines so they are persisted (skip empty lines)
+      const validAutoLines = formLines.filter(l => l.description.trim() || Number(l.amount_ttc) > 0)
+      if (validAutoLines.length > 0) {
+        const linesToInsert = validAutoLines.map((l, i) => ({
           expense_report_id: data.id,
           date: l.date,
           description: l.description,
@@ -333,12 +334,13 @@ export default function ExpensesPage() {
         })
       }
 
-      // Insert lines
-      if (formLines.length > 0 && reportId) {
-        const linesToInsert = formLines.map((l, i) => ({
+      // Insert lines (skip empty lines — no description and no amount)
+      const validLines = formLines.filter(l => l.description.trim() || Number(l.amount_ttc) > 0)
+      if (validLines.length > 0 && reportId) {
+        const linesToInsert = validLines.map((l, i) => ({
           expense_report_id: reportId!,
           date: l.date,
-          description: l.description,
+          description: l.description.trim(),
           amount_ttc: Number(l.amount_ttc) || 0,
           file_name: l.file_name,
           file_url: l.file_url,

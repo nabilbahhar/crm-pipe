@@ -36,7 +36,7 @@ function addSecurityHeaders(response: NextResponse): NextResponse {
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob: https://cnrpaedvqjvepwtypbmw.supabase.co",
       "font-src 'self' data:",
-      "connect-src 'self' https://cnrpaedvqjvepwtypbmw.supabase.co wss://cnrpaedvqjvepwtypbmw.supabase.co https://api.anthropic.com",
+      "connect-src 'self' https://cnrpaedvqjvepwtypbmw.supabase.co wss://cnrpaedvqjvepwtypbmw.supabase.co",
       "frame-src 'self'",
       "object-src 'none'",
       "base-uri 'self'",

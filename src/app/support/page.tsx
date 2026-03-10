@@ -67,6 +67,7 @@ export default function SupportPage() {
   const [dealSearch, setDealSearch] = useState('')
 
   useEffect(() => {
+    document.title = 'Support / SAV \u00b7 CRM-PIPE'
     supabase.auth.getUser().then(({ data }) => setUserEmail(data.user?.email || ''))
     load()
   }, [])
@@ -170,12 +171,14 @@ export default function SupportPage() {
       updated_at: new Date().toISOString(),
     }
     if (editId) {
-      await supabase.from('support_tickets').update(payload).eq('id', editId)
+      const { error } = await supabase.from('support_tickets').update(payload).eq('id', editId)
+      if (error) { alert(error.message); setSaving(false); return }
       logActivity({ action_type: 'update', entity_type: 'ticket', entity_name: fTitle, detail: 'Ticket support mis à jour' })
     } else {
       payload.created_by = userEmail
       payload.status = 'ouvert'
-      await supabase.from('support_tickets').insert(payload)
+      const { error } = await supabase.from('support_tickets').insert(payload)
+      if (error) { alert(error.message); setSaving(false); return }
       logActivity({ action_type: 'create', entity_type: 'ticket', entity_name: fTitle, detail: 'Ticket support créé' })
     }
     setSaving(false); setShowModal(false); load()
@@ -184,14 +187,16 @@ export default function SupportPage() {
   async function changeStatus(t: Ticket, newStatus: string) {
     const up: any = { status: newStatus, updated_at: new Date().toISOString() }
     if (newStatus === 'resolu' || newStatus === 'ferme') up.resolved_at = new Date().toISOString()
-    await supabase.from('support_tickets').update(up).eq('id', t.id)
+    const { error } = await supabase.from('support_tickets').update(up).eq('id', t.id)
+    if (error) { alert(error.message); return }
     logActivity({ action_type: 'update', entity_type: 'ticket', entity_name: t.title, detail: `Ticket → ${(TICKET_STATUS_CFG as any)[newStatus]?.label || newStatus}` })
     load()
   }
 
   async function deleteTicket(t: Ticket) {
     if (!confirm(`Supprimer le ticket "${t.title}" ?`)) return
-    await supabase.from('support_tickets').delete().eq('id', t.id)
+    const { error } = await supabase.from('support_tickets').delete().eq('id', t.id)
+    if (error) { alert(error.message); return }
     logActivity({ action_type: 'delete', entity_type: 'ticket', entity_name: t.title, detail: 'Ticket support supprimé' })
     load()
   }

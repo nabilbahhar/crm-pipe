@@ -397,10 +397,11 @@ export default function ProjectsPage() {
   }
 
   async function updateServiceStatus(svcId: string, newStatus: ProjectServiceStatus, oppId: string) {
-    await supabase.from('project_services').update({
+    const { error } = await supabase.from('project_services').update({
       status: newStatus,
       updated_at: new Date().toISOString(),
     }).eq('id', svcId)
+    if (error) { alert('Erreur: ' + error.message); return }
 
     const deal = deals.find(d => d.id === oppId)
     const svc = deal?.project_services?.find(s => s.id === svcId)
@@ -419,7 +420,8 @@ export default function ProjectsPage() {
     const deal = deals.find(d => d.id === oppId)
     const svc = deal?.project_services?.find(s => s.id === svcId)
 
-    await supabase.from('project_services').delete().eq('id', svcId)
+    const { error } = await supabase.from('project_services').delete().eq('id', svcId)
+    if (error) { alert('Erreur: ' + error.message); return }
 
     await logActivity({
       action_type: 'delete', entity_type: 'project_service',
