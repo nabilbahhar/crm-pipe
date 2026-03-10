@@ -57,7 +57,7 @@ function buildStats(deals: any[]) {
 
 export default function KPIPage() {
   const [rows, setRows] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string|null>(null)
   const [year, setYear] = useState(() => new Date().getFullYear())
   const [email, setEmail] = useState<string|null>(null)
@@ -131,7 +131,7 @@ export default function KPIPage() {
     return Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,6)
   },[wonYear])
 
-  const pct = Math.min(100,annual.total>0?(annual.total/AT)*100:0)
+  const pct = AT > 0 ? Math.min(100,(annual.total/AT)*100) : 0
   const selQ = quarters.find(q=>q.q===activeQ)
   const salimEarned = quarters.reduce((s,q)=>s+q.earned,0)
 

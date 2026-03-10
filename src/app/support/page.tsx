@@ -235,6 +235,7 @@ export default function SupportPage() {
       const blob = await resp.blob()
       const url = URL.createObjectURL(blob)
       Object.assign(document.createElement('a'), { href: url, download: `support_${new Date().toISOString().slice(0, 10)}.xlsx` }).click()
+      URL.revokeObjectURL(url)
     }
   }
 
@@ -317,8 +318,8 @@ export default function SupportPage() {
       ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white py-20 text-center text-sm text-slate-400">Aucun ticket</div>
       ) : (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm min-w-[900px]">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
                 <th className="px-4 py-3 text-left font-semibold">Titre</th>

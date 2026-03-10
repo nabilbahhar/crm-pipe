@@ -40,7 +40,7 @@ const MONTHS_FR = ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct'
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
-const pct = (v: number, t: number) => (!t ? 0 : Math.round((v/t)*100))
+const pct = (v: number, t: number) => (!t || !Number.isFinite(t) ? 0 : Math.round((v/t)*100))
 const monthsOfYear  = (y: number) => Array.from({length:12},(_,i) => `${y}-${String(i+1).padStart(2,'0')}`)
 const quarterMonths = (y: number, q: 'Q1'|'Q2'|'Q3'|'Q4') => {
   const s = q==='Q1'?1:q==='Q2'?4:q==='Q3'?7:10
@@ -223,7 +223,7 @@ export default function Dashboard() {
   const [dateFrom, setDateFrom] = useState(`${thisYear}-01-01`)
   const [dateTo, setDateTo]     = useState(todayStr)
   const [scope, setScope]       = useState<ScopeMode>('open_only')
-  const [loading, setLoading]   = useState(false)
+  const [loading, setLoading]   = useState(true)
   const [err, setErr]           = useState<string|null>(null)
   const [rows, setRows]         = useState<any[]>([])
   const [accounts, setAccounts] = useState<any[]>([])

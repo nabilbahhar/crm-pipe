@@ -702,9 +702,13 @@ function InvoiceFormModal({
   // Form fields
   const [selectedDealId, setSelectedDealId] = useState(invoice?.opportunity_id || '')
   const [invoiceNumber, setInvoiceNumber]   = useState(invoice?.invoice_number || '')
-  const [amount, setAmount]                 = useState(invoice?.amount || 0)
+  const [amount, setAmount]                 = useState<number | ''>(invoice?.amount ?? '')
   const [issueDate, setIssueDate]           = useState(invoice?.issue_date || new Date().toISOString().slice(0, 10))
-  const [dueDate, setDueDate]               = useState(invoice?.due_date || '')
+  const [dueDate, setDueDate]               = useState(invoice?.due_date || (() => {
+    // Default due date: issue date + 30 days
+    const d = new Date(); d.setDate(d.getDate() + 30)
+    return d.toISOString().slice(0, 10)
+  })())
   const [paymentTerms, setPaymentTerms]     = useState(invoice?.payment_terms || '')
   const [notes, setNotes]                   = useState(invoice?.notes || '')
   const [saving, setSaving]                 = useState(false)
@@ -762,8 +766,8 @@ function InvoiceFormModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!selectedDealId || !invoiceNumber.trim() || !amount || !issueDate || !dueDate) {
-      alert('Veuillez remplir tous les champs obligatoires.')
+    if (!selectedDealId || !invoiceNumber.trim() || !amount || Number(amount) <= 0 || !issueDate || !dueDate) {
+      alert('Veuillez remplir tous les champs obligatoires (montant > 0).')
       return
     }
 
