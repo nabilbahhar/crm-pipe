@@ -14,7 +14,7 @@ export async function logActivity(params: {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user?.email) return
 
-    await supabase.from('activity_log').insert({
+    const { error } = await supabase.from('activity_log').insert({
       user_email: user.email,
       action_type: params.action_type,
       entity_type: params.entity_type,
@@ -22,6 +22,7 @@ export async function logActivity(params: {
       entity_name: params.entity_name,
       detail: params.detail ?? null,
     })
+    if (error) console.warn('logActivity DB error:', error.message)
   } catch (e) {
     // Silent fail — logging should never break the app
     console.warn('logActivity error:', e)

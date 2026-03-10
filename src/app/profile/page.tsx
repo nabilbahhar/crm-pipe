@@ -241,6 +241,13 @@ export default function ProfilePage() {
     try {
       await supabase.storage.from('profile-avatars').remove([profile.avatar_url])
     } catch {}
+    // Persist avatar removal in DB
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.email) {
+        await supabase.from('user_profiles').update({ avatar_url: null, updated_at: new Date().toISOString() }).eq('user_email', user.email)
+      }
+    } catch {}
     setProfile(p => p ? { ...p, avatar_url: null } : p)
     setAvatarPreview(null)
   }

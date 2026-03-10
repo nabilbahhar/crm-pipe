@@ -142,7 +142,7 @@ export function buildKaderEmail(data: KaderEmailData): string {
           ${data.deliveryLines.map(l => `<tr>
             <td>${esc(l.designation)}</td>
             <td><span class="badge badge-blue">${esc(l.status)}</span></td>
-            <td>${l.eta || '—'}</td>
+            <td>${esc(l.eta) || '—'}</td>
           </tr>`).join('')}
         </table>
       ` : ''}
@@ -227,7 +227,7 @@ export function buildExpenseEmail(data: ExpenseEmailData): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseStyle}</head><body>
     <div class="header">
-      <h2>💰 Note de frais — ${monthNames[data.month - 1]} ${data.year}</h2>
+      <h2>💰 Note de frais — ${monthNames[data.month - 1] || 'Mois inconnu'} ${data.year}</h2>
       <div class="sub">${esc(data.senderName)} · ${new Date().toLocaleDateString('fr-MA')}</div>
     </div>
     <div class="body">

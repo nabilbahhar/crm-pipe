@@ -43,7 +43,9 @@ export const pct = (n: number | null | undefined): string => `${(Number(n) || 0)
 /** Date courte — ex: 15/03/25 */
 export const fmtDate = (s?: string | null): string => {
   if (!s) return '—'
-  return new Date(s).toLocaleDateString('fr-MA', {
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('fr-MA', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -53,7 +55,9 @@ export const fmtDate = (s?: string | null): string => {
 /** Date + heure — ex: 15 mars 25, 10:30 */
 export const fmtDateTime = (s?: string | null): string => {
   if (!s) return '—'
-  return new Date(s).toLocaleDateString('fr-MA', {
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleDateString('fr-MA', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
