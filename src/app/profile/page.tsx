@@ -63,10 +63,17 @@ export default function ProfilePage() {
           .from('user_profiles')
           .select('*')
           .eq('user_email', user.email)
-          .maybeSingle()
+          .limit(1)
+          .single()
 
         if (data) {
-          setProfile(data as Profile)
+          // Coalesce null values to empty strings (columns may be NULL in DB)
+          setProfile({
+            ...emptyProfile(user.email),
+            ...Object.fromEntries(
+              Object.entries(data).map(([k, v]) => [k, v ?? (k === 'avatar_url' ? null : '')])
+            ),
+          } as Profile)
           if (data.avatar_url) {
             const { data: urlData } = await supabase.storage
               .from('profile-avatars')
@@ -76,7 +83,7 @@ export default function ProfilePage() {
         } else {
           setProfile(emptyProfile(user.email))
         }
-      } catch {
+      } catch (_e) {
         // Table may not exist yet — use default profile
         setProfile(emptyProfile(user.email))
       }
@@ -90,15 +97,16 @@ export default function ProfilePage() {
     setSaving(true)
 
     try {
+      const s = (v: string | null | undefined) => (v || '').trim()
       const payload = {
         user_email: email,
-        full_name: profile.full_name.trim(),
-        job_title: profile.job_title.trim(),
-        phone: profile.phone.trim(),
-        mobile: profile.mobile.trim(),
-        department: profile.department.trim(),
-        location: profile.location.trim(),
-        bio: profile.bio.trim(),
+        full_name: s(profile.full_name),
+        job_title: s(profile.job_title),
+        phone: s(profile.phone),
+        mobile: s(profile.mobile),
+        department: s(profile.department),
+        location: s(profile.location),
+        bio: s(profile.bio),
         avatar_url: profile.avatar_url,
         updated_at: new Date().toISOString(),
       }
@@ -112,10 +120,10 @@ export default function ProfilePage() {
         // Fallback: save only base columns if extended columns don't exist yet
         const basePayload = {
           user_email: email,
-          full_name: profile.full_name.trim(),
-          phone: profile.phone.trim(),
-          department: profile.department.trim(),
-          bio: profile.bio.trim(),
+          full_name: s(profile.full_name),
+          phone: s(profile.phone),
+          department: s(profile.department),
+          bio: s(profile.bio),
           avatar_url: profile.avatar_url,
           updated_at: new Date().toISOString(),
         }
@@ -343,7 +351,7 @@ export default function ProfilePage() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                 <User className="inline h-3 w-3 mr-1" />Nom complet *
               </label>
-              <input value={profile.full_name} onChange={e => upd('full_name', e.target.value)}
+              <input value={profile.full_name || ''} onChange={e => upd('full_name', e.target.value)}
                 placeholder="Prénom Nom" className={inp} />
             </div>
 
@@ -361,7 +369,7 @@ export default function ProfilePage() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                 <Briefcase className="inline h-3 w-3 mr-1" />Poste / Fonction
               </label>
-              <input value={profile.job_title} onChange={e => upd('job_title', e.target.value)}
+              <input value={profile.job_title || ''} onChange={e => upd('job_title', e.target.value)}
                 placeholder="Ex: Business Development Manager" className={inp} />
             </div>
 
@@ -370,7 +378,7 @@ export default function ProfilePage() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                 <Building2 className="inline h-3 w-3 mr-1" />Département
               </label>
-              <input value={profile.department} onChange={e => upd('department', e.target.value)}
+              <input value={profile.department || ''} onChange={e => upd('department', e.target.value)}
                 placeholder="Ex: Commercial, Inside Sales…" className={inp} />
             </div>
 
@@ -379,7 +387,7 @@ export default function ProfilePage() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                 <Phone className="inline h-3 w-3 mr-1" />Téléphone fixe
               </label>
-              <input value={profile.phone} onChange={e => upd('phone', e.target.value)}
+              <input value={profile.phone || ''} onChange={e => upd('phone', e.target.value)}
                 placeholder="+212 5XX XXX XXX" className={inp} />
             </div>
 
@@ -388,7 +396,7 @@ export default function ProfilePage() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                 <Phone className="inline h-3 w-3 mr-1" />Mobile
               </label>
-              <input value={profile.mobile} onChange={e => upd('mobile', e.target.value)}
+              <input value={profile.mobile || ''} onChange={e => upd('mobile', e.target.value)}
                 placeholder="+212 6XX XXX XXX" className={inp} />
             </div>
 
@@ -397,14 +405,14 @@ export default function ProfilePage() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
                 <MapPin className="inline h-3 w-3 mr-1" />Localisation
               </label>
-              <input value={profile.location} onChange={e => upd('location', e.target.value)}
+              <input value={profile.location || ''} onChange={e => upd('location', e.target.value)}
                 placeholder="Ex: Casablanca, Maroc" className={inp} />
             </div>
 
             {/* Bio */}
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Bio / Notes</label>
-              <textarea value={profile.bio} onChange={e => upd('bio', e.target.value)}
+              <textarea value={profile.bio || ''} onChange={e => upd('bio', e.target.value)}
                 rows={3} placeholder="Quelques mots sur toi, tes compétences, ton périmètre…"
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-100 resize-none transition placeholder:text-slate-300" />
             </div>
