@@ -17,6 +17,11 @@ interface Deal {
   isMulti: boolean; lines: { sbu: string; group: string; card: string; amount: number }[]
 }
 
+interface Account {
+  id: string; name: string; sector: string | null; segment: string | null
+  region: string | null; dealCount: number; totalAmount: number
+}
+
 interface Message {
   id: string; role: 'user' | 'assistant'; content: string
   excelData?: ExcelSpec; timestamp: Date
@@ -37,8 +42,8 @@ const fmtAmt = (n: number) => {
   return String(Math.round(n))
 }
 
-function buildContext(deals: Deal[]): string {
-  if (!deals?.length) return 'Aucune donnée disponible.'
+function buildContext(deals: Deal[], accounts: Account[]): string {
+  if (!deals?.length && !accounts?.length) return 'Aucune donnée disponible.'
   const open = deals.filter(d => d.status === 'Open')
   const won  = deals.filter(d => d.status === 'Won')
   const lost = deals.filter(d => d.status === 'Lost')
@@ -55,9 +60,14 @@ function buildContext(deals: Deal[]): string {
     return `- ${d.account_name} | ${d.title} | ${d.stage} | ${d.status} | ${d.amount} MAD | prob:${d.prob}% | BU:${bestSbu} | closing:${d.closingYmReal || d.closingYm}`
   }).join('\n')
 
+  const accountsList = accounts.map(a =>
+    `- ${a.name} | ${a.sector || '—'} | ${a.segment || '—'} | ${a.region || '—'} | ${a.dealCount} deals | ${fmtAmt(a.totalAmount)} MAD`
+  ).join('\n')
+
   return `
 === CONTEXTE CRM ===
 Total deals: ${deals.length} (Open: ${open.length}, Won: ${won.length}, Lost: ${lost.length})
+Total comptes clients: ${accounts.length}
 Pipeline total: ${fmtAmt(pipeAmt)} MAD
 Forecast pondéré: ${fmtAmt(foreAmt)} MAD
 Won: ${fmtAmt(wonAmt)} MAD
@@ -68,6 +78,10 @@ ${[...stageMap.entries()].map(([s, a]) => `  ${s}: ${fmtAmt(a)} MAD`).join('\n')
 
 Par SBU (Open):
 ${[...sbuMap.entries()].map(([s, a]) => `  ${s}: ${fmtAmt(a)} MAD`).join('\n')}
+
+=== COMPTES CLIENTS (${accounts.length}) ===
+Format: Nom | Secteur | Segment | Région | Nb deals | CA total
+${accountsList}
 
 === DEALS (max 200) ===
 Format: Compte | Titre | Stage | Statut | Montant | Probabilité | BU | Closing
@@ -204,6 +218,7 @@ export default function PipouChatbot() {
   const [showSuggestions, setShowSuggestions] = useState(true)
   const [thinkingMsg, setThinkingMsg] = useState('')
   const [deals, setDeals] = useState<Deal[]>([])
+  const [accounts, setAccounts] = useState<Account[]>([])
   const [dealsLoaded, setDealsLoaded] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -221,9 +236,15 @@ export default function PipouChatbot() {
   }, [open])
 
   async function loadDeals() {
-    const { data } = await supabase.from('opportunities').select('*, accounts(name)').order('created_at', { ascending: false })
-    if (data) {
-      const mapped: Deal[] = data.map((r: any) => {
+    // Load deals and accounts in parallel
+    const [dealsRes, accountsRes] = await Promise.all([
+      supabase.from('opportunities').select('*, accounts(name)').order('created_at', { ascending: false }),
+      supabase.from('accounts').select('id, name, sector, segment, region'),
+    ])
+
+    let mappedDeals: Deal[] = []
+    if (dealsRes.data) {
+      mappedDeals = dealsRes.data.map((r: any) => {
         const buLines = Array.isArray(r.bu_lines) ? r.bu_lines : []
         return {
           id: r.id,
@@ -242,9 +263,34 @@ export default function PipouChatbot() {
             : [{ sbu: r.bu || '—', group: '—', card: r.vendor || '—', amount: Number(r.amount) || 0 }],
         }
       })
-      setDeals(mapped)
-      setDealsLoaded(true)
+      setDeals(mappedDeals)
     }
+
+    // Map accounts with deal stats
+    if (accountsRes.data) {
+      const acctDeals = new Map<string, { count: number; total: number }>()
+      for (const d of dealsRes.data || []) {
+        const aid = d.account_id
+        if (aid) {
+          const cur = acctDeals.get(aid) || { count: 0, total: 0 }
+          cur.count++
+          cur.total += Number(d.amount) || 0
+          acctDeals.set(aid, cur)
+        }
+      }
+      const mappedAccounts: Account[] = accountsRes.data.map((a: any) => ({
+        id: a.id,
+        name: a.name || '—',
+        sector: a.sector || null,
+        segment: a.segment || null,
+        region: a.region || null,
+        dealCount: acctDeals.get(a.id)?.count || 0,
+        totalAmount: acctDeals.get(a.id)?.total || 0,
+      }))
+      setAccounts(mappedAccounts)
+    }
+
+    setDealsLoaded(true)
   }
 
   useEffect(() => {
@@ -280,7 +326,7 @@ export default function PipouChatbot() {
     setLoading(true)
 
     try {
-      const context = buildContext(deals)
+      const context = buildContext(deals, accounts)
       const history = messages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
       const response = await authFetch('/api/chat', {

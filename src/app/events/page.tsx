@@ -456,7 +456,7 @@ export default function EventsPage() {
 
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white">
-        <div className="mx-auto max-w-[1500px] px-6 py-8">
+        <div className="mx-auto max-w-[1500px] px-4 py-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-3">
@@ -480,7 +480,7 @@ export default function EventsPage() {
       </div>
 
       {/* ── Content ───────────────────────────────────────────────────────── */}
-      <div className="mx-auto max-w-[1500px] px-6 -mt-4 pb-12">
+      <div className="mx-auto max-w-[1500px] px-4 -mt-4 pb-12 space-y-5">
 
         {/* Error banner */}
         {err && (

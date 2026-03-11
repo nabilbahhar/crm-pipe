@@ -834,8 +834,8 @@ export default function ExpensesPage() {
                 <div className="mt-1 text-xs text-slate-400">Cliquez sur "Nouvelle note" pour commencer.</div>
               </div>
             ) : (
-              <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
-                <div className="overflow-x-auto">
+              <div className="rounded-2xl border border-slate-100 bg-white shadow-sm">
+                <div className="overflow-x-auto rounded-2xl">
                   <table className="w-full min-w-[700px] text-sm">
                     <thead>
                       <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold text-slate-400">

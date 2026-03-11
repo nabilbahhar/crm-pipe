@@ -173,10 +173,10 @@ export default function ActivityPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-[1500px] px-4 py-8">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">Historique des activités</h1>
             <p className="text-sm text-slate-500 mt-1">

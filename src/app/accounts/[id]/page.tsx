@@ -297,7 +297,7 @@ export default function AccountDetailPage() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-12">
-      <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
+      <div className="mx-auto max-w-5xl px-4 py-6 space-y-5">
 
         {/* ─── Toast ─────────────────────────────────────────────── */}
         {toast && <Toast message={toast} type="success" onClose={() => setToast(null)} />}

@@ -185,7 +185,7 @@ export default function RenewalsPage() {
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white">
       {/* Header */}
       <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white">
-        <div className="mx-auto max-w-[1500px] px-6 py-8 sm:px-8">
+        <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-black tracking-tight">Renouvellements</h1>
@@ -205,7 +205,7 @@ export default function RenewalsPage() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-[1500px] px-6 py-6 sm:px-8 space-y-6">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 space-y-5">
         {err && (
           <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
             <AlertTriangle className="h-4 w-4" /> {err}
