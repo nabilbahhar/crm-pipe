@@ -15,7 +15,7 @@ const PROFILES: Record<string, any> = {
 
 const CSG_MIN = 0.40
 const CSG_MAX = 0.60
-const CIRS_MIN = 0.50
+const ICS_MIN = 0.50
 const MONTHS_FR = ['Jan','Fev','Mar','Avr','Mai','Jun','Jul','Aou','Sep','Oct','Nov','Dec']
 const QUARTERS: Record<string, number[]> = { Q1:[1,2,3], Q2:[4,5,6], Q3:[7,8,9], Q4:[10,11,12] }
 const SBU_COLORS: Record<string, string> = {
@@ -51,8 +51,8 @@ function buildStats(deals: any[]) {
     }
   }
   const csg = buMap['CSG']||0
-  const cirs = total-csg
-  return { total, buMap, csg, cirs, csgR: total>0?csg/total:0, cirsR: total>0?cirs/total:0 }
+  const ics = total-csg
+  return { total, buMap, csg, ics, csgR: total>0?csg/total:0, icsR: total>0?ics/total:0 }
 }
 
 export default function KPIPage() {
@@ -98,7 +98,7 @@ export default function KPIPage() {
     })
     const s = buildStats(deals)
     const target = AT/4
-    const ok = s.total>=target && s.cirsR>=CIRS_MIN
+    const ok = s.total>=target && s.icsR>=ICS_MIN
     return { q, deals:deals.length, ...s, target, ok, earned: ok?5000:0 }
   }),[wonYear,AT])
 
@@ -172,7 +172,7 @@ export default function KPIPage() {
           <div className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-3">Recap annuel {year}</div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <div><div className="text-xs text-slate-500">Won total</div><div className="text-xl font-black text-slate-900">{fmtMAD(annual.total,true)}</div></div>
-            <div><div className="text-xs text-slate-500">CIRS (infra)</div><div className={`text-xl font-black ${annual.cirsR>=CIRS_MIN?'text-emerald-600':'text-amber-600'}`}>{(annual.cirsR*100).toFixed(1)}%</div></div>
+            <div><div className="text-xs text-slate-500">ICS (infra)</div><div className={`text-xl font-black ${annual.icsR>=ICS_MIN?'text-emerald-600':'text-amber-600'}`}>{(annual.icsR*100).toFixed(1)}%</div></div>
             <div><div className="text-xs text-slate-500">Trimestres valides</div><div className="text-xl font-black text-slate-900">{quarters.filter(q=>q.ok).length} / 4</div></div>
             <div><div className="text-xs text-slate-500">Commissions gagnees</div><div className={`text-xl font-black ${salimEarned>0?'text-emerald-600':'text-slate-400'}`}>{fmtMAD(salimEarned)}</div></div>
           </div>
@@ -212,16 +212,16 @@ export default function KPIPage() {
                 </div>
                 <div className="text-xs mt-1 text-slate-500">{selQ.total>=selQ.target?'OK':'Manque '+fmtMAD(selQ.target-selQ.total,true)}</div>
               </div>
-              <div className={`rounded-xl p-4 ${selQ.cirsR>=CIRS_MIN?'bg-emerald-100':'bg-white border'}`}>
-                <div className="text-xs font-semibold text-slate-500 mb-2">Condition 2 — CIRS ≥ 50%</div>
-                <div className={`text-2xl font-black ${selQ.cirsR>=CIRS_MIN?'text-emerald-700':'text-amber-600'}`}>{(selQ.cirsR*100).toFixed(1)}%</div>
+              <div className={`rounded-xl p-4 ${selQ.icsR>=ICS_MIN?'bg-emerald-100':'bg-white border'}`}>
+                <div className="text-xs font-semibold text-slate-500 mb-2">Condition 2 — ICS ≥ 50%</div>
+                <div className={`text-2xl font-black ${selQ.icsR>=ICS_MIN?'text-emerald-700':'text-amber-600'}`}>{(selQ.icsR*100).toFixed(1)}%</div>
                 <div className="mt-2 h-4 rounded-full overflow-hidden flex">
                   <div className="bg-slate-800 transition-all" style={{width:`${selQ.csgR*100}%`}}/>
                   <div className="bg-blue-500 flex-1"/>
                 </div>
                 <div className="flex justify-between text-xs mt-1 text-slate-500">
                   <span>CSG {(selQ.csgR*100).toFixed(0)}%</span>
-                  <span>CIRS {(selQ.cirsR*100).toFixed(0)}% {selQ.cirsR>=CIRS_MIN?'':'⚠️'}</span>
+                  <span>ICS {(selQ.icsR*100).toFixed(0)}% {selQ.icsR>=ICS_MIN?'':'⚠️'}</span>
                 </div>
               </div>
             </div>
@@ -231,7 +231,7 @@ export default function KPIPage() {
         <div className="rounded-2xl border bg-white p-4">
           <div className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Regles commissions {year}</div>
           <div className="text-sm text-slate-600 space-y-1">
-            <div>Chaque trimestre : Won ≥ <strong>7,5M MAD</strong> ET CIRS ≥ <strong>50%</strong> → <strong>5 000 MAD</strong></div>
+            <div>Chaque trimestre : Won ≥ <strong>7,5M MAD</strong> ET ICS ≥ <strong>50%</strong> → <strong>5 000 MAD</strong></div>
             <div>4 trimestres = <strong>20 000 MAD</strong> sur l'annee</div>
           </div>
         </div>
@@ -294,9 +294,9 @@ export default function KPIPage() {
             <div className="text-xs text-slate-500 mt-0.5">{nc.goodMix?'Mix OK 50/50':'Cible 40-60%'}</div>
           </div>
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">CIRS</div>
-            <div className={`text-2xl font-bold mt-1 ${nc.goodMix?'text-emerald-600':'text-amber-600'}`}>{(annual.cirsR*100).toFixed(1)}%</div>
-            <div className="text-xs text-slate-500 mt-0.5">{fmtMAD(annual.cirs,true)}</div>
+            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">ICS</div>
+            <div className={`text-2xl font-bold mt-1 ${nc.goodMix?'text-emerald-600':'text-amber-600'}`}>{(annual.icsR*100).toFixed(1)}%</div>
+            <div className="text-xs text-slate-500 mt-0.5">{fmtMAD(annual.ics,true)}</div>
           </div>
         </div>
 
@@ -365,7 +365,7 @@ export default function KPIPage() {
                   <div className="flex justify-between text-xs mt-1 text-slate-500">
                     <span>CSG {(annual.csgR*100).toFixed(1)}%</span>
                     <span className={nc.goodMix?'text-emerald-600 font-bold':'text-amber-600'}>{nc.goodMix?'Mix OK':'Cible 40-60%'}</span>
-                    <span>CIRS {(annual.cirsR*100).toFixed(1)}%</span>
+                    <span>ICS {(annual.icsR*100).toFixed(1)}%</span>
                   </div>
                 </div>
               </div>

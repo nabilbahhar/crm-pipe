@@ -31,7 +31,7 @@ const STAGE_ORDER = ['Lead','Discovery','Qualified','Solutioning','Proposal Sent
 
 const C = {
   pipeline: '#2563eb', forecast: '#7c3aed', commit: '#d97706',
-  won: '#16a34a', lost: '#dc2626', csg: '#0f172a', cirs: '#64748b',
+  won: '#16a34a', lost: '#dc2626', csg: '#0f172a', ics: '#64748b',
   grid: '#f1f5f9',
 }
 
@@ -61,14 +61,14 @@ const rangeMonths = (from: string, to: string): string[] => {
   return res
 }
 const normStage  = (s: any) => String(s||'').trim() || 'Lead'
-const buGroup = (s: SBU): 'CSG'|'CIRS' => (s==='CSG'?'CSG':'CIRS')
+const buGroup = (s: SBU): 'CSG'|'ICS' => (s==='CSG'?'CSG':'ICS')
 
 const daysBetween = (a: string, b: string) => {
   const ms = new Date(b).getTime() - new Date(a).getTime()
   return Math.max(0, Math.floor(ms/86400000))
 }
 
-type NormLine = { sbu: SBU; group: 'CSG'|'CIRS'; card: string; amount: number }
+type NormLine = { sbu: SBU; group: 'CSG'|'ICS'; card: string; amount: number }
 type Deal = {
   id: string; account_id: string|null; account_name: string; title: string
   stage: string; status: 'Open'|'Won'|'Lost'; prob: number; amount: number
@@ -178,6 +178,26 @@ function ChartTip({active,payload,label,isAmt}:any) {
             {p.name}
           </span>
           <span className="font-bold text-slate-900">{isAmt?fmt(p.value)+' MAD':p.value}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function MargeTip({active,payload,label}:any) {
+  if (!active||!payload?.length) return null
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white/95 backdrop-blur p-3 shadow-xl text-xs min-w-[140px]">
+      <div className="mb-2 font-bold text-slate-800">{label}</div>
+      {payload.map((p:any,i:number)=>(
+        <div key={i} className="flex items-center justify-between gap-3 mt-1">
+          <span className="flex items-center gap-1.5 text-slate-500">
+            <span className="h-2 w-2 rounded-full shrink-0" style={{background:p.color}}/>
+            {p.name}
+          </span>
+          <span className="font-bold text-slate-900">
+            {p.dataKey==='pct' ? `${p.value}%` : `${fmt(p.value)} MAD`}
+          </span>
         </div>
       ))}
     </div>
@@ -405,8 +425,12 @@ export default function Dashboard() {
 
     // Annual Won CA
     const annualWon = deals.filter(d=>d.status==='Won'&&d.closingYm.startsWith(String(year))).reduce((s,d)=>s+d.amount,0)
-    // Annual Facturé = invoices payées cette année (objectif principal)
+    // Annual Facturé = ALL invoices emitted this year (any status)
     const annualFacture = invoices
+      .filter((i: any) => String(i.issue_date||i.created_at||'').startsWith(String(year)))
+      .reduce((s: number, i: any) => s + Number(i.amount||0), 0)
+    // Annual Payé = invoices status='payee' this year
+    const annualPaye = invoices
       .filter((i: any) => String(i.issue_date||i.created_at||'').startsWith(String(year)) && i.status === 'payee')
       .reduce((s: number, i: any) => s + Number(i.amount||0), 0)
     const annualCoverage = ANNUAL_TARGET>0 ? Math.min(100,Math.round(annualFacture/ANNUAL_TARGET*100)) : 0
@@ -423,7 +447,7 @@ export default function Dashboard() {
       commitAmt, commitCount:commitDeals.length,
       wonAmt, wonCount:wonDeals.length, lostAmt, lostCount:lostDeals.length,
       winRate, avgDeal, conf,
-      annualWon, annualFacture, annualCoverage,
+      annualWon, annualFacture, annualPaye, annualCoverage,
       pipeVsPrev: prevPipe>0?Math.round((pipeAmt-prevPipe)/prevPipe*100):null,
       wonVsPrev:  prevWon>0?Math.round((wonAmt-prevWon)/prevWon*100):null,
     }
@@ -449,13 +473,13 @@ export default function Dashboard() {
     return {d, total:d.reduce((s,x)=>s+x.value,0)}
   },[openDeals,wonDeals,lostDeals])
 
-  // ── Mix BU CSG vs CIRS ──────────────────────────────────────────────────
+  // ── Mix BU CSG vs ICS ──────────────────────────────────────────────────
   const mixBU = useMemo(()=>{
-    let csgA=0,cirsA=0
+    let csgA=0,icsA=0
     for (const d of openDeals)
-      for (const ln of d.lines) { if (ln.group==='CSG') csgA+=ln.amount; else cirsA+=ln.amount }
+      for (const ln of d.lines) { if (ln.group==='CSG') csgA+=ln.amount; else icsA+=ln.amount }
     const data=[
-      {name:'CIRS',value:cirsA,color:C.cirs},
+      {name:'ICS',value:icsA,color:C.ics},
       {name:'CSG', value:csgA, color:C.csg },
     ]
     return {data,total:data.reduce((s,x)=>s+x.value,0)}
@@ -497,7 +521,9 @@ export default function Dashboard() {
       map.set(k,cur)
     }
     for (const d of inPeriod) for (const ln of d.lines) add(String(ln.sbu),ln.amount,d.prob,d.status)
-    return [...map.entries()].map(([sbu,x])=>{
+    return [...map.entries()]
+      .filter(([sbu])=>sbu!=='MULTI')
+      .map(([sbu,x])=>{
       const wr=x.wonCount+x.lostCount>0?Math.round(x.wonCount/(x.wonCount+x.lostCount)*100):0
       const avg=x.count>0?Math.round(x.pipeline/x.count):0
       return {sbu,...x,winRate:wr,avgSize:avg} as Row
@@ -564,10 +590,10 @@ export default function Dashboard() {
 
   // ── Top Clients ──────────────────────────────────────────────────────────
   const topClients = useMemo(()=>{
-    const map=new Map<string,{client:string;accountId:string|null;csg:number;cirs:number;total:number;deals:number;region:string}>()
+    const map=new Map<string,{client:string;accountId:string|null;csg:number;ics:number;total:number;deals:number;region:string}>()
     for (const d of scopeDeals) {
-      const key=d.account_name; const cur=map.get(key)||{client:key,accountId:d.account_id,csg:0,cirs:0,total:0,deals:0,region:'—'}
-      for(const ln of d.lines){if(ln.group==='CSG')cur.csg+=ln.amount;else cur.cirs+=ln.amount};cur.total=cur.csg+cur.cirs;cur.deals++
+      const key=d.account_name; const cur=map.get(key)||{client:key,accountId:d.account_id,csg:0,ics:0,total:0,deals:0,region:'—'}
+      for(const ln of d.lines){if(ln.group==='CSG')cur.csg+=ln.amount;else cur.ics+=ln.amount};cur.total=cur.csg+cur.ics;cur.deals++
       // region from accounts
       const acc=d.account_id?accountMap.get(d.account_id):undefined
       if (acc?.region) cur.region=acc.region
@@ -918,7 +944,7 @@ export default function Dashboard() {
                   {buFilters.size>0&&<button onClick={()=>setBuFilters(new Set())} className="text-xs text-slate-400 hover:text-slate-600">Effacer</button>}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {['CSG','CIRS'].map(g=>(
+                  {['CSG','ICS'].map(g=>(
                     <button key={g} type="button" onClick={()=>toggleSet(setBuFilters,g)}
                       className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold border transition-all
                         ${buFilters.has(g)?'bg-slate-900 text-white border-slate-900':'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'}`}>
@@ -952,7 +978,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ══ OBJECTIF ANNUEL PROGRESS BAR ══ */}
+        {/* ══ OBJECTIF ANNUEL — 3 BARRES DE PROGRESSION ══ */}
         <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
@@ -960,7 +986,7 @@ export default function Dashboard() {
                 <Trophy className="h-5 w-5"/>
               </div>
               <div>
-                <div className="text-sm font-black text-slate-900">Objectif annuel {year} — Facturé</div>
+                <div className="text-sm font-black text-slate-900">Objectif annuel {year}</div>
                 {editingTarget ? (
                   <div className="flex items-center gap-1">
                     <input value={targetInput} onChange={e => setTargetInput(e.target.value)}
@@ -978,33 +1004,64 @@ export default function Dashboard() {
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-6">
-              <div className="text-right">
-                <div className="text-2xl font-black text-emerald-700">{fmt(kpis.annualFacture)} MAD</div>
-                <div className="text-xs text-slate-500">Facturé {year}</div>
-              </div>
-              <div className="text-right">
-                <div className="text-xl font-black text-slate-900">{kpis.annualCoverage}%</div>
-                <div className="text-xs text-slate-500">de l'objectif</div>
-              </div>
-              <div className="text-right">
-                <div className="text-lg font-bold text-amber-600">{fmt(kpis.annualWon)} MAD</div>
-                <div className="text-xs text-slate-500">Won (CA signé)</div>
-              </div>
-              <div className="text-right">
-                <div className="text-lg font-bold text-slate-700">{fmt(Math.max(0,ANNUAL_TARGET-kpis.annualFacture))} MAD</div>
-                <div className="text-xs text-slate-500">restant</div>
-              </div>
+            <div className="text-right">
+              <div className="text-lg font-bold text-slate-700">{fmt(Math.max(0,ANNUAL_TARGET-kpis.annualFacture))} MAD</div>
+              <div className="text-xs text-slate-500">restant à facturer</div>
             </div>
           </div>
-          <div className="px-6 pb-4">
-            <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-700 ${kpis.annualCoverage>=100?'bg-emerald-500':kpis.annualCoverage>=70?'bg-amber-400':'bg-blue-500'}`}
-                style={{width:`${kpis.annualCoverage}%`}}
-              />
+          <div className="px-6 pb-5 space-y-3">
+            {/* 3 progress bars side by side */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {/* Gagné (Won) — green */}
+              {(() => {
+                const wonPct = ANNUAL_TARGET>0 ? Math.min(100,Math.round(kpis.annualWon/ANNUAL_TARGET*100)) : 0
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-emerald-700">Gagné (Won)</span>
+                      <span className="text-xs font-black text-emerald-700">{wonPct}%</span>
+                    </div>
+                    <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+                      <div className="h-full rounded-full bg-emerald-500 transition-all duration-700" style={{width:`${wonPct}%`}}/>
+                    </div>
+                    <div className="mt-1 text-[10px] font-semibold text-slate-500">{fmt(kpis.annualWon)} MAD</div>
+                  </div>
+                )
+              })()}
+              {/* Facturé — blue (main KPI) */}
+              {(() => {
+                const factPct = ANNUAL_TARGET>0 ? Math.min(100,Math.round(kpis.annualFacture/ANNUAL_TARGET*100)) : 0
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-blue-700">Facturé</span>
+                      <span className="text-xs font-black text-blue-700">{factPct}%</span>
+                    </div>
+                    <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+                      <div className="h-full rounded-full bg-blue-500 transition-all duration-700" style={{width:`${factPct}%`}}/>
+                    </div>
+                    <div className="mt-1 text-[10px] font-semibold text-slate-500">{fmt(kpis.annualFacture)} MAD</div>
+                  </div>
+                )
+              })()}
+              {/* Payé — amber */}
+              {(() => {
+                const payePct = ANNUAL_TARGET>0 ? Math.min(100,Math.round(kpis.annualPaye/ANNUAL_TARGET*100)) : 0
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-bold text-amber-700">Payé</span>
+                      <span className="text-xs font-black text-amber-700">{payePct}%</span>
+                    </div>
+                    <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+                      <div className="h-full rounded-full bg-amber-500 transition-all duration-700" style={{width:`${payePct}%`}}/>
+                    </div>
+                    <div className="mt-1 text-[10px] font-semibold text-slate-500">{fmt(kpis.annualPaye)} MAD</div>
+                  </div>
+                )
+              })()}
             </div>
-            <div className="mt-1.5 flex justify-between text-[10px] text-slate-400 font-medium">
+            <div className="flex justify-between text-[10px] text-slate-400 font-medium">
               <span>0</span><span>{fmt(ANNUAL_TARGET*0.25)} (Q1)</span><span>{fmt(ANNUAL_TARGET*0.5)} (Q2)</span><span>{fmt(ANNUAL_TARGET*0.75)} (Q3)</span><span>{fmt(ANNUAL_TARGET)}</span>
             </div>
           </div>
@@ -1070,7 +1127,7 @@ export default function Dashboard() {
                 {overdueOrders.length} commande{overdueOrders.length > 1 ? 's' : ''} en retard &gt; 24h
               </div>
               <div className="text-sm text-red-600 mt-0.5">
-                Ces deals Won ont une fiche remplie mais la commande n'a pas encore été placée — action requise.
+                Ces deals Won ont une fiche achat remplie mais la commande n'a pas encore été placée par l'équipe supply depuis plus de 24h. Action requise : relancer Salim ou passer la commande.
               </div>
             </div>
             <div className="shrink-0 flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-2 text-sm font-bold text-white group-hover:bg-red-600 transition-colors">
@@ -1147,84 +1204,10 @@ export default function Dashboard() {
           </Link>
         )}
 
-        {/* ─── SECTION: Supply & Opérations ─── */}
+        {/* ─── SECTION: Sales & Pipeline ─── */}
         <div className="flex items-center gap-3 mt-2">
           <div className="h-px flex-1 bg-slate-200" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Supply & Opérations</span>
-          <div className="h-px flex-1 bg-slate-200" />
-        </div>
-
-        {/* ══ SUPPLY STATUTS + MARGE PAR BU ══ */}
-        {(filteredSupplyOrders.length > 0 || margeStats.buArr.length > 0) && (
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {filteredSupplyOrders.length > 0 && (
-              <Panel title="📦 Supply Chain — Statuts" sub="Commandes en cours par étape">
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    {key:'a_commander',label:'À commander',icon:'🟡',color:'text-amber-700', bg:'bg-amber-50',  border:'border-amber-200'},
-                    {key:'place',      label:'Placé',      icon:'🔵',color:'text-blue-700',  bg:'bg-blue-50',   border:'border-blue-200'},
-                    {key:'commande',   label:'Commandé',   icon:'🟣',color:'text-violet-700',bg:'bg-violet-50', border:'border-violet-200'},
-                    {key:'en_stock',   label:'En stock',   icon:'🟠',color:'text-orange-700',bg:'bg-orange-50', border:'border-orange-200'},
-                    {key:'livre',      label:'Livré',      icon:'🟢',color:'text-emerald-700',bg:'bg-emerald-50',border:'border-emerald-200'},
-                    {key:'facture',    label:'Facturé',    icon:'✅',color:'text-slate-600', bg:'bg-slate-100', border:'border-slate-200'},
-                  ].map(s=>(
-                    <a key={s.key} href="/supply"
-                      className={`flex flex-col items-center justify-center rounded-2xl border p-3 transition-all hover:shadow-md ${s.bg} ${s.border}`}>
-                      <div className="text-xl mb-1">{s.icon}</div>
-                      <div className={`text-2xl font-black ${s.color}`}>{supplyCounts[s.key]||0}</div>
-                      <div className={`text-[10px] font-semibold text-center mt-0.5 ${s.color}`}>{s.label}</div>
-                    </a>
-                  ))}
-                </div>
-              </Panel>
-            )}
-            {margeStats.buArr.length > 0 && (
-              <Panel title="💰 Marge par BU" sub="Vente vs Achat vs Marge HT">
-                <div className="h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={margeStats.buArr} margin={{top:4,right:10,bottom:4,left:0}} barGap={2} barCategoryGap="28%">
-                      <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4" vertical={false}/>
-                      <XAxis dataKey="bu" tick={{fontSize:11,fill:'#475569',fontWeight:600}} axisLine={false} tickLine={false}/>
-                      <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
-                      <Tooltip content={<ChartTip isAmt={true}/>}/>
-                      <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
-                      <Bar name="Vente HT" dataKey="vente" fill="#1e293b" radius={[4,4,0,0]}/>
-                      <Bar name="Achat HT" dataKey="achat" fill="#94a3b8" radius={[4,4,0,0]}/>
-                      <Bar name="Marge"    dataKey="marge" fill="#10b981" radius={[4,4,0,0]}/>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </Panel>
-            )}
-          </div>
-        )}
-
-        {/* ══ TENDANCE MARGE MENSUELLE ══ */}
-        {margeStats.trendMarge.some(m=>m.marge>0) && (
-          <Panel title={`📈 Évolution marge ${year}`} sub="Marge brute MAD et % par mois">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={margeStats.trendMarge} margin={{top:10,right:10,bottom:5,left:0}}>
-                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4"/>
-                  <XAxis dataKey="month" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
-                  <YAxis yAxisId="amt" tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
-                  <YAxis yAxisId="pct" orientation="right" tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={36} tickFormatter={(v:any)=>`${v}%`}/>
-                  <Tooltip content={<ChartTip isAmt={true}/>}/>
-                  <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
-                  <Bar yAxisId="amt" name="Marge MAD" dataKey="marge" fill="#10b981" radius={[4,4,0,0]} opacity={0.85}/>
-                  <Line yAxisId="pct" type="monotone" dataKey="pct" name="Marge %" stroke="#f59e0b" strokeWidth={2.5} dot={{r:3,fill:'#f59e0b'}} activeDot={{r:5}}/>
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </Panel>
-        )}
-
-        {/* Alertes qualité déplacées vers /tasks */}
-
-        {/* ─── SECTION: Pipeline & Performance ─── */}
-        <div className="flex items-center gap-3 mt-2">
-          <div className="h-px flex-1 bg-slate-200" />
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Pipeline & Performance</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Sales & Pipeline</span>
           <div className="h-px flex-1 bg-slate-200" />
         </div>
 
@@ -1260,8 +1243,8 @@ export default function Dashboard() {
             )}
           </Panel>
 
-          {/* Mix CSG/CIRS */}
-          <Panel title="Mix CSG vs CIRS" sub="Open · répartition BU">
+          {/* Mix CSG/ICS */}
+          <Panel title="Mix CSG vs ICS" sub="Open · répartition BU">
             {mixBU.total<=0?<Empty/>:(
               <>
                 <div className="h-64">
@@ -1316,6 +1299,51 @@ export default function Dashboard() {
             )}
           </Panel>
         </div>
+
+        {/* ══ TENDANCE MENSUELLE ══ */}
+        <Panel title={`Tendance ${year}`} sub="Total Open / Forecast / Commit / Won — par mois">
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={trend} margin={{top:10,right:10,bottom:5,left:0}}>
+                <defs>
+                  <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4"/>
+                <XAxis dataKey="month" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
+                <Tooltip content={<ChartTip isAmt={true}/>}/>
+                <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
+                <Area type="monotone" dataKey="total" name="Total Open" fill="url(#gradTotal)" stroke="#1e293b" strokeWidth={2.5} fillOpacity={1} dot={false}/>
+                <Line type="monotone" dataKey="forecast" name="Forecast" stroke="#3b82f6" strokeWidth={2} dot={false} strokeDasharray="6 3"/>
+                <Line type="monotone" dataKey="commit"   name="Commit"   stroke="#f59e0b" strokeWidth={2.5} dot={false}/>
+                <Line type="monotone" dataKey="won"      name="Won"      stroke="#10b981" strokeWidth={3} dot={{r:3,fill:'#10b981'}} activeDot={{r:5}}/>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </Panel>
+
+        {/* ══ PIPELINE PAR BU ══ */}
+        <Panel title="Pipeline par BU" sub={`Open · Total vs Forecast vs Won`}>
+          {bySBU.length===0?<Empty/>:(
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={bySBU} margin={{top:10,right:10,bottom:10,left:0}} barGap={3} barCategoryGap="30%">
+                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4" vertical={false}/>
+                  <XAxis dataKey="sbu" tick={{fontSize:12,fill:'#475569',fontWeight:600}} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
+                  <Tooltip content={<ChartTip isAmt={true}/>}/>
+                  <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
+                  <Bar name="Total Open" dataKey="total"    fill="#1e293b" radius={[5,5,0,0]}/>
+                  <Bar name="Forecast"   dataKey="forecast" fill="#3b82f6" radius={[5,5,0,0]}/>
+                  <Bar name="Won"        dataKey="won"      fill="#10b981" radius={[5,5,0,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </Panel>
 
         {/* ══ BU SCORECARD ══ */}
         <Panel title="📊 Scorecard par BU — Période" sub={`${periodLabel} · Pipeline / Forecast / Won / Win Rate / Taille moy.`}>
@@ -1378,49 +1406,75 @@ export default function Dashboard() {
           </div>
         </Panel>
 
-        {/* ══ ROW : Pipeline BU + Tendance ══ */}
+        {/* ══ ROW : Top Open + Top Won ══ */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Panel title="Pipeline par BU" sub={`Open · Total vs Forecast vs Won`}>
-            {bySBU.length===0?<Empty/>:(
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={bySBU} margin={{top:10,right:10,bottom:10,left:0}} barGap={3} barCategoryGap="30%">
-                    <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4" vertical={false}/>
-                    <XAxis dataKey="sbu" tick={{fontSize:12,fill:'#475569',fontWeight:600}} axisLine={false} tickLine={false}/>
-                    <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
-                    <Tooltip content={<ChartTip isAmt={true}/>}/>
-                    <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
-                    <Bar name="Total Open" dataKey="total"    fill="#1e293b" radius={[5,5,0,0]}/>
-                    <Bar name="Forecast"   dataKey="forecast" fill="#3b82f6" radius={[5,5,0,0]}/>
-                    <Bar name="Won"        dataKey="won"      fill="#10b981" radius={[5,5,0,0]}/>
-                  </BarChart>
-                </ResponsiveContainer>
+          <Panel title="🎯 Top Open Deals" sub="Trié par montant décroissant">
+            {topOpen.length===0?<Empty/>:(
+              <div className="overflow-auto max-h-64 -mx-5 px-5">
+                <table className="w-full text-sm min-w-[420px]">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="border-b border-slate-100 text-xs font-semibold text-slate-400">
+                      <th className="pb-2 text-left">Client</th>
+                      <th className="pb-2 text-left">Deal</th>
+                      <th className="pb-2 text-left">Étape</th>
+                      <th className="pb-2 text-right">Montant</th>
+                      <th className="pb-2 text-right">Prob</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {topOpen.map(d=>(
+                      <tr key={d.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="py-2 pr-3 font-bold text-slate-900 text-xs whitespace-nowrap">{d.account_name}</td>
+                        <td className="py-2 pr-3 text-xs text-slate-600 max-w-[130px] truncate">
+                          <Link href={`/opportunities/${d.id}`} className="hover:text-blue-600 hover:underline">{d.title}</Link>
+                        </td>
+                        <td className="py-2 pr-3"><StagePill stage={d.stage}/></td>
+                        <td className="py-2 text-right font-black text-slate-900 tabular-nums text-xs whitespace-nowrap">{fmt(d.amount)}</td>
+                        <td className="py-2 text-right text-slate-500 tabular-nums text-xs">{d.prob}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </Panel>
 
-          <Panel title={`Tendance ${year}`} sub="Total Open / Forecast / Commit / Won — par mois">
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={trend} margin={{top:10,right:10,bottom:5,left:0}}>
-                  <defs>
-                    <linearGradient id="gradTotal" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25}/>
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4"/>
-                  <XAxis dataKey="month" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
-                  <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
-                  <Tooltip content={<ChartTip isAmt={true}/>}/>
-                  <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
-                  <Area type="monotone" dataKey="total" name="Total Open" fill="url(#gradTotal)" stroke="#1e293b" strokeWidth={2.5} fillOpacity={1} dot={false}/>
-                  <Line type="monotone" dataKey="forecast" name="Forecast" stroke="#3b82f6" strokeWidth={2} dot={false} strokeDasharray="6 3"/>
-                  <Line type="monotone" dataKey="commit"   name="Commit"   stroke="#f59e0b" strokeWidth={2.5} dot={false}/>
-                  <Line type="monotone" dataKey="won"      name="Won"      stroke="#10b981" strokeWidth={3} dot={{r:3,fill:'#10b981'}} activeDot={{r:5}}/>
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
+          <Panel title="🏆 Top Won Deals" sub="Deals clôturés sur la période">
+            {topWon.length===0?(
+              <div className="flex h-32 items-center justify-center gap-2 text-sm font-semibold text-emerald-600">
+                <Award className="h-5 w-5"/>Aucun Won pour l'instant
+              </div>
+            ):(
+              <div className="overflow-auto max-h-64 -mx-5 px-5">
+                <table className="w-full text-sm min-w-[360px]">
+                  <thead className="sticky top-0 bg-white">
+                    <tr className="border-b border-slate-100 text-xs font-semibold text-slate-400">
+                      <th className="pb-2 text-left">Client</th>
+                      <th className="pb-2 text-left">Deal</th>
+                      <th className="pb-2 text-left">BU</th>
+                      <th className="pb-2 text-right">Montant</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {topWon.map(d=>{
+                      const best=[...(d.lines||[])].sort((a,b)=>b.amount-a.amount)[0]
+                      return (
+                        <tr key={d.id} className="hover:bg-emerald-50/30 transition-colors">
+                          <td className="py-2 pr-3 font-bold text-slate-900 text-xs whitespace-nowrap">{d.account_name}</td>
+                          <td className="py-2 pr-3 text-xs text-slate-600 max-w-[150px] truncate">
+                            <Link href={`/opportunities/${d.id}`} className="hover:text-emerald-600 hover:underline">{d.title}</Link>
+                          </td>
+                          <td className="py-2 pr-3">
+                            <span className="text-xs font-semibold" style={{color:SBU_COLORS[String(best?.sbu)]||'#64748b'}}>{String(best?.sbu||'—')}</span>
+                          </td>
+                          <td className="py-2 text-right font-black text-emerald-700 tabular-nums text-xs whitespace-nowrap">{fmt(d.amount)}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Panel>
         </div>
 
@@ -1433,7 +1487,7 @@ export default function Dashboard() {
 
         {/* ══ ROW : Top Clients + Top Vendors ══ */}
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Panel title="Top 5 Clients" sub={`${scope==='open_only'?'Open':scope==='won_only'?'Won':'Tout'} · CSG vs CIRS`}>
+          <Panel title="Top 5 Clients" sub={`${scope==='open_only'?'Open':scope==='won_only'?'Won':'Tout'} · CSG vs ICS`}>
             {topClients.length===0?<Empty/>:(
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1443,7 +1497,7 @@ export default function Dashboard() {
                     <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
                     <Tooltip content={<ChartTip isAmt={true}/>}/>
                     <Legend wrapperStyle={{fontSize:11,paddingTop:4}}/>
-                    <Bar name="CIRS" dataKey="cirs" stackId="a" fill="#64748b"/>
+                    <Bar name="ICS" dataKey="ics" stackId="a" fill="#64748b"/>
                     <Bar name="CSG"  dataKey="csg"  stackId="a" fill="#1e293b" radius={[6,6,0,0]}/>
                   </BarChart>
                 </ResponsiveContainer>
@@ -1527,77 +1581,52 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ══ ROW : Top Open + Top Won ══ */}
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Panel title="🎯 Top Open Deals" sub="Trié par montant décroissant">
-            {topOpen.length===0?<Empty/>:(
-              <div className="overflow-auto max-h-64 -mx-5 px-5">
-                <table className="w-full text-sm min-w-[420px]">
-                  <thead className="sticky top-0 bg-white">
-                    <tr className="border-b border-slate-100 text-xs font-semibold text-slate-400">
-                      <th className="pb-2 text-left">Client</th>
-                      <th className="pb-2 text-left">Deal</th>
-                      <th className="pb-2 text-left">Étape</th>
-                      <th className="pb-2 text-right">Montant</th>
-                      <th className="pb-2 text-right">Prob</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {topOpen.map(d=>(
-                      <tr key={d.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-2 pr-3 font-bold text-slate-900 text-xs whitespace-nowrap">{d.account_name}</td>
-                        <td className="py-2 pr-3 text-xs text-slate-600 max-w-[130px] truncate">
-                          <Link href={`/opportunities/${d.id}`} className="hover:text-blue-600 hover:underline">{d.title}</Link>
-                        </td>
-                        <td className="py-2 pr-3"><StagePill stage={d.stage}/></td>
-                        <td className="py-2 text-right font-black text-slate-900 tabular-nums text-xs whitespace-nowrap">{fmt(d.amount)}</td>
-                        <td className="py-2 text-right text-slate-500 tabular-nums text-xs">{d.prob}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Panel>
-
-          <Panel title="🏆 Top Won Deals" sub="Deals clôturés sur la période">
-            {topWon.length===0?(
-              <div className="flex h-32 items-center justify-center gap-2 text-sm font-semibold text-emerald-600">
-                <Award className="h-5 w-5"/>Aucun Won pour l'instant
-              </div>
-            ):(
-              <div className="overflow-auto max-h-64 -mx-5 px-5">
-                <table className="w-full text-sm min-w-[360px]">
-                  <thead className="sticky top-0 bg-white">
-                    <tr className="border-b border-slate-100 text-xs font-semibold text-slate-400">
-                      <th className="pb-2 text-left">Client</th>
-                      <th className="pb-2 text-left">Deal</th>
-                      <th className="pb-2 text-left">BU</th>
-                      <th className="pb-2 text-right">Montant</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {topWon.map(d=>{
-                      const best=[...(d.lines||[])].sort((a,b)=>b.amount-a.amount)[0]
-                      return (
-                        <tr key={d.id} className="hover:bg-emerald-50/30 transition-colors">
-                          <td className="py-2 pr-3 font-bold text-slate-900 text-xs whitespace-nowrap">{d.account_name}</td>
-                          <td className="py-2 pr-3 text-xs text-slate-600 max-w-[150px] truncate">
-                            <Link href={`/opportunities/${d.id}`} className="hover:text-emerald-600 hover:underline">{d.title}</Link>
-                          </td>
-                          <td className="py-2 pr-3">
-                            <span className="text-xs font-semibold" style={{color:SBU_COLORS[String(best?.sbu)]||'#64748b'}}>{String(best?.sbu||'—')}</span>
-                          </td>
-                          <td className="py-2 text-right font-black text-emerald-700 tabular-nums text-xs whitespace-nowrap">{fmt(d.amount)}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Panel>
+        {/* ─── SECTION: Marge & Rentabilité ─── */}
+        <div className="flex items-center gap-3 mt-2">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Marge & Rentabilité</span>
+          <div className="h-px flex-1 bg-slate-200" />
         </div>
+
+        {/* ══ MARGE PAR BU ══ */}
+        {margeStats.buArr.length > 0 && (
+          <Panel title="💰 Marge par BU" sub="Vente vs Achat vs Marge HT">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={margeStats.buArr} margin={{top:4,right:10,bottom:4,left:0}} barGap={2} barCategoryGap="28%">
+                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4" vertical={false}/>
+                  <XAxis dataKey="bu" tick={{fontSize:11,fill:'#475569',fontWeight:600}} axisLine={false} tickLine={false}/>
+                  <YAxis tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
+                  <Tooltip content={<ChartTip isAmt={true}/>}/>
+                  <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
+                  <Bar name="Vente HT" dataKey="vente" fill="#1e293b" radius={[4,4,0,0]}/>
+                  <Bar name="Achat HT" dataKey="achat" fill="#94a3b8" radius={[4,4,0,0]}/>
+                  <Bar name="Marge"    dataKey="marge" fill="#10b981" radius={[4,4,0,0]}/>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+        )}
+
+        {/* ══ TENDANCE MARGE MENSUELLE ══ */}
+        {margeStats.trendMarge.some(m=>m.marge>0) && (
+          <Panel title={`📈 Évolution marge ${year}`} sub="Marge brute MAD et % par mois">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={margeStats.trendMarge} margin={{top:10,right:10,bottom:5,left:0}}>
+                  <CartesianGrid stroke="#f1f5f9" strokeDasharray="4 4"/>
+                  <XAxis dataKey="month" tick={{fontSize:11,fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                  <YAxis yAxisId="amt" tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={52} tickFormatter={fmt}/>
+                  <YAxis yAxisId="pct" orientation="right" tick={{fontSize:10,fill:'#94a3b8'}} axisLine={false} tickLine={false} width={36} tickFormatter={(v:any)=>`${v}%`}/>
+                  <Tooltip content={<MargeTip/>}/>
+                  <Legend wrapperStyle={{fontSize:11,paddingTop:8}}/>
+                  <Bar yAxisId="amt" name="Marge MAD" dataKey="marge" fill="#10b981" radius={[4,4,0,0]} opacity={0.85}/>
+                  <Line yAxisId="pct" type="monotone" dataKey="pct" name="Marge %" stroke="#f59e0b" strokeWidth={2.5} dot={{r:3,fill:'#f59e0b'}} activeDot={{r:5}}/>
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </Panel>
+        )}
 
         {/* ─── SECTION: Logistique & Finance ─── */}
         <div className="flex items-center gap-3 mt-2">
@@ -1606,10 +1635,30 @@ export default function Dashboard() {
           <div className="h-px flex-1 bg-slate-200" />
         </div>
 
-        {/* Retards & stale déplacés vers /tasks */}
+        {/* ══ SUPPLY CHAIN STATUTS ══ */}
+        {filteredSupplyOrders.length > 0 && (
+          <Panel title="📦 Supply Chain — Statuts" sub="Commandes en cours par étape">
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                {key:'a_commander',label:'À commander',icon:'🟡',color:'text-amber-700', bg:'bg-amber-50',  border:'border-amber-200'},
+                {key:'place',      label:'Placé',      icon:'🔵',color:'text-blue-700',  bg:'bg-blue-50',   border:'border-blue-200'},
+                {key:'commande',   label:'Commandé',   icon:'🟣',color:'text-violet-700',bg:'bg-violet-50', border:'border-violet-200'},
+                {key:'en_stock',   label:'En stock',   icon:'🟠',color:'text-orange-700',bg:'bg-orange-50', border:'border-orange-200'},
+                {key:'livre',      label:'Livré',      icon:'🟢',color:'text-emerald-700',bg:'bg-emerald-50',border:'border-emerald-200'},
+                {key:'facture',    label:'Facturé',    icon:'✅',color:'text-slate-600', bg:'bg-slate-100', border:'border-slate-200'},
+              ].map(s=>(
+                <a key={s.key} href="/supply"
+                  className={`flex flex-col items-center justify-center rounded-2xl border p-3 transition-all hover:shadow-md ${s.bg} ${s.border}`}>
+                  <div className="text-xl mb-1">{s.icon}</div>
+                  <div className={`text-2xl font-black ${s.color}`}>{supplyCounts[s.key]||0}</div>
+                  <div className={`text-[10px] font-semibold text-center mt-0.5 ${s.color}`}>{s.label}</div>
+                </a>
+              ))}
+            </div>
+          </Panel>
+        )}
 
-
-        {/* ══ SECTION : LOGISTIQUE + FINANCE + ALERTES ══ */}
+        {/* ══ LOGISTIQUE + FINANCE ══ */}
         {(() => {
           // Supply KPIs
           const supTotal = supplyOrders.length
@@ -1728,8 +1777,6 @@ export default function Dashboard() {
                   </div>
                 )}
               </Panel>
-
-              {/* Alertes déplacées vers /tasks */}
             </div>
           )
         })()}

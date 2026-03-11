@@ -184,7 +184,7 @@ export async function GET(req: NextRequest) {
 
     const csgOpen = open.filter((d) => d.bu === "CSG").reduce((a, d) => a + d.amount, 0)
     const mixCsgPct = pipelineTotal > 0 ? (csgOpen / pipelineTotal) * 100 : 0
-    const mixCirsPct = Math.max(0, 100 - mixCsgPct)
+    const mixicsPct = Math.max(0, 100 - mixCsgPct)
 
     const missingAmount = periodRows.filter((d) => !d.amount || d.amount <= 0).length
     const missingCloseMonth = periodRows.filter((d) => !d.bookingMonth).length
@@ -219,15 +219,15 @@ export async function GET(req: NextRequest) {
     })
 
     // Top clients (open only)
-    const topClientsMap = new Map<string, { client: string; total: number; weighted: number; csg: number; cirs: number; deals: number }>()
+    const topClientsMap = new Map<string, { client: string; total: number; weighted: number; csg: number; ics: number; deals: number }>()
     for (const d of open) {
       const key = d.accountName || "—"
-      const cur = topClientsMap.get(key) || { client: key, total: 0, weighted: 0, csg: 0, cirs: 0, deals: 0 }
+      const cur = topClientsMap.get(key) || { client: key, total: 0, weighted: 0, csg: 0, ics: 0, deals: 0 }
       cur.total += d.amount
       cur.weighted += d.weighted
       cur.deals += 1
       if (d.bu === "CSG") cur.csg += d.amount
-      else cur.cirs += d.amount
+      else cur.ics += d.amount
       topClientsMap.set(key, cur)
     }
     const topClients = [...topClientsMap.values()].sort((a, b) => b.total - a.total).slice(0, 10)
@@ -274,7 +274,7 @@ export async function GET(req: NextRequest) {
         wonAmount,
         wonAvgMargin,
         mixCsgPct,
-        mixCirsPct,
+        mixicsPct,
       },
       dataQuality: {
         missingAmount,

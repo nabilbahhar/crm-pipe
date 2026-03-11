@@ -12,8 +12,8 @@ type NavItem = { label: string; href: string; badge?: boolean; children?: { labe
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard" },
-  { label: "Prospection", href: "/prospection" },
   { label: "Vente", href: "/pipeline", children: [
+    { label: "Prospection", href: "/prospection" },
     { label: "Pipeline", href: "/pipeline" },
     { label: "Deals", href: "/opportunities" },
     { label: "Comptes", href: "/accounts" },
@@ -31,7 +31,9 @@ const NAV_ITEMS: NavItem[] = [
     { label: "Facturation", href: "/invoices" },
     { label: "Notes de frais", href: "/expenses" },
   ]},
-  { label: "Événements", href: "/events" },
+  { label: "Marketing", href: "/events", children: [
+    { label: "Événements", href: "/events" },
+  ]},
   { label: "Support", href: "/support" },
   { label: "KPI", href: "/kpi" },
 ];
@@ -76,6 +78,24 @@ const ACTION_LABEL: Record<string, string> = {
 const ENTITY_ICON: Record<string, string> = {
   deal: "💼", account: "🏢", prospect: "🎯", contact: "👤", card: "🃏", message: "💬",
 };
+
+function describeActivity(a: Activity, currentEmail: string | null): string {
+  const name = userName(a.user_email);
+  const isMe = a.user_email === currentEmail;
+  const who = isMe ? "Vous avez" : `${name} a`;
+
+  switch (a.action_type) {
+    case 'create': return `${who} créé ${a.entity_type === 'deal' ? 'le deal' : a.entity_type === 'prospect' ? 'le prospect' : ''} "${a.entity_name}"`;
+    case 'update': return `${who} modifié ${a.entity_type === 'deal' ? 'le deal' : ''} "${a.entity_name}"${a.detail ? ` — ${a.detail}` : ''}`;
+    case 'delete': return `${who} supprimé ${a.entity_type === 'deal' ? 'le deal' : ''} "${a.entity_name}"`;
+    case 'stage': return `${who} changé l'étape du deal "${a.entity_name}"${a.detail ? ` → ${a.detail}` : ''}`;
+    case 'won': return `${who} gagné le deal "${a.entity_name}" 🎉`;
+    case 'lost': return `${who} perdu le deal "${a.entity_name}"`;
+    case 'convert': return `${who} converti le prospect "${a.entity_name}" en deal`;
+    case 'message': return `${name} vous a envoyé un message : "${a.entity_name}"`;
+    default: return `${who} ${a.action_type} "${a.entity_name}"`;
+  }
+}
 
 // ── Password modal ────────────────────────────────────────────────────────────
 function PasswordModal({ onClose, userEmail }: { onClose: () => void; userEmail: string }) {
@@ -785,7 +805,7 @@ export default function NavBar() {
                       display: "inline-flex", alignItems: "center", justifyContent: "center",
                       padding: "0 4px",
                     }}>
-                      {taskCount > 9 ? "9+" : taskCount}
+                      {taskCount}
                     </span>
                   )}
                 </Link>
@@ -826,7 +846,7 @@ export default function NavBar() {
               <MessageSquare style={{ width: 18, height: 18, color: path === "/messages" ? "#0866ff" : "#050505" }} />
               {unreadMsgs > 0 && (
                 <span style={{ position: "absolute", top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, background: "#e41e3f", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }}>
-                  {unreadMsgs > 9 ? "9+" : unreadMsgs}
+                  {unreadMsgs}
                 </span>
               )}
             </Link>
@@ -845,7 +865,7 @@ export default function NavBar() {
               <ListChecks style={{ width: 18, height: 18, color: path === "/tasks" ? "#e65100" : "#050505" }} />
               {taskCount > 0 && (
                 <span style={{ position: "absolute", top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, background: "#e65100", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }}>
-                  {taskCount > 9 ? "9+" : taskCount}
+                  {taskCount}
                 </span>
               )}
             </Link>
@@ -868,7 +888,7 @@ export default function NavBar() {
                 <Bell style={{ width: 18, height: 18, color: showNotifs ? "#0866ff" : "#050505" }} />
                 {unread > 0 && (
                   <span style={{ position: "absolute", top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, background: "#e41e3f", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }}>
-                    {unread > 9 ? "9+" : unread}
+                    {unread}
                   </span>
                 )}
               </button>
@@ -885,28 +905,20 @@ export default function NavBar() {
                     {activities.length === 0 ? (
                       <div style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "#94a3b8" }}>Aucune activité récente</div>
                     ) : activities.map((a, idx) => {
-                      const color = ACTION_COLOR[a.action_type] || "#64748b";
-                      const label = ACTION_LABEL[a.action_type] || a.action_type;
                       const isNew = lastReadRef.current ? a.created_at > lastReadRef.current : idx < 5;
-                      const icon = ENTITY_ICON[a.entity_type] || "📋"
+                      const icon = ENTITY_ICON[a.entity_type] || "📋";
+                      const desc = describeActivity(a, email);
+                      const linkHref = a.entity_type === "message" ? "/messages" : a.entity_id && a.entity_type === "deal" ? `/opportunities/${a.entity_id}` : null;
                       return (
-                        <div key={a.id} style={{ display: "flex", gap: 12, padding: "11px 16px", borderBottom: "1px solid #f8fafc", background: isNew ? "#fefce8" : "#fff", transition: "background 0.15s" }}>
+                        <div key={a.id} style={{ display: "flex", gap: 12, padding: "11px 16px", borderBottom: "1px solid #f8fafc", background: isNew ? "#fefce8" : "#fff", transition: "background 0.15s", cursor: linkHref ? "pointer" : "default" }}
+                          onClick={() => { if (linkHref) { setShowNotifs(false); router.push(linkHref); } }}>
                           <div style={{ width: 32, height: 32, borderRadius: 8, background: "#f8fafc", border: "1px solid #e2e8f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>
                             {icon}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 12, color: "#0f172a", lineHeight: 1.5 }}>
-                              <b style={{ color: a.user_email === email ? "#2563eb" : "#0f172a" }}>{userName(a.user_email)}</b>
-                              {" "}<span style={{ color, fontWeight: 600 }}>{label}</span>
-                              {" "}
-                              {a.entity_type === "message"
-                                ? <Link href="/messages" onClick={() => setShowNotifs(false)} style={{ fontWeight: 500, color: "#0866ff", textDecoration: "none" }}>"{a.entity_name}"</Link>
-                                : a.entity_id && a.entity_type === "deal"
-                                ? <Link href={`/opportunities/${a.entity_id}`} onClick={() => setShowNotifs(false)} style={{ fontWeight: 600, color: "#0f172a", textDecoration: "underline", textDecorationColor: "#e2e8f0" }}>{a.entity_name}</Link>
-                                : <span style={{ fontWeight: 600 }}>{a.entity_name}</span>
-                              }
+                              {desc}
                             </div>
-                            {a.detail && <div style={{ fontSize: 11, color: "#64748b", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.detail}</div>}
                             <div style={{ fontSize: 11, color: "#cbd5e1", marginTop: 3 }}>{timeAgo(a.created_at)}</div>
                           </div>
                           {isNew && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#ef4444", marginTop: 8, flexShrink: 0 }} />}

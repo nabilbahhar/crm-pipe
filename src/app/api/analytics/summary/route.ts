@@ -20,7 +20,7 @@ type SummaryKpis = {
   wonAmount: number
   wonAvgMargin?: number
   mixCsgPct: number
-  mixCirsPct?: number
+  mixicsPct?: number
 }
 
 type SummaryTopClient = {
@@ -28,7 +28,7 @@ type SummaryTopClient = {
   total: number
   weighted?: number
   csg?: number
-  cirs?: number
+  ics?: number
   deals?: number
 }
 
@@ -286,7 +286,7 @@ export async function GET(req: NextRequest) {
     const vendorMap = new Map<string, { total: number; dealIds: Set<string> }>()
     const clientMap = new Map<
       string,
-      { total: number; weighted: number; csg: number; cirs: number; dealIds: Set<string> }
+      { total: number; weighted: number; csg: number; ics: number; dealIds: Set<string> }
     >()
 
     for (const o of openDeals) {
@@ -295,7 +295,7 @@ export async function GET(req: NextRequest) {
 
       // total deal (client total)
       const dealAmt = dealTotalAmount(o)
-      const curClient = clientMap.get(client) || { total: 0, weighted: 0, csg: 0, cirs: 0, dealIds: new Set() }
+      const curClient = clientMap.get(client) || { total: 0, weighted: 0, csg: 0, ics: 0, dealIds: new Set() }
       curClient.total += dealAmt
       curClient.weighted += weighted(dealAmt, prob)
       curClient.dealIds.add(o.id)
@@ -319,9 +319,9 @@ export async function GET(req: NextRequest) {
         curV.dealIds.add(o.id)
         vendorMap.set(vendor, curV)
 
-        // mix CSG vs CIRS (règle simple: BU === 'CSG' => CSG, sinon CIRS)
+        // mix CSG vs ics (règle simple: BU === 'CSG' => CSG, sinon ics)
         if (normText(bu).toUpperCase() === 'CSG') curClient.csg += amt
-        else curClient.cirs += amt
+        else curClient.ics += amt
       }
     }
 
@@ -340,7 +340,7 @@ export async function GET(req: NextRequest) {
         total: v.total,
         weighted: v.weighted,
         csg: v.csg,
-        cirs: v.cirs,
+        ics: v.ics,
         deals: v.dealIds.size,
       }))
       .sort((a, b) => b.total - a.total)
@@ -349,7 +349,7 @@ export async function GET(req: NextRequest) {
     const totalMix = topClients.reduce((s, c) => s + (c.total || 0), 0)
     const totalCsg = topClients.reduce((s, c) => s + (c.csg || 0), 0)
     const mixCsgPct = totalMix > 0 ? (totalCsg / totalMix) * 100 : 0
-    const mixCirsPct = 100 - mixCsgPct
+    const mixicsPct = 100 - mixCsgPct
 
     // open/won/lost (montant période)
     const lostAmount = lostDeals.reduce((s, o) => s + dealTotalAmount(o), 0)
@@ -463,7 +463,7 @@ export async function GET(req: NextRequest) {
         wonAmount,
         wonAvgMargin: 0,
         mixCsgPct,
-        mixCirsPct,
+        mixicsPct,
       },
       dataQuality: {
         missingAmount,

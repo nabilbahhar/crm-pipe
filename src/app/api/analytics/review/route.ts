@@ -212,11 +212,11 @@ export async function GET(req: NextRequest) {
       (won.reduce((acc, d) => acc + (d.amount > 0 ? d.amount : 0), 0) || 1)
 
     const csgOpen = open.filter(d => isCSG(d.bu))
-    const cirsOpen = open.filter(d => !isCSG(d.bu))
+    const icsOpen = open.filter(d => !isCSG(d.bu))
 
     const csgAmount = sum(csgOpen, 'amount')
-    const cirsAmount = sum(cirsOpen, 'amount')
-    const mixCirsPct = pipelineTotal > 0 ? (cirsAmount / pipelineTotal) * 100 : 0
+    const icsAmount = sum(icsOpen, 'amount')
+    const mixicsPct = pipelineTotal > 0 ? (icsAmount / pipelineTotal) * 100 : 0
     const mixCsgPct = pipelineTotal > 0 ? (csgAmount / pipelineTotal) * 100 : 0
 
     // Data quality
@@ -227,16 +227,16 @@ export async function GET(req: NextRequest) {
       blockedInside: rowsPeriod.filter(r => (r.insideStatus || '').toUpperCase().includes('BLOCK')).length,
     }
 
-    // Top clients (Open pipeline) + split CSG/CIRS
-    const clientAgg = new Map<string, { client: string; total: number; weighted: number; csg: number; cirs: number; deals: number }>()
+    // Top clients (Open pipeline) + split CSG/ics
+    const clientAgg = new Map<string, { client: string; total: number; weighted: number; csg: number; ics: number; deals: number }>()
     for (const r of open) {
       const key = r.accountName || '—'
-      const cur = clientAgg.get(key) || { client: key, total: 0, weighted: 0, csg: 0, cirs: 0, deals: 0 }
+      const cur = clientAgg.get(key) || { client: key, total: 0, weighted: 0, csg: 0, ics: 0, deals: 0 }
       cur.total += r.amount
       cur.weighted += r.weighted
       cur.deals += 1
       if (isCSG(r.bu)) cur.csg += r.amount
-      else cur.cirs += r.amount
+      else cur.ics += r.amount
       clientAgg.set(key, cur)
     }
     const topClients = [...clientAgg.values()].sort((a, b) => b.total - a.total).slice(0, 10)
@@ -315,7 +315,7 @@ export async function GET(req: NextRequest) {
         wonAvgMargin,
 
         mixCsgPct,
-        mixCirsPct,
+        mixicsPct,
       },
       dataQuality: dq,
       byBu,
