@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import NavBar from './NavBar'
@@ -13,40 +13,59 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname()
   const [checking, setChecking]           = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
+  const pathnameRef = useRef(pathname)
+  pathnameRef.current = pathname
 
-  const isPublic = PUBLIC_ROUTES.some(r => pathname === r)
-
+  // ─── Initial session check (runs once) ───
   useEffect(() => {
-    // Vérification initiale de la session
     supabase.auth.getSession().then(({ data }) => {
       const isAuth = !!data.session
       setAuthenticated(isAuth)
       setChecking(false)
 
-      if (!isAuth && !isPublic) {
+      const currentPath = pathnameRef.current
+      const isPublicRoute = PUBLIC_ROUTES.some(r => currentPath === r)
+      if (!isAuth && !isPublicRoute) {
         router.replace('/login')
       }
-      if (isAuth && pathname === '/login') {
+      if (isAuth && currentPath === '/login') {
         router.replace('/dashboard')
       }
     }).catch((err) => {
       console.warn('ClientLayout getSession error:', err)
       setChecking(false)
-      if (!isPublic) router.replace('/login')
+      const isPublicRoute = PUBLIC_ROUTES.some(r => pathnameRef.current === r)
+      if (!isPublicRoute) router.replace('/login')
     })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-    // Écouter les changements d'auth en temps réel
+  // ─── Auth state listener (separate from pathname) ───
+  useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       const isAuth = !!session
       setAuthenticated(isAuth)
-      if (!isAuth && !isPublic) {
+      const isPublicRoute = PUBLIC_ROUTES.some(r => pathnameRef.current === r)
+      if (!isAuth && !isPublicRoute) {
         router.replace('/login')
       }
     })
 
     return () => sub.subscription.unsubscribe()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname])
+  }, [])
+
+  const isPublic = PUBLIC_ROUTES.some(r => pathname === r)
+
+  // ─── Redirect logic on pathname change ───
+  useEffect(() => {
+    if (!checking && !authenticated && !isPublic) {
+      router.replace('/login')
+    }
+    if (!checking && authenticated && pathname === '/login') {
+      router.replace('/dashboard')
+    }
+  }, [pathname, checking, authenticated, isPublic, router])
 
   // Écran de chargement pendant la vérification auth
   if (checking) {

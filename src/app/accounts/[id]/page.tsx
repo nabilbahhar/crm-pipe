@@ -63,8 +63,8 @@ function StatusPill({ status }: { status: string }) {
 function ConfirmDialog({ open, title, msg, danger, confirmLabel, onConfirm, onCancel }: { open: boolean; title: string; msg: string; danger?: boolean; confirmLabel?: string; onConfirm: () => void; onCancel: () => void }) {
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) onCancel() }}>
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-200">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" role="presentation" onClick={e => { if (e.target === e.currentTarget) onCancel() }} onKeyDown={e => { if (e.key === 'Escape') onCancel() }}>
+      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-200" role="alertdialog" aria-modal="true" aria-label={title}>
         <h3 className="text-base font-bold text-slate-900">{title}</h3>
         <p className="mt-2 text-sm text-slate-600">{msg}</p>
         <div className="mt-5 flex justify-end gap-2">

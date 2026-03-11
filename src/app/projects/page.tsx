@@ -1177,8 +1177,8 @@ export default function ProjectsPage() {
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {emailModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
-          onClick={e => { if (e.target === e.currentTarget) setEmailModal(null) }}>
-          <div className="relative w-full max-w-[700px] max-h-[85vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col">
+          role="presentation" onClick={e => { if (e.target === e.currentTarget) setEmailModal(null) }} onKeyDown={e => { if (e.key === 'Escape') setEmailModal(null) }}>
+          <div className="relative w-full max-w-[700px] max-h-[85vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col" role="dialog" aria-modal="true" aria-label="Aperçu email projet">
             {/* Modal header */}
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
               <div>

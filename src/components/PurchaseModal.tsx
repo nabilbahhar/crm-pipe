@@ -309,16 +309,19 @@ export default function PurchaseModal({
   const inp = 'h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400 transition-colors'
 
   if (loading) return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50">
-      <div className="rounded-2xl bg-white p-8"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50" role="presentation">
+      <div className="rounded-2xl bg-white p-8" role="dialog" aria-modal="true" aria-label="Chargement fiche achat"><Loader2 className="h-8 w-8 animate-spin text-slate-400" /></div>
     </div>,
     document.body
   )
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
-      onClick={e => e.target === e.currentTarget && onClose()}>
+      onClick={e => e.target === e.currentTarget && onClose()}
+      role="presentation"
+      onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <div className="flex w-full max-w-5xl flex-col rounded-2xl bg-white shadow-2xl"
+        role="dialog" aria-modal="true" aria-label="Fiche Achat"
         style={{ maxHeight: 'calc(100dvh - 72px)' }}>
 
         {/* ── Header ── */}

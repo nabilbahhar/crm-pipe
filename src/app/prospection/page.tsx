@@ -1290,9 +1290,10 @@ export default function ProspectionPage() {
       {modalOpen && (
         <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
           style={{ paddingTop: 'env(safe-area-inset-top)' }}
-          onClick={e => { if (e.target === e.currentTarget) { setModalOpen(false); setEditId(null) } }}>
+          role="presentation" onClick={e => { if (e.target === e.currentTarget) { setModalOpen(false); setEditId(null) } }} onKeyDown={e => { if (e.key === 'Escape') { setModalOpen(false); setEditId(null) } }}>
           <div className="flex w-full max-w-2xl flex-col rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl"
-            style={{ maxHeight: 'calc(100dvh - 72px)' }}>
+            style={{ maxHeight: 'calc(100dvh - 72px)' }}
+            role="dialog" aria-modal="true" aria-label={editId ? 'Modifier le prospect' : 'Nouveau prospect'}>
 
             {/* ── Header ── */}
             <div className="flex shrink-0 items-center justify-between rounded-t-3xl bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-5 sm:rounded-t-2xl">
@@ -1603,8 +1604,8 @@ export default function ProspectionPage() {
 
       {/* ── CONVERT MODAL ────────────────────────────────────────────────── */}
       {convertP && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') setConvertP(null) }}>
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl" role="dialog" aria-modal="true" aria-label="Convertir en compte CRM">
             <div className="border-b px-5 py-4">
               <div className="text-sm font-semibold text-slate-900">Convertir en compte CRM</div>
               <div className="text-xs text-slate-500 mt-0.5">
@@ -1640,9 +1641,10 @@ export default function ProspectionPage() {
       {qualifyP && (
         <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
           style={{ paddingTop: 'env(safe-area-inset-top)' }}
-          onClick={e => { if (e.target === e.currentTarget) setQualifyP(null) }}>
+          role="presentation" onClick={e => { if (e.target === e.currentTarget) setQualifyP(null) }} onKeyDown={e => { if (e.key === 'Escape') setQualifyP(null) }}>
           <div className="flex w-full max-w-lg flex-col rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl"
-            style={{ maxHeight: 'calc(100dvh - 72px)' }}>
+            style={{ maxHeight: 'calc(100dvh - 72px)' }}
+            role="dialog" aria-modal="true" aria-label="Qualifier le prospect">
 
             {/* Header */}
             <div className="flex shrink-0 items-center justify-between rounded-t-3xl bg-gradient-to-r from-emerald-700 to-emerald-500 px-6 py-5 sm:rounded-t-2xl">

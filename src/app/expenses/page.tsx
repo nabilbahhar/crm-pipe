@@ -956,9 +956,10 @@ export default function ExpensesPage() {
       {/* ═══════════════════ VIEW MODAL ═══════════════════ */}
       {viewReport && (
         <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center p-0 sm:p-4"
-          onClick={() => setViewReport(null)}>
+          role="presentation" onClick={() => setViewReport(null)} onKeyDown={e => { if (e.key === 'Escape') setViewReport(null) }}>
           <div className="flex w-full flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden"
             style={{ maxHeight: '90vh', maxWidth: 800 }}
+            role="dialog" aria-modal="true" aria-label="Détail note de frais"
             onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 shrink-0">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-lg shrink-0">
@@ -1042,9 +1043,10 @@ export default function ExpensesPage() {
 
       {/* ═══════════════════ EMAIL PREVIEW MODAL ═══════════════════ */}
       {emailModal && (
-        <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center p-0 sm:p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') setEmailModal(null) }}>
           <div className="flex w-full flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden"
-            style={{ maxHeight: '92vh', maxWidth: 800 }}>
+            style={{ maxHeight: '92vh', maxWidth: 800 }}
+            role="dialog" aria-modal="true" aria-label="Email note de frais">
             <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 shrink-0">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-lg shrink-0">
                 <Receipt className="h-5 w-5 text-white" />

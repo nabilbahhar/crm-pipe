@@ -3,11 +3,16 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/apiAuth'
+import { aiLimiter } from '@/lib/rateLimit'
 
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAuth(request)
     if (auth instanceof NextResponse) return auth
+
+    // ─── Rate limiting: 5 req/min per user ───
+    const rl = aiLimiter.check(auth.user.email || auth.user.id)
+    if (!rl.ok) return NextResponse.json({ error: rl.error }, { status: 429 })
 
     // Security: Check body size before parsing (Content-Length can be spoofed)
     const MAX_BODY_SIZE = 20 * 1024 * 1024 // ~20 MB max

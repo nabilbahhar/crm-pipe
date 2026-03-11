@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { requireAuth } from '@/lib/apiAuth'
+import { migrateLimiter } from '@/lib/rateLimit'
 
 export const runtime = 'nodejs'
 
@@ -22,6 +23,10 @@ export async function POST(req: NextRequest) {
 
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+
+    // ─── Rate limiting: 2 req/min per user ───
+    const rl = migrateLimiter.check(auth.user.email || auth.user.id)
+    if (!rl.ok) return NextResponse.json({ error: rl.error }, { status: 429 })
 
     const checks: { table: string; exists: boolean }[] = []
 

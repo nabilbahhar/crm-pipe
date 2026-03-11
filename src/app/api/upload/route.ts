@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabaseServer'
 import { requireAuth } from '@/lib/apiAuth'
+import { fileLimiter } from '@/lib/rateLimit'
 
 export const runtime = 'nodejs'
 
@@ -48,6 +49,10 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+
+    // ─── Rate limiting: 20 req/min per user ───
+    const rl = fileLimiter.check(auth.user.email || auth.user.id)
+    if (!rl.ok) return NextResponse.json({ error: rl.error }, { status: 429 })
 
     const formData = await req.formData()
     const file   = formData.get('file') as File | null
@@ -172,6 +177,10 @@ export async function DELETE(req: NextRequest) {
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+
+    // ─── Rate limiting: 20 req/min per user ───
+    const rl = fileLimiter.check(auth.user.email || auth.user.id)
+    if (!rl.ok) return NextResponse.json({ error: rl.error }, { status: 429 })
 
     const body = await req.json()
     const bucket  = body.bucket || 'deal-files'

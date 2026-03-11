@@ -575,8 +575,11 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
     <div
       className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-0 sm:p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      role="presentation"
+      onKeyDown={e => { if (e.key === 'Escape') onClose() }}
     >
-      <div className="w-full max-w-4xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[95vh]">
+      <div className="w-full max-w-4xl bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col max-h-[95vh]"
+        role="dialog" aria-modal="true" aria-label={isEdit ? 'Modifier le deal' : 'Nouveau deal'}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">

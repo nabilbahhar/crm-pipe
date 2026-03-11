@@ -370,8 +370,8 @@ export default function SupportPage() {
 
       {/* ─── Create/Edit Modal ──────────────────────────────── */}
       {showModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-200">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }} onKeyDown={e => { if (e.key === 'Escape') setShowModal(false) }}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-200" role="dialog" aria-modal="true" aria-label={editId ? 'Modifier le ticket' : 'Nouveau ticket'}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-slate-900">{editId ? 'Modifier le ticket' : 'Nouveau ticket'}</h2>
               <button onClick={() => setShowModal(false)} className="rounded-lg p-1 hover:bg-slate-100"><X className="h-5 w-5 text-slate-400" /></button>
@@ -427,8 +427,8 @@ export default function SupportPage() {
 
       {/* ─── Email Preview Modal ───────────────────────────── */}
       {emailHtml && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setEmailHtml(null) }}>
-          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 overflow-hidden">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" role="presentation" onClick={e => { if (e.target === e.currentTarget) setEmailHtml(null) }} onKeyDown={e => { if (e.key === 'Escape') setEmailHtml(null) }}>
+          <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 overflow-hidden" role="dialog" aria-modal="true" aria-label="Email Support Mernassi">
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
               <div>
                 <div className="text-sm font-bold text-slate-900">📧 Email Support — Mernassi</div>

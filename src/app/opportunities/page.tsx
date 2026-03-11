@@ -760,8 +760,8 @@ function DealsPageInner() {
 
       {/* ── Confirm delete modal ── */}
       {confirmDel.open && confirmDel.deal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') setConfirmDel({ open: false, deal: null }) }}>
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden" role="alertdialog" aria-modal="true" aria-label="Confirmer la suppression du deal">
             <div className="p-6">
               <div className="flex items-center gap-3 mb-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100">

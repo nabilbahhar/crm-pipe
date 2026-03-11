@@ -785,8 +785,9 @@ export default function SupplyPage() {
       {/* Email preview modal */}
       {emailHtml && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm"
-          onClick={() => setEmailHtml(null)}>
+          role="presentation" onClick={() => setEmailHtml(null)} onKeyDown={e => { if (e.key === 'Escape') setEmailHtml(null) }}>
           <div className="relative w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-2xl"
+            role="dialog" aria-modal="true" aria-label="Aperçu email Supply"
             onClick={e => e.stopPropagation()}>
             {/* Modal header */}
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">

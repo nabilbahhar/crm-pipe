@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import { Bell, X, ChevronDown, KeyRound, LogOut, Search, User, MessageSquare, ListChecks } from "lucide-react";
+import { Bell, X, ChevronDown, KeyRound, LogOut, Search, User, MessageSquare, ListChecks, Menu } from "lucide-react";
 import { ownerName } from "@/lib/utils";
 
 type NavItem = { label: string; href: string; badge?: boolean; children?: { label: string; href: string }[] }
@@ -369,10 +369,10 @@ function QuickSearch({ onClose }: { onClose: () => void }) {
         {!q && (
           <div style={{ padding: '12px 16px', borderTop: '1px solid #f1f5f9', display: 'flex', flexWrap: 'wrap', gap: 8 }}>
             {ALL_NAV_LINKS.map(it => (
-              <a key={it.href} href={it.href} onClick={onClose}
+              <Link key={it.href} href={it.href} onClick={onClose}
                 style={{ fontSize: 11, fontWeight: 500, color: '#64748b', background: '#f8fafc', borderRadius: 8, padding: '4px 10px', textDecoration: 'none', border: '1px solid #e2e8f0' }}>
                 {it.label}
-              </a>
+              </Link>
             ))}
           </div>
         )}
@@ -518,8 +518,12 @@ export default function NavBar() {
   const userMenuRef = useRef<HTMLDivElement>(null);
   const lastReadRef = useRef<string>("");
   const [isMac, setIsMac] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   useEffect(() => { setIsMac(typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent)) }, []);
   const modKey = isMac ? '⌘' : 'Ctrl';
+
+  // Close mobile menu on route change
+  useEffect(() => { setMobileMenuOpen(false) }, [path]);
 
   // Global keyboard shortcuts
   const router = useRouter();
@@ -734,11 +738,27 @@ export default function NavBar() {
       <div style={{ borderBottom: "1px solid #e2e8f0", background: "#fff", position: "sticky", top: 0, zIndex: 100 }}>
         <div style={{ maxWidth: 1600, margin: "0 auto", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 8 }}>
 
+          {/* ── Mobile hamburger ── */}
+          <button
+            onClick={() => setMobileMenuOpen(v => !v)}
+            aria-label={mobileMenuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+            aria-expanded={mobileMenuOpen}
+            className="md:hidden"
+            style={{
+              width: 36, height: 36, borderRadius: 8,
+              border: "none", background: mobileMenuOpen ? "#f1f5f9" : "transparent",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              marginRight: 4,
+            }}
+          >
+            {mobileMenuOpen ? <X style={{ width: 20, height: 20, color: "#0f172a" }} /> : <Menu style={{ width: 20, height: 20, color: "#0f172a" }} />}
+          </button>
+
           <Link href="/dashboard" style={{ fontWeight: 900, fontSize: 15, letterSpacing: "1.5px", color: "#0f172a", textDecoration: "none", marginRight: 16 }}>
             CRM-PIPE
           </Link>
 
-          <nav style={{ display: "flex", gap: 2, flex: 1 }}>
+          <nav className="hidden md:flex" style={{ gap: 2, flex: 1 }}>
             {NAV_ITEMS.map(it => {
               const allPaths = it.children ? it.children.map(c => c.href.split('?')[0]) : [it.href];
               const active = allPaths.some(p => path === p || path.startsWith(p + "/"));
@@ -779,6 +799,7 @@ export default function NavBar() {
             <button
               onClick={() => setShowSearch(true)}
               title={`Recherche (${modKey}+K)`}
+              aria-label={`Recherche rapide (${modKey}+K)`}
               style={{
                 width: 40, height: 40, borderRadius: "50%",
                 border: "none", background: "#e4e6eb",
@@ -792,7 +813,7 @@ export default function NavBar() {
             </button>
 
             {/* ── Messages (Facebook-style circle) ── */}
-            <Link href="/messages" title="Messages"
+            <Link href="/messages" title="Messages" aria-label="Messages"
               style={{
                 position: "relative", width: 40, height: 40, borderRadius: "50%",
                 border: "none", background: path === "/messages" ? "#e7f3ff" : "#e4e6eb",
@@ -811,7 +832,7 @@ export default function NavBar() {
             </Link>
 
             {/* ── Tasks (Facebook-style circle) ── */}
-            <Link href="/tasks" title="Tâches"
+            <Link href="/tasks" title="Tâches" aria-label="Tâches"
               style={{
                 position: "relative", width: 40, height: 40, borderRadius: "50%",
                 border: "none", background: path === "/tasks" ? "#fff3e0" : "#e4e6eb",
@@ -834,6 +855,7 @@ export default function NavBar() {
               <button
                 onClick={openNotifs}
                 title="Notifications"
+                aria-label="Notifications"
                 style={{
                   position: "relative", width: 40, height: 40, borderRadius: "50%",
                   border: "none", background: showNotifs ? "#e7f3ff" : "#e4e6eb",
@@ -878,9 +900,9 @@ export default function NavBar() {
                               {" "}<span style={{ color, fontWeight: 600 }}>{label}</span>
                               {" "}
                               {a.entity_type === "message"
-                                ? <a href="/messages" onClick={() => setShowNotifs(false)} style={{ fontWeight: 500, color: "#0866ff", textDecoration: "none" }}>"{a.entity_name}"</a>
+                                ? <Link href="/messages" onClick={() => setShowNotifs(false)} style={{ fontWeight: 500, color: "#0866ff", textDecoration: "none" }}>"{a.entity_name}"</Link>
                                 : a.entity_id && a.entity_type === "deal"
-                                ? <a href={`/opportunities/${a.entity_id}`} onClick={() => setShowNotifs(false)} style={{ fontWeight: 600, color: "#0f172a", textDecoration: "underline", textDecorationColor: "#e2e8f0" }}>{a.entity_name}</a>
+                                ? <Link href={`/opportunities/${a.entity_id}`} onClick={() => setShowNotifs(false)} style={{ fontWeight: 600, color: "#0f172a", textDecoration: "underline", textDecorationColor: "#e2e8f0" }}>{a.entity_name}</Link>
                                 : <span style={{ fontWeight: 600 }}>{a.entity_name}</span>
                               }
                             </div>
@@ -894,10 +916,10 @@ export default function NavBar() {
                   </div>
                   <div style={{ padding: "10px 16px", borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={{ fontSize: 11, color: "#94a3b8" }}>Activité de l'équipe</span>
-                    <a href="/activity" onClick={() => setShowNotifs(false)}
+                    <Link href="/activity" onClick={() => setShowNotifs(false)}
                       style={{ fontSize: 12, fontWeight: 600, color: "#3b82f6", textDecoration: "none" }}>
                       Voir tout l'historique →
-                    </a>
+                    </Link>
                   </div>
                 </div>
               )}
@@ -909,6 +931,7 @@ export default function NavBar() {
                 <button
                   onClick={() => setShowUserMenu(v => !v)}
                   title={userName(email)}
+                  aria-label={`Menu profil — ${userName(email)}`}
                   style={{
                     width: 40, height: 40, borderRadius: "50%",
                     border: showUserMenu ? "2px solid #0866ff" : "2px solid transparent",
@@ -1008,6 +1031,59 @@ export default function NavBar() {
           </div>
         </div>
       </div>
+
+      {/* ── Mobile navigation menu (accordion) ── */}
+      {mobileMenuOpen && (
+        <div className="md:hidden" style={{
+          borderBottom: "1px solid #e2e8f0", background: "#fff",
+          padding: "8px 16px 12px", maxHeight: "70vh", overflowY: "auto",
+        }}>
+          {NAV_ITEMS.map(it => {
+            const allPaths = it.children ? it.children.map(c => c.href.split('?')[0]) : [it.href];
+            const active = allPaths.some(p => path === p || path.startsWith(p + "/"));
+            if (it.children) {
+              return (
+                <div key={it.label} style={{ marginBottom: 4 }}>
+                  <div style={{ padding: "8px 12px", fontSize: 13, fontWeight: 600, color: active ? "#0f172a" : "#64748b" }}>
+                    {it.label}
+                  </div>
+                  {it.children.map(child => {
+                    const childActive = path === child.href.split('?')[0];
+                    return (
+                      <Link key={child.href} href={child.href}
+                        onClick={() => setMobileMenuOpen(false)}
+                        style={{
+                          display: "block", padding: "8px 12px 8px 28px", fontSize: 13,
+                          fontWeight: childActive ? 600 : 400,
+                          color: childActive ? "#0f172a" : "#475569",
+                          textDecoration: "none",
+                          background: childActive ? "#f1f5f9" : "transparent",
+                          borderRadius: 8,
+                        }}>
+                        {child.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            }
+            return (
+              <Link key={it.href} href={it.href}
+                onClick={() => setMobileMenuOpen(false)}
+                style={{
+                  display: "block", padding: "8px 12px", fontSize: 13, borderRadius: 8,
+                  fontWeight: active ? 600 : 400,
+                  color: active ? "#0f172a" : "#64748b",
+                  textDecoration: "none",
+                  background: active ? "#f1f5f9" : "transparent",
+                  marginBottom: 2,
+                }}>
+                {it.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Password modal (outside navbar flow) ── */}
       {showPwdModal && <PasswordModal onClose={() => setShowPwdModal(false)} userEmail={email || ""} />}

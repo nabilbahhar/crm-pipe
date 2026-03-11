@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer } from "@/lib/supabaseServer"
 import { requireAuth } from "@/lib/apiAuth"
+import { analyticsLimiter } from "@/lib/rateLimit"
 
 export const runtime = "nodejs"
 
@@ -68,6 +69,10 @@ export async function GET(req: NextRequest) {
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+
+    // ─── Rate limiting: 30 req/min per user ───
+    const rl = analyticsLimiter.check(auth.user.email || auth.user.id)
+    if (!rl.ok) return NextResponse.json({ error: rl.error }, { status: 429 })
 
     const { searchParams } = new URL(req.url)
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ExcelJS from 'exceljs'
 import { requireAuth } from '@/lib/apiAuth'
+import { fileLimiter } from '@/lib/rateLimit'
 
 // Status-based row color tinting
 const STATUS_COLORS: Record<string, string> = {
@@ -13,6 +14,10 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+
+    // ─── Rate limiting: 20 req/min per user ───
+    const rl = fileLimiter.check(auth.user.email || auth.user.id)
+    if (!rl.ok) return NextResponse.json({ error: rl.error }, { status: 429 })
 
     // Security: Limit request body size (max 5 MB)
     const MAX_BODY_SIZE = 5 * 1024 * 1024

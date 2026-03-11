@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/apiAuth'
+import { aiLimiter } from '@/lib/rateLimit'
 
 // ─── Security: Whitelist models & cap tokens ───────────────────
 const ALLOWED_MODELS = ['claude-sonnet-4-20250514', 'claude-haiku-4-20250414']
@@ -10,6 +11,10 @@ export async function POST(req: NextRequest) {
   try {
     const auth = await requireAuth(req)
     if (auth instanceof NextResponse) return auth
+
+    // ─── Rate limiting: 5 req/min per user ───
+    const rl = aiLimiter.check(auth.user.email || auth.user.id)
+    if (!rl.ok) return NextResponse.json({ error: rl.error }, { status: 429 })
 
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (!apiKey) {
