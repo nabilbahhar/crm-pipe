@@ -1,5 +1,5 @@
 'use client'
-import React, { useEffect, useMemo, useState, useRef } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
 import { logActivity } from '@/lib/logActivity'
@@ -9,6 +9,7 @@ import {
   LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus,
   COMPUCOM_EMAILS, ownerName,
   normMainBU, MAIN_BU_COLORS,
+  PAYMENT_TERMS,
 } from '@/lib/utils'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { buildSupplyEmail } from '@/lib/emailTemplates'
@@ -16,7 +17,11 @@ import PurchaseModal from '@/components/PurchaseModal'
 import Toast from '@/components/Toast'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { RefreshCw, Package, ChevronRight, ChevronDown, Search, AlertCircle, Download, Clock, Mail, Copy, ExternalLink, X } from 'lucide-react'
+import {
+  RefreshCw, Package, ChevronRight, ChevronDown, Search,
+  AlertCircle, Download, Clock, Mail, Copy, ExternalLink, X,
+  FileText, CheckSquare, Square, Check,
+} from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
 type PurchaseLine = {
@@ -62,7 +67,7 @@ type Order = {
   }
 }
 
-// Aliases for backward compat with existing references in this file
+// Aliases
 const STATUS_CONFIG = SUPPLY_STATUS_CFG
 const ALL_STATUSES = SUPPLY_STATUS_ORDER
 
@@ -90,6 +95,281 @@ function LineNoteCell({ lineId, note, onSave }: { lineId: string; note: string |
   )
 }
 
+// ─── Facturation Modal ────────────────────────────────────────
+function FacturationModal({
+  order, lines, paymentTerms, userEmail, onClose, onSaved,
+}: {
+  order: Order
+  lines: PurchaseLine[]
+  paymentTerms: string | null
+  userEmail: string | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  // Only show lines that are "livre" or above (not already facture)
+  const invoiceableLines = lines.filter(l => {
+    const s = l.line_status || 'pending'
+    return s === 'livre' // Only livre lines can be invoiced
+  })
+  const alreadyFacture = lines.filter(l => l.line_status === 'facture')
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(invoiceableLines.map(l => l.id)))
+  const [invoiceNumber, setInvoiceNumber] = useState('')
+  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
+  const [pmTerms, setPmTerms] = useState(paymentTerms || '30j')
+  const [saving, setSaving] = useState(false)
+
+  const allSelected = invoiceableLines.length > 0 && selectedIds.size === invoiceableLines.length
+  const isGlobal = selectedIds.size === lines.filter(l => l.line_status !== 'facture').length
+
+  function toggleAll() {
+    if (allSelected) setSelectedIds(new Set())
+    else setSelectedIds(new Set(invoiceableLines.map(l => l.id)))
+  }
+
+  function toggleLine(id: string) {
+    setSelectedIds(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
+  }
+
+  // Compute due date from payment terms + invoice date
+  function getDueDate(): string {
+    const base = new Date(invoiceDate)
+    if (pmTerms === 'a_la_livraison') return invoiceDate
+    if (pmTerms === '30j') { base.setDate(base.getDate() + 30); return base.toISOString().slice(0, 10) }
+    if (pmTerms === '60j') { base.setDate(base.getDate() + 60); return base.toISOString().slice(0, 10) }
+    if (pmTerms === '90j') { base.setDate(base.getDate() + 90); return base.toISOString().slice(0, 10) }
+    base.setDate(base.getDate() + 30)
+    return base.toISOString().slice(0, 10)
+  }
+
+  const selectedLines = invoiceableLines.filter(l => selectedIds.has(l.id))
+  const invoiceAmount = selectedLines.reduce((s, l) => s + (l.pt_vente || l.qty * l.pu_vente), 0)
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!invoiceNumber.trim()) { alert('Veuillez entrer le numéro de facture.'); return }
+    if (selectedIds.size === 0) { alert('Sélectionnez au moins une ligne à facturer.'); return }
+
+    setSaving(true)
+    try {
+      const opp = order.opportunities!
+      const dueDate = getDueDate()
+
+      // 1. Update selected lines to "facture"
+      for (const lineId of selectedIds) {
+        await supabase.from('purchase_lines').update({
+          line_status: 'facture' as LineStatus,
+        }).eq('id', lineId)
+      }
+
+      // 2. Check if ALL lines are now facture
+      const remainingNonFacture = lines.filter(l =>
+        l.line_status !== 'facture' && !selectedIds.has(l.id)
+      )
+      const allFactured = remainingNonFacture.length === 0
+
+      // 3. If all factured, update supply order status
+      if (allFactured) {
+        await supabase.from('supply_orders').update({
+          status: 'facture' as SupplyStatus,
+          invoiced_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq('id', order.id)
+      }
+
+      // 4. Create invoice in invoices table
+      const { error: invError } = await supabase.from('invoices').insert({
+        opportunity_id: order.opportunity_id,
+        invoice_number: invoiceNumber.trim(),
+        amount: invoiceAmount,
+        issue_date: invoiceDate,
+        due_date: dueDate,
+        status: 'emise',
+        payment_terms: pmTerms,
+        notes: isGlobal
+          ? `Facturation globale — ${selectedLines.length} lignes`
+          : `Facturation partielle — ${selectedLines.length}/${lines.length} lignes`,
+        created_by: userEmail,
+      })
+      if (invError) throw invError
+
+      // 5. Log activity
+      await logActivity({
+        action_type: 'update',
+        entity_type: 'deal',
+        entity_id: order.opportunity_id,
+        entity_name: opp.title,
+        detail: `Facturé: ${invoiceNumber} — ${mad(invoiceAmount)} (${selectedLines.length} ligne${selectedLines.length > 1 ? 's' : ''})`,
+      })
+
+      onSaved()
+    } catch (err: any) {
+      alert(err?.message || 'Erreur lors de la facturation')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      role="presentation" onClick={onClose} onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
+      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl"
+        role="dialog" aria-modal="true" aria-label="Facturer les lignes"
+        onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white">
+              <FileText className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="text-sm font-bold text-slate-900">Facturer — {order.opportunities?.accounts?.name || order.opportunities?.title}</div>
+              <div className="text-xs text-slate-500">
+                {order.opportunities?.title} · PO {order.opportunities?.po_number || '—'}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {/* Already invoiced info */}
+          {alreadyFacture.length > 0 && (
+            <div className="rounded-xl bg-green-50 border border-green-200 p-3 text-xs text-green-800">
+              <strong>{alreadyFacture.length}</strong> ligne{alreadyFacture.length > 1 ? 's' : ''} déjà facturée{alreadyFacture.length > 1 ? 's' : ''}
+            </div>
+          )}
+
+          {/* Select lines */}
+          {invoiceableLines.length === 0 ? (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-center text-sm text-amber-700">
+              Aucune ligne livré à facturer. Toutes les lignes doivent avoir le statut « Livré » avant de pouvoir être facturées.
+            </div>
+          ) : (
+            <>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                    Lignes à facturer
+                  </label>
+                  <button type="button" onClick={toggleAll}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors">
+                    {allSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                    {allSelected ? 'Tout décocher' : 'Facturation globale'}
+                  </button>
+                </div>
+                <div className="rounded-xl border border-slate-200 overflow-hidden divide-y divide-slate-100">
+                  {invoiceableLines.map(line => (
+                    <label key={line.id}
+                      className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors
+                        ${selectedIds.has(line.id) ? 'bg-emerald-50/50' : 'bg-white hover:bg-slate-50'}`}>
+                      <input type="checkbox" checked={selectedIds.has(line.id)}
+                        onChange={() => toggleLine(line.id)}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500" />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold text-slate-800 truncate">
+                          {line.designation || '—'}
+                          {line.ref && <span className="ml-1 text-slate-400">[{line.ref}]</span>}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          Qté {line.qty} · {line.fournisseur || '—'}
+                        </div>
+                      </div>
+                      <div className="text-xs font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                        {mad(line.pt_vente || line.qty * line.pu_vente)}
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Invoice details */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    N° Facture <span className="text-red-500">*</span>
+                  </label>
+                  <input value={invoiceNumber} onChange={e => setInvoiceNumber(e.target.value)}
+                    placeholder="FAC-XXX-YYY"
+                    className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-400"
+                    required />
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    Identique au n° du système interne Compucom
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    Date facture <span className="text-red-500">*</span>
+                  </label>
+                  <input type="date" value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)}
+                    className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-emerald-400"
+                    required />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Modalités paiement</label>
+                  <select value={pmTerms} onChange={e => setPmTerms(e.target.value)}
+                    className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none">
+                    {PAYMENT_TERMS.map(t => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Échéance</label>
+                  <div className="h-9 flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600">
+                    {fmtDate(getDueDate())}
+                  </div>
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="rounded-xl bg-slate-900 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      {isGlobal ? '✅ Facturation globale' : `📋 Facturation partielle (${selectedIds.size}/${lines.length})`}
+                    </div>
+                    <div className="text-lg font-black text-white mt-1">{mad(invoiceAmount)}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] text-slate-400">{selectedIds.size} ligne{selectedIds.size > 1 ? 's' : ''}</div>
+                    <div className="text-xs font-semibold text-slate-300 mt-0.5">
+                      N° {invoiceNumber || '...'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit */}
+              <div className="flex items-center justify-end gap-2">
+                <button type="button" onClick={onClose}
+                  className="h-9 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                  Annuler
+                </button>
+                <button type="submit" disabled={saving || selectedIds.size === 0}
+                  className="h-9 rounded-xl bg-emerald-600 px-5 text-sm font-bold text-white hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                  {saving ? 'Facturation...' : `Facturer ${selectedIds.size} ligne${selectedIds.size > 1 ? 's' : ''}`}
+                </button>
+              </div>
+            </>
+          )}
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main ─────────────────────────────────────────────────────
 export default function SupplyPage() {
   const sp = useSearchParams()
@@ -109,6 +389,7 @@ export default function SupplyPage() {
   const [buFilter, setBuFilter] = useState('Tous')
   const [vendorFilter, setVendorFilter] = useState('Tous')
   const [busyLines, setBusyLines] = useState<Set<string>>(new Set())
+  const [factureOrder, setFactureOrder] = useState<Order | null>(null)
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok })
@@ -123,9 +404,8 @@ export default function SupplyPage() {
   }
 
   useEffect(() => {
-    document.title = 'Supply \u00b7 CRM-PIPE'
+    document.title = 'Supply · CRM-PIPE'
     supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null))
-    // Read vendor filter from URL params (e.g., from fournisseurs page link)
     const urlVendor = sp.get('vendor')
     if (urlVendor) setVendorFilter(urlVendor)
     load()
@@ -193,6 +473,17 @@ export default function SupplyPage() {
     return g
   }, [filtered])
 
+  // ── Derive order status from line statuses ──
+  function deriveOrderStatus(lines: PurchaseLine[]): SupplyStatus | null {
+    if (lines.length === 0) return null
+    const statuses = lines.map(l => l.line_status || 'pending')
+    if (statuses.every(s => s === 'facture')) return 'facture'
+    if (statuses.every(s => s === 'livre' || s === 'facture')) return 'livre'
+    if (statuses.every(s => s === 'en_stock' || s === 'livre' || s === 'facture')) return 'en_stock'
+    if (statuses.some(s => s === 'commande' || s === 'sous_douane' || s === 'en_stock' || s === 'livre' || s === 'facture')) return 'commande'
+    return null
+  }
+
   async function changeStatus(order: Order, newStatus: SupplyStatus) {
     if (newStatus === order.status || updating) return
     setUpdating(order.id)
@@ -231,7 +522,7 @@ export default function SupplyPage() {
     }
   }
 
-  async function updateLineStatus(lineId: string, newStatus: LineStatus, orderTitle: string) {
+  async function updateLineStatus(lineId: string, newStatus: LineStatus, orderId: string, orderTitle: string) {
     if (busyLines.has(lineId)) return
     setBusyLines(prev => new Set(prev).add(lineId))
     try {
@@ -239,6 +530,29 @@ export default function SupplyPage() {
         line_status: newStatus,
       }).eq('id', lineId)
       if (error) { showToast('Erreur mise à jour ligne', false); return }
+
+      // After updating a line, check if we should auto-update order status
+      // Reload the order's lines and derive
+      const order = orders.find(o => o.id === orderId)
+      if (order) {
+        const lines = order.opportunities?.purchase_info?.[0]?.purchase_lines || []
+        // Update in memory for derive check
+        const updatedLines = lines.map(l => l.id === lineId ? { ...l, line_status: newStatus } : l)
+        const derived = deriveOrderStatus(updatedLines)
+        if (derived && derived !== order.status) {
+          const timestamps: Record<string, string> = {
+            place: 'placed_at', commande: 'ordered_at',
+            en_stock: 'received_at', livre: 'delivered_at', facture: 'invoiced_at',
+          }
+          const tsField = timestamps[derived]
+          await supabase.from('supply_orders').update({
+            status: derived,
+            ...(tsField ? { [tsField]: new Date().toISOString() } : {}),
+            updated_at: new Date().toISOString(),
+          }).eq('id', orderId)
+        }
+      }
+
       showToast(`Ligne → ${LINE_STATUS_CFG[newStatus]?.label || newStatus}`)
       await load()
     } finally {
@@ -318,13 +632,23 @@ export default function SupplyPage() {
 
   const toCommanderCount = grouped.a_commander.length
 
+  // ── Line progress helpers ──
+  function getLineProgress(lines: PurchaseLine[]) {
+    if (lines.length === 0) return { total: 0, livre: 0, facture: 0, pct: 0 }
+    const livre = lines.filter(l => l.line_status === 'livre' || l.line_status === 'facture').length
+    const facture = lines.filter(l => l.line_status === 'facture').length
+    return { total: lines.length, livre, facture, pct: Math.round((facture / lines.length) * 100) }
+  }
+
+  function canInvoice(lines: PurchaseLine[]) {
+    return lines.some(l => l.line_status === 'livre')
+  }
+
   const [exporting, setExporting] = useState(false)
   async function exportExcel() {
     setExporting(true)
     try {
       const totalAmt = filtered.reduce((s,o) => s+(o.opportunities?.amount||0), 0)
-
-      // Status breakdown
       const statusMap = new Map<string, { count: number; amount: number }>()
       filtered.forEach(o => {
         const label = STATUS_CONFIG[o.status]?.label || o.status
@@ -337,24 +661,26 @@ export default function SupplyPage() {
         sheets: [{
           name: 'Supply',
           title: `Suivi Supply · ${filtered.length} commandes · ${new Date().toLocaleDateString('fr-MA')}`,
-          headers: ['Compte','Deal','Statut','BU','Vendor','Montant (MAD)','PO','PO Date','Fournisseurs','Placé le','Commandé le','Livré le','Note'],
+          headers: ['Compte','Deal','Statut','BU','Vendor','Montant (MAD)','PO','PO Date','Fournisseurs','Lignes','Livré','Facturé','Placé le','Commandé le','Livré le','Note'],
           rows: filtered.map(o => {
             const opp = o.opportunities
             const lines = opp?.purchase_info?.[0]?.purchase_lines || []
             const fournisseurs = [...new Set(lines.map((l: any) => l.fournisseur).filter(Boolean))].join(', ')
+            const prog = getLineProgress(lines)
             return [
               opp?.accounts?.name||'—', opp?.title||'—',
               STATUS_CONFIG[o.status]?.label||o.status,
               opp?.bu||'—', opp?.vendor||'—', opp?.amount||0,
               opp?.po_number||'—', opp?.po_date||'—',
               fournisseurs||'—',
+              prog.total, prog.livre, prog.facture,
               o.placed_at ? new Date(o.placed_at).toLocaleDateString('fr-MA') : '—',
               o.ordered_at ? new Date(o.ordered_at).toLocaleDateString('fr-MA') : '—',
               o.delivered_at ? new Date(o.delivered_at).toLocaleDateString('fr-MA') : '—',
               o.supply_notes||'—',
             ]
           }),
-          totalsRow: ['TOTAL', `${filtered.length} commandes`, '', '', '', totalAmt, '', '', '', '', '', '', ''],
+          totalsRow: ['TOTAL', `${filtered.length} commandes`, '', '', '', totalAmt, '', '', '', '', '', '', '', '', '', ''],
           notes: `Montant total: ${mad(totalAmt)}`,
         }],
         summary: {
@@ -395,7 +721,7 @@ export default function SupplyPage() {
             <div>
               <h1 className="text-xl font-black text-slate-900 tracking-tight">Supply</h1>
               <p className="text-xs text-slate-500">
-                Suivi commandes · {orders.length} commande{orders.length !== 1 ? 's' : ''}
+                Suivi commandes ligne par ligne · {orders.length} commande{orders.length !== 1 ? 's' : ''}
                 {toCommanderCount > 0 && (
                   <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-700">
                     {toCommanderCount} à commander
@@ -530,7 +856,7 @@ export default function SupplyPage() {
                             <th className="px-4 py-2.5 text-right">Montant</th>
                             <th className="px-4 py-2.5 text-left">PO</th>
                             <th className="px-4 py-2.5 text-left">Paiement</th>
-                            <th className="px-4 py-2.5 text-left">Fournisseurs</th>
+                            <th className="px-4 py-2.5 text-center">Lignes</th>
                             <th className="px-4 py-2.5 text-left">Note</th>
                             <th className="px-4 py-2.5 text-center">Statut</th>
                             <th className="px-4 py-2.5 text-center">Actions</th>
@@ -544,6 +870,8 @@ export default function SupplyPage() {
                             const fournisseurs = [...new Set(lines.map((l: any) => l.fournisseur).filter(Boolean))]
                             const hasPurchase  = (opp?.purchase_info?.length || 0) > 0
                             const isExpanded   = expandedRows.has(order.id)
+                            const prog = getLineProgress(lines)
+                            const canFact = canInvoice(lines)
 
                             const isOverdue = status === 'a_commander' && (() => {
                               const ts = order.placed_at || order.updated_at
@@ -605,21 +933,25 @@ export default function SupplyPage() {
                                     {paymentTermLabel(pi?.payment_terms)}
                                   </span>
                                 </td>
+                                {/* Lines progress */}
                                 <td className="px-4 py-3">
-                                  {!hasPurchase ? (
-                                    <button onClick={() => setPurchaseDeal(opp)}
-                                      className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-100 transition-colors">
-                                      <AlertCircle className="h-3 w-3" /> Fiche vide
-                                    </button>
-                                  ) : fournisseurs.length > 0 ? (
-                                    <div className="flex flex-wrap gap-1">
-                                      {fournisseurs.map((f, i) => (
-                                        <span key={i} className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
-                                          {f}
-                                        </span>
-                                      ))}
+                                  {lines.length > 0 ? (
+                                    <div className="flex flex-col items-center gap-1">
+                                      <div className="flex items-center gap-1">
+                                        <span className="text-xs font-bold text-slate-700">{prog.facture}/{prog.total}</span>
+                                        <span className="text-[10px] text-slate-400">facturées</span>
+                                      </div>
+                                      <div className="w-16 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                                        <div className="h-full rounded-full bg-emerald-500 transition-all"
+                                          style={{ width: `${prog.pct}%` }} />
+                                      </div>
+                                      {prog.livre > prog.facture && (
+                                        <span className="text-[9px] font-semibold text-blue-600">{prog.livre - prog.facture} livrée{prog.livre - prog.facture > 1 ? 's' : ''}</span>
+                                      )}
                                     </div>
-                                  ) : <span className="text-slate-300 text-xs">—</span>}
+                                  ) : (
+                                    <span className="text-xs text-slate-300">—</span>
+                                  )}
                                 </td>
                                 <td className="px-4 py-3 max-w-[150px]">
                                   {noteOpen === order.id ? (
@@ -654,9 +986,17 @@ export default function SupplyPage() {
                                     ))}
                                   </select>
                                 </td>
-                                {/* Actions: email */}
+                                {/* Actions */}
                                 <td className="px-4 py-3 text-center">
                                   <div className="flex items-center justify-center gap-1">
+                                    {/* Facturer button */}
+                                    {canFact && (
+                                      <button onClick={() => setFactureOrder(order)}
+                                        title="Facturer"
+                                        className="inline-flex h-8 items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100 transition-colors">
+                                        <FileText className="h-3.5 w-3.5" /> Facturer
+                                      </button>
+                                    )}
                                     {hasPurchase && lines.length > 0 && (
                                       <button onClick={() => generateSupplyEmail(order)}
                                         title="Générer email Supply"
@@ -670,6 +1010,12 @@ export default function SupplyPage() {
                                         className={`inline-flex h-8 items-center gap-1 rounded-xl border px-2 text-[10px] font-bold transition-colors
                                           ${isExpanded ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
                                         {lines.length} ligne{lines.length > 1 ? 's' : ''}
+                                      </button>
+                                    )}
+                                    {!hasPurchase && (
+                                      <button onClick={() => setPurchaseDeal(opp)}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-100 transition-colors">
+                                        <AlertCircle className="h-3 w-3" /> Fiche vide
                                       </button>
                                     )}
                                   </div>
@@ -698,7 +1044,7 @@ export default function SupplyPage() {
                                           {lines.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map(line => {
                                             const lsCfg = LINE_STATUS_CFG[line.line_status as LineStatus] || LINE_STATUS_CFG.pending
                                             return (
-                                              <tr key={line.id} className="hover:bg-slate-50/60">
+                                              <tr key={line.id} className={`hover:bg-slate-50/60 ${line.line_status === 'facture' ? 'bg-green-50/30' : ''}`}>
                                                 <td className="px-3 py-2">
                                                   <div className="font-semibold text-slate-800">{line.designation || '—'}</div>
                                                   {line.ref && <div className="text-[10px] text-slate-400">Réf: {line.ref}</div>}
@@ -714,8 +1060,8 @@ export default function SupplyPage() {
                                                 <td className="px-3 py-2 text-center">
                                                   <select
                                                     value={line.line_status || 'pending'}
-                                                    disabled={busyLines.has(line.id)}
-                                                    onChange={e => updateLineStatus(line.id, e.target.value as LineStatus, opp?.title || '')}
+                                                    disabled={busyLines.has(line.id) || line.line_status === 'facture'}
+                                                    onChange={e => updateLineStatus(line.id, e.target.value as LineStatus, order.id, opp?.title || '')}
                                                     className={`h-7 rounded-lg border px-1.5 text-[10px] font-bold outline-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed
                                                       ${lsCfg.bg} ${lsCfg.border} ${lsCfg.color}`}>
                                                     {LINE_STATUS_ORDER.map(ls => (
@@ -724,15 +1070,21 @@ export default function SupplyPage() {
                                                   </select>
                                                 </td>
                                                 <td className="px-3 py-2 text-center">
-                                                  <input
-                                                    type="date"
-                                                    value={line.eta ? line.eta.slice(0, 10) : ''}
-                                                    disabled={busyLines.has(line.id)}
-                                                    onChange={e => updateLineEta(line.id, e.target.value)}
-                                                    className="h-7 rounded-lg border border-slate-200 px-1.5 text-[10px] outline-none focus:border-blue-300 disabled:opacity-40 disabled:cursor-not-allowed"
-                                                  />
-                                                  {line.eta_updated_at && (
-                                                    <div className="text-[9px] text-slate-400 mt-0.5">maj {fmtDate(line.eta_updated_at)}</div>
+                                                  {line.line_status !== 'facture' ? (
+                                                    <>
+                                                      <input
+                                                        type="date"
+                                                        value={line.eta ? line.eta.slice(0, 10) : ''}
+                                                        disabled={busyLines.has(line.id)}
+                                                        onChange={e => updateLineEta(line.id, e.target.value)}
+                                                        className="h-7 rounded-lg border border-slate-200 px-1.5 text-[10px] outline-none focus:border-blue-300 disabled:opacity-40 disabled:cursor-not-allowed"
+                                                      />
+                                                      {line.eta_updated_at && (
+                                                        <div className="text-[9px] text-slate-400 mt-0.5">maj {fmtDate(line.eta_updated_at)}</div>
+                                                      )}
+                                                    </>
+                                                  ) : (
+                                                    <span className="text-[10px] text-green-600 font-semibold">✓ Facturé</span>
                                                   )}
                                                 </td>
                                                 <td className="px-3 py-2 text-center">
@@ -758,6 +1110,16 @@ export default function SupplyPage() {
                                         </tbody>
                                       </table>
                                     </div>
+
+                                    {/* Quick facturer button in expanded view */}
+                                    {canFact && (
+                                      <div className="mt-3 flex justify-end">
+                                        <button onClick={() => setFactureOrder(order)}
+                                          className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-emerald-600 px-3 text-xs font-bold text-white hover:bg-emerald-700 transition-colors shadow-sm">
+                                          <FileText className="h-3.5 w-3.5" /> Facturer les lignes livrées
+                                        </button>
+                                      </div>
+                                    )}
                                   </td>
                                 </tr>
                               )}
@@ -773,6 +1135,18 @@ export default function SupplyPage() {
           </div>
         )}
       </div>
+
+      {/* Facturation Modal */}
+      {factureOrder && (
+        <FacturationModal
+          order={factureOrder}
+          lines={factureOrder.opportunities?.purchase_info?.[0]?.purchase_lines || []}
+          paymentTerms={factureOrder.opportunities?.purchase_info?.[0]?.payment_terms || null}
+          userEmail={userEmail}
+          onClose={() => setFactureOrder(null)}
+          onSaved={() => { setFactureOrder(null); showToast('Facture créée avec succès !'); load() }}
+        />
+      )}
 
       {purchaseDeal && (
         <PurchaseModal
