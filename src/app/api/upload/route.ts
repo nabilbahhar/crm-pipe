@@ -22,10 +22,10 @@ const ALLOWED_TYPES = [
 ]
 
 // ─── Security: Whitelist allowed buckets ───────────────────────
-const ALLOWED_BUCKETS = ['deal-files', 'account-files', 'expense-files', 'profile-avatars']
+const ALLOWED_BUCKETS = ['deal-files', 'account-files', 'expense-files', 'profile-avatars', 'team-files']
 
 // ─── Security: Whitelist file_type values for DB records ────────
-const ALLOWED_FILE_TYPES = ['devis', 'devis_compucom', 'bon_commande', 'facture', 'photo', 'autre', 'bc_client', 'bc_fournisseur', 'bon_livraison', 'pv_reception', 'contrat', 'avatar']
+const ALLOWED_FILE_TYPES = ['devis', 'devis_compucom', 'bon_commande', 'facture', 'photo', 'autre', 'bc_client', 'bc_fournisseur', 'bon_livraison', 'pv_reception', 'contrat', 'avatar', 'chat']
 
 // ─── Security: Validate path (no traversal) ───────────────────
 function isPathSafe(path: string): boolean {
