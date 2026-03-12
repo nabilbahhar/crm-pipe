@@ -1679,7 +1679,7 @@ export default function Dashboard() {
             return { name: MONTHS_FR[i], facture, paye }
           })
 
-          return (
+          return (<>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {/* Logistique */}
               <Panel title="📦 Logistique" sub={`${supTotal} commandes`}>
@@ -1743,7 +1743,60 @@ export default function Dashboard() {
                 )}
               </Panel>
             </div>
-          )
+
+            {/* Alertes section */}
+            {totalAlerts > 0 && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/50 overflow-hidden shadow-sm">
+                <div className="flex items-center gap-2 px-5 py-3 border-b border-amber-200 bg-amber-100/50">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <span className="text-sm font-bold text-amber-800">Alertes</span>
+                  <span className="ml-1 rounded-full bg-amber-200 px-2 py-0.5 text-xs font-bold text-amber-800">{totalAlerts}</span>
+                </div>
+                <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {drExpiring.length > 0 && (
+                    <Link href="/tasks" className="rounded-xl border border-red-200 bg-white p-3 hover:bg-red-50 transition-colors">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm">🎯</span>
+                        <span className="text-xs font-bold text-red-700">DR expirant</span>
+                      </div>
+                      <div className="text-lg font-black text-red-600">{drExpiring.length}</div>
+                      <div className="text-[10px] text-red-500">dans &lt; 30 jours</div>
+                    </Link>
+                  )}
+                  {warrantyExpiring.length > 0 && (
+                    <Link href="/tasks" className="rounded-xl border border-orange-200 bg-white p-3 hover:bg-orange-50 transition-colors">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm">🛡️</span>
+                        <span className="text-xs font-bold text-orange-700">Garanties</span>
+                      </div>
+                      <div className="text-lg font-black text-orange-600">{warrantyExpiring.length}</div>
+                      <div className="text-[10px] text-orange-500">expirant &lt; 90 jours</div>
+                    </Link>
+                  )}
+                  {licenseExpiring.length > 0 && (
+                    <Link href="/tasks" className="rounded-xl border border-blue-200 bg-white p-3 hover:bg-blue-50 transition-colors">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm">🔑</span>
+                        <span className="text-xs font-bold text-blue-700">Licences</span>
+                      </div>
+                      <div className="text-lg font-black text-blue-600">{licenseExpiring.length}</div>
+                      <div className="text-[10px] text-blue-500">expirant &lt; 90 jours</div>
+                    </Link>
+                  )}
+                  {invOverdue.length > 0 && (
+                    <Link href="/invoices" className="rounded-xl border border-red-200 bg-white p-3 hover:bg-red-50 transition-colors">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm">💰</span>
+                        <span className="text-xs font-bold text-red-700">Factures échues</span>
+                      </div>
+                      <div className="text-lg font-black text-red-600">{invOverdue.length}</div>
+                      <div className="text-[10px] text-red-500">{mad(invOverdue.reduce((s: number, i: any) => s + Number(i.amount || 0), 0))}</div>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
+          </>)
         })()}
 
         {/* ══ LISTE COMPLÈTE DEALS ══ */}
