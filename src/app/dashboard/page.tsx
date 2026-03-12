@@ -433,7 +433,7 @@ export default function Dashboard() {
     const annualPaye = invoices
       .filter((i: any) => String(i.issue_date||i.created_at||'').startsWith(String(year)) && i.status === 'payee')
       .reduce((s: number, i: any) => s + Number(i.amount||0), 0)
-    const annualCoverage = ANNUAL_TARGET>0 ? Math.min(100,Math.round(annualFacture/ANNUAL_TARGET*100)) : 0
+    const annualCoverage = ANNUAL_TARGET>0 ? Math.min(100,Math.round(annualWon/ANNUAL_TARGET*100)) : 0
 
     // Prev period for deltas
     const prevPipe = prevOpenDeals.reduce((s,d)=>s+d.amount,0)
@@ -669,21 +669,11 @@ export default function Dashboard() {
       const ptAchat = Number(ln.qty||1) * Number(ln.pu_achat||0)
       totalVente += ptVente; totalAchat += ptAchat
 
-      // by BU — ventiler les deals MULTI par BU réelle (proportionnel)
-      const deal = deals.find(d=>d.id===oppId)
-      if (deal && deal.isMulti && deal.lines.length > 1) {
-        const totalDealAmt = deal.lines.reduce((s,l)=>s+l.amount,0) || 1
-        for (const dl of deal.lines) {
-          const ratio = dl.amount / totalDealAmt
-          const bu = dl.sbu || 'Autre'
-          if (!byBU[bu]) byBU[bu] = {vente:0,achat:0,count:0}
-          byBU[bu].vente += ptVente * ratio; byBU[bu].achat += ptAchat * ratio; byBU[bu].count++
-        }
-      } else {
-        const bu = (deal?.lines?.[0]?.sbu) || opp.bu || 'Autre'
-        if (!byBU[bu]) byBU[bu] = {vente:0,achat:0,count:0}
-        byBU[bu].vente += ptVente; byBU[bu].achat += ptAchat; byBU[bu].count++
-      }
+      // by BU — MULTI → ICS
+      const rawBu = opp.bu || 'Autre'
+      const bu = rawBu === 'MULTI' ? 'ICS' : rawBu
+      if (!byBU[bu]) byBU[bu] = {vente:0,achat:0,count:0}
+      byBU[bu].vente += ptVente; byBU[bu].achat += ptAchat; byBU[bu].count++
 
       // by month (booking_month)
       const ym = ymFrom(opp.booking_month) || ymFrom(opp.created_at)
@@ -712,7 +702,7 @@ export default function Dashboard() {
     }))
 
     return { totalVente, totalAchat, margeBrute, margePct, buArr, trendMarge }
-  },[purchaseLines, rowMap, year, inPeriod, deals])
+  },[purchaseLines, rowMap, year, inPeriod])
 
   // ── Supply status counts (respects filters via inPeriod) ────────────────
   const filteredSupplyOrders = useMemo(()=>{
@@ -993,8 +983,8 @@ export default function Dashboard() {
 
         {/* ══ OBJECTIF ANNUEL — CA FACTURÉ ══ */}
         {(() => {
-          const factPct = ANNUAL_TARGET>0 ? Math.min(100,Math.round(kpis.annualFacture/ANNUAL_TARGET*100)) : 0
-          const restant = Math.max(0, ANNUAL_TARGET - kpis.annualFacture)
+          const factPct = ANNUAL_TARGET>0 ? Math.min(100,Math.round(kpis.annualWon/ANNUAL_TARGET*100)) : 0
+          const restant = Math.max(0, ANNUAL_TARGET - kpis.annualWon)
           return (
             <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden">
               <div className="px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1003,7 +993,7 @@ export default function Dashboard() {
                     <Trophy className="h-5 w-5"/>
                   </div>
                   <div>
-                    <div className="text-sm font-black text-slate-900">Objectif {year} — CA Facturé</div>
+                    <div className="text-sm font-black text-slate-900">Objectif {year} — CA Won</div>
                     {editingTarget ? (
                       <div className="flex items-center gap-1">
                         <input value={targetInput} onChange={e => setTargetInput(e.target.value)}
@@ -1037,7 +1027,7 @@ export default function Dashboard() {
                   <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-700 shadow-sm" style={{width:`${factPct}%`}}/>
                 </div>
                 <div className="flex justify-between mt-2 text-[10px] text-slate-400 font-medium">
-                  <span>{fmt(kpis.annualFacture)} facturé</span>
+                  <span>{fmt(kpis.annualWon)} won</span>
                   <span>{fmt(ANNUAL_TARGET)}</span>
                 </div>
               </div>
