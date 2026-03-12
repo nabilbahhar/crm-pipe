@@ -669,10 +669,21 @@ export default function Dashboard() {
       const ptAchat = Number(ln.qty||1) * Number(ln.pu_achat||0)
       totalVente += ptVente; totalAchat += ptAchat
 
-      // by BU
-      const bu = opp.bu || 'Autre'
-      if (!byBU[bu]) byBU[bu] = {vente:0,achat:0,count:0}
-      byBU[bu].vente += ptVente; byBU[bu].achat += ptAchat; byBU[bu].count++
+      // by BU — ventiler les deals MULTI par BU réelle (proportionnel)
+      const deal = deals.find(d=>d.id===oppId)
+      if (deal && deal.isMulti && deal.lines.length > 1) {
+        const totalDealAmt = deal.lines.reduce((s,l)=>s+l.amount,0) || 1
+        for (const dl of deal.lines) {
+          const ratio = dl.amount / totalDealAmt
+          const bu = dl.sbu || 'Autre'
+          if (!byBU[bu]) byBU[bu] = {vente:0,achat:0,count:0}
+          byBU[bu].vente += ptVente * ratio; byBU[bu].achat += ptAchat * ratio; byBU[bu].count++
+        }
+      } else {
+        const bu = (deal?.lines?.[0]?.sbu) || opp.bu || 'Autre'
+        if (!byBU[bu]) byBU[bu] = {vente:0,achat:0,count:0}
+        byBU[bu].vente += ptVente; byBU[bu].achat += ptAchat; byBU[bu].count++
+      }
 
       // by month (booking_month)
       const ym = ymFrom(opp.booking_month) || ymFrom(opp.created_at)
@@ -686,10 +697,12 @@ export default function Dashboard() {
     const margeBrute = totalVente - totalAchat
     const margePct   = totalVente > 0 ? (margeBrute/totalVente)*100 : 0
 
-    const buArr = Object.entries(byBU).map(([bu,v])=>({
-      bu, vente:v.vente, achat:v.achat, marge:v.vente-v.achat,
-      margePct: v.vente>0 ? Math.round((v.vente-v.achat)/v.vente*100) : 0,
-    })).sort((a,b)=>b.vente-a.vente)
+    const buArr = Object.entries(byBU)
+      .filter(([bu])=>bu!=='MULTI')
+      .map(([bu,v])=>({
+        bu, vente:v.vente, achat:v.achat, marge:v.vente-v.achat,
+        margePct: v.vente>0 ? Math.round((v.vente-v.achat)/v.vente*100) : 0,
+      })).sort((a,b)=>b.vente-a.vente)
 
     const trendMarge = monthsOfYear(year).map((m,i)=>({
       month: MONTHS_FR[i],
@@ -699,7 +712,7 @@ export default function Dashboard() {
     }))
 
     return { totalVente, totalAchat, margeBrute, margePct, buArr, trendMarge }
-  },[purchaseLines, rowMap, year, inPeriod])
+  },[purchaseLines, rowMap, year, inPeriod, deals])
 
   // ── Supply status counts (respects filters via inPeriod) ────────────────
   const filteredSupplyOrders = useMemo(()=>{
