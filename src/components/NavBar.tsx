@@ -31,7 +31,8 @@ const NAV_ITEMS: NavItem[] = [
     { label: "Facturation", href: "/invoices" },
     { label: "Notes de frais", href: "/expenses" },
   ]},
-  { label: "Marketing", href: "/events", children: [
+  { label: "Marketing", href: "/marketing", children: [
+    { label: "Stratégie", href: "/marketing" },
     { label: "Événements", href: "/events" },
   ]},
   { label: "Support", href: "/support" },
@@ -544,6 +545,13 @@ export default function NavBar() {
 
   // Close mobile menu on route change
   useEffect(() => { setMobileMenuOpen(false) }, [path]);
+
+  // Reset unread messages when navigating to /messages
+  useEffect(() => {
+    if (path === '/messages' && unreadMsgs > 0) {
+      setUnreadMsgs(0);
+    }
+  }, [path]);
 
   // Global keyboard shortcuts
   const router = useRouter();

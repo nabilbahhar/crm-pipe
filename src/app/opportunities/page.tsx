@@ -581,7 +581,7 @@ function DealsPageInner() {
                     className="h-8 appearance-none rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-xs font-semibold text-slate-700 focus:outline-none">
                     <option value="Tous">Toutes</option>
                     {BUS.map(b => <option key={b} value={b}>{b}</option>)}
-                    <option value="MULTI">MULTI</option>
+                    <option value="MULTI">Multi-BU</option>
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-2 top-2 h-4 w-4 text-slate-400" />
                 </div>

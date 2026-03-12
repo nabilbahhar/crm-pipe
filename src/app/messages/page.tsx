@@ -193,10 +193,25 @@ export default function MessagesPage() {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // Mark all received messages as read
+  async function markAllRead(myEmail: string) {
+    try {
+      await supabase
+        .from('team_messages')
+        .update({ read_at: new Date().toISOString() })
+        .neq('sender_email', myEmail)
+        .is('read_at', null)
+    } catch {}
+  }
+
   useEffect(() => {
     document.title = 'Messages · CRM-PIPE'
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user?.email) setUserEmail(data.user.email)
+      if (data.user?.email) {
+        setUserEmail(data.user.email)
+        // Mark all received messages as read when opening the page
+        markAllRead(data.user.email)
+      }
     })
     loadMessages()
     loadFiles()
@@ -205,7 +220,17 @@ export default function MessagesPage() {
     const channel = supabase
       .channel('team-messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_messages' }, (payload) => {
-        setMessages(prev => [...prev, payload.new as Message])
+        const newMsg = payload.new as Message
+        setMessages(prev => [...prev, newMsg])
+        // Auto-mark incoming messages as read since user is on the page
+        supabase.auth.getUser().then(({ data }) => {
+          if (data.user?.email && newMsg.sender_email !== data.user.email) {
+            supabase.from('team_messages')
+              .update({ read_at: new Date().toISOString() })
+              .eq('id', newMsg.id)
+              .then(() => {})
+          }
+        })
       })
       .subscribe()
 

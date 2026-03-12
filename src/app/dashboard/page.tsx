@@ -978,94 +978,59 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ══ OBJECTIF ANNUEL — 3 BARRES DE PROGRESSION ══ */}
-        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-400 text-white shadow-md">
-                <Trophy className="h-5 w-5"/>
+        {/* ══ OBJECTIF ANNUEL — CA FACTURÉ ══ */}
+        {(() => {
+          const factPct = ANNUAL_TARGET>0 ? Math.min(100,Math.round(kpis.annualFacture/ANNUAL_TARGET*100)) : 0
+          const restant = Math.max(0, ANNUAL_TARGET - kpis.annualFacture)
+          return (
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-400 text-white shadow-md">
+                    <Trophy className="h-5 w-5"/>
+                  </div>
+                  <div>
+                    <div className="text-sm font-black text-slate-900">Objectif {year} — CA Facturé</div>
+                    {editingTarget ? (
+                      <div className="flex items-center gap-1">
+                        <input value={targetInput} onChange={e => setTargetInput(e.target.value)}
+                          onKeyDown={e => { if (e.key==='Enter') saveTarget(); if (e.key==='Escape') setEditingTarget(false) }}
+                          autoFocus placeholder="30000000"
+                          className="h-6 w-28 rounded border border-slate-300 px-2 text-xs outline-none focus:border-blue-400" />
+                        <button onClick={saveTarget} className="h-6 rounded bg-slate-900 px-2 text-[10px] font-bold text-white">OK</button>
+                        <button onClick={() => setEditingTarget(false)} className="h-6 rounded border px-2 text-[10px] text-slate-500">✕</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setTargetInput(String(ANNUAL_TARGET)); setEditingTarget(true) }}
+                        className="text-xs text-slate-500 hover:text-blue-600 transition-colors cursor-pointer">
+                        Cible : {new Intl.NumberFormat('fr-MA').format(ANNUAL_TARGET)} MAD ✎
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-center">
+                    <div className="text-2xl font-black text-blue-600">{factPct}%</div>
+                    <div className="text-[10px] font-semibold text-slate-400">atteint</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-slate-700">{fmt(restant)} MAD</div>
+                    <div className="text-[10px] text-slate-500">restant</div>
+                  </div>
+                </div>
               </div>
-              <div>
-                <div className="text-sm font-black text-slate-900">Objectif annuel {year}</div>
-                {editingTarget ? (
-                  <div className="flex items-center gap-1">
-                    <input value={targetInput} onChange={e => setTargetInput(e.target.value)}
-                      onKeyDown={e => { if (e.key==='Enter') saveTarget(); if (e.key==='Escape') setEditingTarget(false) }}
-                      autoFocus placeholder="30000000"
-                      className="h-6 w-28 rounded border border-slate-300 px-2 text-xs outline-none focus:border-blue-400" />
-                    <button onClick={saveTarget} className="h-6 rounded bg-slate-900 px-2 text-[10px] font-bold text-white">OK</button>
-                    <button onClick={() => setEditingTarget(false)} className="h-6 rounded border px-2 text-[10px] text-slate-500">✕</button>
-                  </div>
-                ) : (
-                  <button onClick={() => { setTargetInput(String(ANNUAL_TARGET)); setEditingTarget(true) }}
-                    className="text-xs text-slate-500 hover:text-blue-600 transition-colors cursor-pointer">
-                    Cible : {new Intl.NumberFormat('fr-MA').format(ANNUAL_TARGET)} MAD ✎
-                  </button>
-                )}
+              <div className="px-6 pb-4">
+                <div className="h-4 w-full rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all duration-700 shadow-sm" style={{width:`${factPct}%`}}/>
+                </div>
+                <div className="flex justify-between mt-2 text-[10px] text-slate-400 font-medium">
+                  <span>{fmt(kpis.annualFacture)} facturé</span>
+                  <span>{fmt(ANNUAL_TARGET)}</span>
+                </div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-lg font-bold text-slate-700">{fmt(Math.max(0,ANNUAL_TARGET-kpis.annualFacture))} MAD</div>
-              <div className="text-xs text-slate-500">restant à facturer</div>
-            </div>
-          </div>
-          <div className="px-6 pb-5 space-y-3">
-            {/* 3 progress bars side by side */}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {/* Gagné (Won) — green */}
-              {(() => {
-                const wonPct = ANNUAL_TARGET>0 ? Math.min(100,Math.round(kpis.annualWon/ANNUAL_TARGET*100)) : 0
-                return (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-emerald-700">Gagné (Won)</span>
-                      <span className="text-xs font-black text-emerald-700">{wonPct}%</span>
-                    </div>
-                    <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
-                      <div className="h-full rounded-full bg-emerald-500 transition-all duration-700" style={{width:`${wonPct}%`}}/>
-                    </div>
-                    <div className="mt-1 text-[10px] font-semibold text-slate-500">{fmt(kpis.annualWon)} MAD</div>
-                  </div>
-                )
-              })()}
-              {/* Facturé — blue (main KPI) */}
-              {(() => {
-                const factPct = ANNUAL_TARGET>0 ? Math.min(100,Math.round(kpis.annualFacture/ANNUAL_TARGET*100)) : 0
-                return (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-blue-700">Facturé</span>
-                      <span className="text-xs font-black text-blue-700">{factPct}%</span>
-                    </div>
-                    <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
-                      <div className="h-full rounded-full bg-blue-500 transition-all duration-700" style={{width:`${factPct}%`}}/>
-                    </div>
-                    <div className="mt-1 text-[10px] font-semibold text-slate-500">{fmt(kpis.annualFacture)} MAD</div>
-                  </div>
-                )
-              })()}
-              {/* Payé — amber */}
-              {(() => {
-                const payePct = ANNUAL_TARGET>0 ? Math.min(100,Math.round(kpis.annualPaye/ANNUAL_TARGET*100)) : 0
-                return (
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-bold text-amber-700">Payé</span>
-                      <span className="text-xs font-black text-amber-700">{payePct}%</span>
-                    </div>
-                    <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
-                      <div className="h-full rounded-full bg-amber-500 transition-all duration-700" style={{width:`${payePct}%`}}/>
-                    </div>
-                    <div className="mt-1 text-[10px] font-semibold text-slate-500">{fmt(kpis.annualPaye)} MAD</div>
-                  </div>
-                )
-              })()}
-            </div>
-            <div className="flex justify-between text-[10px] text-slate-400 font-medium">
-              <span>0</span><span>{fmt(ANNUAL_TARGET*0.25)} (Q1)</span><span>{fmt(ANNUAL_TARGET*0.5)} (Q2)</span><span>{fmt(ANNUAL_TARGET*0.75)} (Q3)</span><span>{fmt(ANNUAL_TARGET)}</span>
-            </div>
-          </div>
-        </div>
+          )
+        })()}
 
         {/* ══ KPI ROW (6 métriques) ══ */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
@@ -1803,7 +1768,7 @@ export default function Dashboard() {
                   {sortedDeals.map(d=>{
                     const best=[...(d.lines||[])].sort((a,b)=>b.amount-a.amount)[0]
                     const mainSbu=String(best?.sbu||'—')
-                    const mainCard=d.isMulti?`Multi (${d.lines.length})`:(best?.card||'—')
+                    const mainCard=d.isMulti?(d.lines.length>0?[...new Set(d.lines.map(l=>l.card||l.sbu))].join(' + '):'Multi-BU'):(best?.card||'—')
                     const isLate=d.closingYmReal&&d.closingYmReal<periodMonths[0]&&d.status==='Open'
                     return (
                       <tr key={d.id} className={`transition-colors ${isLate?'hover:bg-red-50/20':'hover:bg-slate-50/60'}`}>
