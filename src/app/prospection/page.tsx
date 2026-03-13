@@ -6,7 +6,7 @@ import { authFetch } from '@/lib/authFetch'
 import { logActivity } from '@/lib/logActivity'
 import {
   Plus, RefreshCw, X, Phone, Mail, ChevronRight,
-  LayoutGrid, List, Flame, Thermometer, Snowflake, ArrowRightCircle,
+  LayoutGrid, List, ArrowRightCircle,
   ArrowUp, ArrowDown, ChevronsUpDown, Download, Users, Trash2,
   CheckCircle2, Building2, Eye, Pencil, Search, AlertCircle,
 } from 'lucide-react'
@@ -36,7 +36,6 @@ type Prospect = {
   contact_email: string | null
   type: string
   segment: string | null
-  heat: 'cold' | 'warm' | 'hot'
   status: string
   attempts: number
   last_contact_at: string | null
@@ -87,9 +86,9 @@ const SEG_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
   'Semi-public': { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-400' },
 }
 const SOURCES = [
-  'Outbound Call', 'LinkedIn', 'Événement / Salon', 'Référence client',
-  'Constructeur / Éditeur', 'Distributeur / Partenaire', 'Appel d\'offres',
-  'Inbound (site/email)', 'Réseau professionnel', 'Réseau personnel', 'Cross-selling / Upselling', 'Autre',
+  'Cold Call', 'LinkedIn', 'Événement / Salon', 'Referral',
+  'Constructeur / Éditeur', 'Partenaire / Distributeur', 'Appel d\'offres',
+  'Inbound', 'Networking', 'Cross-selling', 'Upselling', 'Autre',
 ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -107,12 +106,6 @@ function isToday(d: string | null) {
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('fr-MA', { day: '2-digit', month: 'short' })
-}
-
-function HeatIcon({ heat }: { heat: string }) {
-  if (heat === 'hot')  return <Flame className="h-3.5 w-3.5 text-red-500" />
-  if (heat === 'warm') return <Thermometer className="h-3.5 w-3.5 text-amber-500" />
-  return <Snowflake className="h-3.5 w-3.5 text-blue-400" />
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -152,7 +145,7 @@ function Sel({ label, value, onChange, options }: {
 
 const EMPTY: any = {
   company_name: '', sector: '', region: 'Rabat', contact_name: '', contact_role: '',
-  contact_phone: '', contact_email: '', type: 'Direct', segment: 'Privé', heat: 'cold',
+  contact_phone: '', contact_email: '', type: 'Direct', segment: 'Privé',
   status: 'À contacter', next_action: '', next_date: '', notes: '', source: '',
 }
 
@@ -229,7 +222,6 @@ function CompanyInput({
               </div>
               <span className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold
                 ${ p.status === 'Qualifié ✓' ? 'bg-emerald-50 text-emerald-700'
-                  : p.heat === 'hot' ? 'bg-red-50 text-red-600'
                   : 'bg-slate-100 text-slate-500' }`}>
                 {p.status}
               </span>
@@ -304,7 +296,6 @@ export default function ProspectionPage() {
 
   // Filters
   const [search, setSearch]           = useState('')
-  const [heatFilter, setHeatFilter]     = useState('Tous')
   const [segFilter, setSegFilter]     = useState('Tous')
   const [statusFilter, setStatusFilter] = useState('Tous')
   const [regionFilter, setRegionFilter] = useState('Tous')
@@ -412,7 +403,6 @@ export default function ProspectionPage() {
       (x.contact_phone || '').includes(q) ||
       (x.sector || '').toLowerCase().includes(q)
     )
-    if (heatFilter !== 'Tous') r = r.filter(x => x.heat === heatFilter)
     if (segFilter !== 'Tous') r = r.filter(x => (x.segment || 'Privé') === segFilter)
     if (statusFilter !== 'Tous') r = r.filter(x => x.status === statusFilter)
     if (regionFilter !== 'Tous') r = r.filter(x => (x.region || '') === regionFilter)
@@ -420,9 +410,9 @@ export default function ProspectionPage() {
     if (dateFrom) r = r.filter(x => (x.created_at || '') >= dateFrom)
     if (dateTo)   r = r.filter(x => (x.created_at || '') <= dateTo + 'T23:59:59')
     return r
-  }, [rows, search, heatFilter, segFilter, statusFilter, regionFilter, showOverdue, dateFrom, dateTo])
+  }, [rows, search, segFilter, statusFilter, regionFilter, showOverdue, dateFrom, dateTo])
 
-  type SortKey = 'created_at'|'company_name'|'status'|'heat'|'next_date'|'type'
+  type SortKey = 'created_at'|'company_name'|'status'|'next_date'|'type'
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
@@ -433,7 +423,6 @@ export default function ProspectionPage() {
       switch (sortKey) {
         case 'company_name': va = a.company_name; vb = b.company_name; break
         case 'status':   va = a.status; vb = b.status; break
-        case 'heat':     va = ['cold','warm','hot'].indexOf(a.heat); vb = ['cold','warm','hot'].indexOf(b.heat); break
         case 'next_date':va = a.next_date||''; vb = b.next_date||''; break
         case 'type':     va = a.segment || 'Privé'; vb = b.segment || 'Privé'; break
         default:         va = a.created_at||''; vb = b.created_at||''
@@ -456,7 +445,6 @@ export default function ProspectionPage() {
     const topSources = Object.entries(bySource).sort((a, b) => b[1] - a[1]).slice(0, 6)
     return {
       total: active.length,
-      hot: active.filter(x => x.heat === 'hot').length,
       qualifie: active.filter(x => x.status === 'Qualifié ✓').length,
       converted,
       convRate: rows.length > 0 ? Math.round(converted / rows.length * 100) : 0,
@@ -478,10 +466,10 @@ export default function ProspectionPage() {
         sheets: [{
           name: 'Prospects',
           title: `Prospection · ${sorted.length} prospects · ${new Date().toLocaleDateString('fr-MA')}`,
-          headers: ['Société','Contact','Rôle','Téléphone','Email','Segment','Statut','Heat','Dernière relance','Prochaine action','Prochaine date','Source','Secteur','Région','Créé le'],
+          headers: ['Société','Contact','Rôle','Téléphone','Email','Segment','Statut','Dernière relance','Prochaine action','Prochaine date','Source','Secteur','Région','Créé le'],
           rows: sorted.map(p => [
             p.company_name, p.contact_name, p.contact_role||'—', p.contact_phone||'—',
-            p.contact_email||'—', p.segment||'Privé', p.status, p.heat,
+            p.contact_email||'—', p.segment||'Privé', p.status,
             p.last_contact_at||'—', p.next_action||'—', p.next_date||'—',
             p.source||'—', p.sector||'—', p.region||'—', (p.created_at||'').slice(0,10),
           ]),
@@ -490,7 +478,7 @@ export default function ProspectionPage() {
         summary: {
           title: `Résumé Prospection · ${new Date().toLocaleDateString('fr-MA')}`,
           kpis: [
-            { label: 'Total prospects', value: sorted.length, detail: `${sorted.filter(p=>p.heat==='hot').length} prospects chauds` },
+            { label: 'Total prospects', value: sorted.length, detail: `${sorted.filter(p=>p.status==='Qualifié ✓').length} qualifiés` },
             { label: 'Taux de conversion', value: `${rows.length > 0 ? Math.round(rows.filter(p=>(p as any).converted_at).length / rows.length * 100) : 0}%`, detail: 'Prospects qualifiés / total' },
           ],
           breakdownTitle: 'Répartition par statut',
@@ -713,7 +701,7 @@ export default function ProspectionPage() {
       company_name: form.company_name.trim(), sector: form.sector || null,
       region: form.region || null, contact_name: form.contact_name.trim(),
       contact_role: form.contact_role || null, contact_phone: form.contact_phone || null,
-      contact_email: form.contact_email || null, type: form.type, segment: form.segment || 'Privé', heat: form.heat,
+      contact_email: form.contact_email || null, type: form.type, segment: form.segment || 'Privé',
       status: form.status, next_action: form.next_action || null,
       next_date: form.next_date || null,
       notes: grandCompteMode
@@ -850,7 +838,7 @@ export default function ProspectionPage() {
       company_name: p.company_name, sector: p.sector || '', region: p.region || '',
       contact_name: p.contact_name, contact_role: p.contact_role || '',
       contact_phone: p.contact_phone || '', contact_email: p.contact_email || '',
-      type: p.type, segment: p.segment || 'Privé', heat: p.heat, status: p.status,
+      type: p.type, segment: p.segment || 'Privé', status: p.status,
       next_action: p.next_action || '', next_date: p.next_date || '',
       notes: isGC ? (p.notes?.replace(/\[GRAND COMPTE · BU: .+?\]\n?/, '') || '') : (p.notes || ''),
       source: p.source || '',
@@ -907,14 +895,6 @@ export default function ProspectionPage() {
             </div>
             <div className="text-2xl font-black text-slate-900">{stats.total}</div>
             <div className="text-[11px] text-slate-500 mt-0.5">{stats.converted} convertis</div>
-          </div>
-          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-red-600"><Flame className="h-3.5 w-3.5" /></div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Chauds</span>
-            </div>
-            <div className="text-2xl font-black text-red-700">{stats.hot}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Heat = hot</div>
           </div>
           <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -1026,14 +1006,6 @@ export default function ProspectionPage() {
             {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-slate-300 hover:text-slate-600" /></button>}
           </div>
 
-          {/* Heat */}
-          <div className="flex gap-1 rounded-xl border bg-white p-1 shadow-sm">
-            {[{k:'Tous',l:'Tous'},{k:'hot',l:'🔥'},{k:'warm',l:'🌡'},{k:'cold',l:'❄️'}].map(({k,l}) => (
-              <button key={k} onClick={() => setHeatFilter(k)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors
-                  ${heatFilter===k ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>{l}</button>
-            ))}
-          </div>
 
           {/* Type filter */}
           <select value={segFilter} onChange={e => setSegFilter(e.target.value)}
@@ -1071,8 +1043,8 @@ export default function ProspectionPage() {
           )}
 
           {/* Active filter indicator */}
-          {(statusFilter !== 'Tous' || segFilter !== 'Tous' || heatFilter !== 'Tous' || regionFilter !== 'Tous' || dateFrom || dateTo || showOverdue) && (
-            <button onClick={() => { setStatusFilter('Tous'); setSegFilter('Tous'); setHeatFilter('Tous'); setRegionFilter('Tous'); setDateFrom(''); setDateTo(''); setShowOverdue(false) }}
+          {(statusFilter !== 'Tous' || segFilter !== 'Tous' || regionFilter !== 'Tous' || dateFrom || dateTo || showOverdue) && (
+            <button onClick={() => { setStatusFilter('Tous'); setSegFilter('Tous'); setRegionFilter('Tous'); setDateFrom(''); setDateTo(''); setShowOverdue(false) }}
               className="inline-flex h-9 items-center gap-1 rounded-xl border bg-white px-3 text-xs text-slate-500 hover:text-red-500 shadow-sm">
               <X className="h-3.5 w-3.5" /> Reset
             </button>
@@ -1161,7 +1133,6 @@ export default function ProspectionPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <HeatIcon heat={p.heat} />
                             <div>
                               <div className="font-semibold text-slate-900">{p.company_name}</div>
                               {(p.sector || p.region) && (
@@ -1266,8 +1237,7 @@ export default function ProspectionPage() {
                             ${overdue ? 'border-red-200' : 'border-slate-100'}`}>
                           <div className="flex items-start justify-between gap-1">
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <HeatIcon heat={p.heat} />
-                              <span className="font-semibold text-slate-900 text-xs leading-tight truncate">{p.company_name}</span>
+                                <span className="font-semibold text-slate-900 text-xs leading-tight truncate">{p.company_name}</span>
                             </div>
                             {(() => { const seg = p.segment || 'Privé'; const s = SEG_STYLE[seg] || SEG_STYLE['Privé']; return <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold flex-shrink-0 ${s.bg} ${s.text}`}><span className={`h-1 w-1 rounded-full ${s.dot}`} />{seg}</span> })()}
                           </div>
@@ -1568,23 +1538,6 @@ export default function ProspectionPage() {
               <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 space-y-3">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">📊 Qualification</div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <div className="mb-1.5 text-xs font-semibold text-slate-600">Chaleur</div>
-                    <div className="flex gap-2">
-                      {([
-                        { k: 'cold', label: '❄️ Froid', active: 'bg-blue-600 text-white border-blue-600' },
-                        { k: 'warm', label: '🌡️ Tiède', active: 'bg-amber-500 text-white border-amber-500' },
-                        { k: 'hot',  label: '🔥 Chaud', active: 'bg-red-500 text-white border-red-500' },
-                      ] as const).map(h => (
-                        <button key={h.k} type="button"
-                          onClick={() => setForm((p: any) => ({ ...p, heat: h.k }))}
-                          className={`flex-1 rounded-xl border py-2 text-xs font-bold transition-all
-                            ${form.heat === h.k ? h.active + ' shadow-sm' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
-                          {h.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                   {editId && <Sel label="Statut" value={form.status} onChange={fld('status')} options={STATUSES} />}
                   <div>
                     <div className="mb-1.5 text-xs font-semibold text-slate-600">Source</div>

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 import { logActivity } from '@/lib/logActivity'
 import {
-  ArrowLeft, Phone, Mail, Users, Flame, Thermometer, Snowflake,
+  ArrowLeft, Phone, Mail, Users,
   ChevronRight, CheckCircle2, ArrowRightCircle, Plus, Pencil, Trash2,
   RefreshCw, Calendar, MessageSquare, Clock, Building2, X,
 } from 'lucide-react'
@@ -19,7 +19,7 @@ type ProspectContact = {
 type Prospect = {
   id: string; company_name: string; sector: string | null; region: string | null
   contact_name: string; contact_role: string | null; contact_phone: string | null
-  contact_email: string | null; type: string; segment: string | null; heat: 'cold' | 'warm' | 'hot'
+  contact_email: string | null; type: string; segment: string | null
   status: string; attempts: number; last_contact_at: string | null
   next_action: string | null; next_date: string | null; notes: string | null
   source: string | null; converted_to_account_id: string | null
@@ -61,19 +61,6 @@ const SECTEUR_OPTIONS = [
 function fmtDate(iso: string | null) {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('fr-MA', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-function HeatBadge({ heat }: { heat: string }) {
-  const cfg = heat === 'hot'
-    ? { icon: <Flame className="h-3.5 w-3.5" />, bg: 'bg-red-100 text-red-700 border-red-200', label: 'Chaud' }
-    : heat === 'warm'
-    ? { icon: <Thermometer className="h-3.5 w-3.5" />, bg: 'bg-amber-100 text-amber-700 border-amber-200', label: 'Tiede' }
-    : { icon: <Snowflake className="h-3.5 w-3.5" />, bg: 'bg-blue-100 text-blue-700 border-blue-200', label: 'Froid' }
-  return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${cfg.bg}`}>
-      {cfg.icon} {cfg.label}
-    </span>
-  )
 }
 
 function StatusBadge({ status }: { status: string }) {
@@ -310,7 +297,6 @@ export default function ProspectDetailPage() {
               <div>
                 <h1 className="text-xl font-black text-white">{prospect.company_name}</h1>
                 <div className="mt-1 flex items-center gap-2 flex-wrap">
-                  <HeatBadge heat={prospect.heat} />
                   <StatusBadge status={prospect.status} />
                   {(prospect.segment || 'Privé') && (
                     <span className="inline-flex rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold text-white">{prospect.segment || 'Privé'}</span>
