@@ -113,19 +113,6 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function AttemptsBar({ n }: { n: number }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <div className="flex gap-0.5">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className={`h-2 w-2 rounded-full ${i < n ? 'bg-slate-600' : 'bg-slate-100'}`} />
-        ))}
-      </div>
-      <span className="text-xs text-slate-400 tabular-nums">{n}</span>
-    </div>
-  )
-}
-
 function Inp({ label, value, onChange, placeholder, type = 'text' }: {
   label: string; value: string; onChange: any; placeholder?: string; type?: string
 }) {
@@ -414,7 +401,7 @@ export default function ProspectionPage() {
     return r
   }, [rows, search, heatFilter, typeFilter, statusFilter, regionFilter, showOverdue, dateFrom, dateTo])
 
-  type SortKey = 'created_at'|'company_name'|'status'|'heat'|'attempts'|'next_date'|'type'
+  type SortKey = 'created_at'|'company_name'|'status'|'heat'|'next_date'|'type'
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
 
@@ -426,7 +413,6 @@ export default function ProspectionPage() {
         case 'company_name': va = a.company_name; vb = b.company_name; break
         case 'status':   va = a.status; vb = b.status; break
         case 'heat':     va = ['cold','warm','hot'].indexOf(a.heat); vb = ['cold','warm','hot'].indexOf(b.heat); break
-        case 'attempts': va = a.attempts; vb = b.attempts; break
         case 'next_date':va = a.next_date||''; vb = b.next_date||''; break
         case 'type':     va = a.type; vb = b.type; break
         default:         va = a.created_at||''; vb = b.created_at||''
@@ -471,20 +457,19 @@ export default function ProspectionPage() {
         sheets: [{
           name: 'Prospects',
           title: `Prospection · ${sorted.length} prospects · ${new Date().toLocaleDateString('fr-MA')}`,
-          headers: ['Société','Contact','Rôle','Téléphone','Email','Statut','Heat','Tentatives','Dernière relance','Prochaine action','Prochaine date','Source','Secteur','Région','Créé le'],
+          headers: ['Société','Contact','Rôle','Téléphone','Email','Statut','Heat','Dernière relance','Prochaine action','Prochaine date','Source','Secteur','Région','Créé le'],
           rows: sorted.map(p => [
             p.company_name, p.contact_name, p.contact_role||'—', p.contact_phone||'—',
-            p.contact_email||'—', p.status, p.heat, p.attempts,
+            p.contact_email||'—', p.status, p.heat,
             p.last_contact_at||'—', p.next_action||'—', p.next_date||'—',
             p.source||'—', p.sector||'—', p.region||'—', (p.created_at||'').slice(0,10),
           ]),
-          totalsRow: ['TOTAL', `${sorted.length} prospects`, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+          totalsRow: ['TOTAL', `${sorted.length} prospects`, '', '', '', '', '', '', '', '', '', '', '', ''],
         }],
         summary: {
           title: `Résumé Prospection · ${new Date().toLocaleDateString('fr-MA')}`,
           kpis: [
             { label: 'Total prospects', value: sorted.length, detail: `${sorted.filter(p=>p.heat==='hot').length} prospects chauds` },
-            { label: 'Moy. tentatives', value: sorted.length > 0 ? (sorted.reduce((s,p)=>s+p.attempts,0)/sorted.length).toFixed(1) : '0', detail: 'Tentatives de contact par prospect' },
             { label: 'Taux de conversion', value: `${rows.length > 0 ? Math.round(rows.filter(p=>(p as any).converted_at).length / rows.length * 100) : 0}%`, detail: 'Prospects qualifiés / total' },
           ],
           breakdownTitle: 'Répartition par statut',
@@ -1072,7 +1057,6 @@ export default function ProspectionPage() {
                       { col: 'type',         label: 'Contact',    w: '', noSort: true },
                       { col: 'type',         label: 'Type',       w: '' },
                       { col: 'status',       label: 'Statut',     w: '' },
-                      { col: 'attempts',     label: 'Tentatives', w: '' },
                       { col: 'next_date',    label: 'Next Step',  w: '', noSort: true },
                       { col: 'next_date',    label: 'Relance',    w: '' },
                       { col: 'type',         label: 'Source',     w: '', noSort: true },
@@ -1162,9 +1146,6 @@ export default function ProspectionPage() {
                           <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{p.type}</span>
                         </td>
                         <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
-                        <td className="px-4 py-3">
-                          <AttemptsBar n={p.attempts} />
-                        </td>
                         <td className="px-4 py-3 max-w-[160px]">
                           <div className="truncate text-xs text-slate-500" title={p.next_action || ''}>
                             {p.next_action || <span className="italic text-slate-300">—</span>}
@@ -1250,7 +1231,6 @@ export default function ProspectionPage() {
                               <Phone className="h-3 w-3" />{p.contact_phone}
                             </a>
                           )}
-                          <div className="mt-2"><AttemptsBar n={p.attempts} /></div>
                           {p.next_action && <div className="mt-1.5 text-[11px] text-slate-400 italic leading-tight">{p.next_action}</div>}
                           {p.next_date && (
                             <div className={`mt-1 text-[11px] font-semibold
