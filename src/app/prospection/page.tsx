@@ -995,9 +995,9 @@ export default function ProspectionPage() {
               return (
                 <div key={s}
                   onClick={() => setStatusFilter(active ? 'Tous' : s)}
-                  className={`flex-1 min-w-[90px] rounded-xl border px-3 py-2.5 cursor-pointer transition-all
-                    ${active ? 'ring-2 ring-slate-900 ring-offset-1' : 'hover:ring-1 hover:ring-slate-300'}
-                    ${st.bg} ${st.border}`}>
+                  className={`flex-1 min-w-[90px] rounded-xl px-3 py-2.5 cursor-pointer transition-all
+                    ${active ? 'shadow-md scale-[1.03] border-2 ' + st.border : 'border border-transparent hover:shadow-sm hover:scale-[1.01]'}
+                    ${st.bg}`}>
                   <div className={`text-[10px] font-semibold uppercase tracking-wide truncate ${st.text}`}>{s}</div>
                   <div className={`mt-0.5 text-xl font-bold ${st.text}`}>{stats.bySt[s] || 0}</div>
                 </div>
