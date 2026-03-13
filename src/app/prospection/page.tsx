@@ -151,7 +151,7 @@ function Sel({ label, value, onChange, options }: {
 }
 
 const EMPTY: any = {
-  company_name: '', sector: '', region: '', contact_name: '', contact_role: '',
+  company_name: '', sector: '', region: 'Rabat', contact_name: '', contact_role: '',
   contact_phone: '', contact_email: '', type: 'Direct', segment: 'Privé', heat: 'cold',
   status: 'À contacter', next_action: '', next_date: '', notes: '', source: '',
 }
@@ -400,9 +400,8 @@ export default function ProspectionPage() {
 
   function toast(msg: string, ok = true) { setInfo({ msg, ok }) }
 
-  // Distinct sectors & regions for autocomplete
+  // Distinct sectors for autocomplete
   const sectorSuggestions = useMemo(() => [...new Set(rows.map(r => r.sector).filter(Boolean) as string[])].sort(), [rows])
-  const regionSuggestions = useMemo(() => [...new Set(rows.map(r => r.region).filter(Boolean) as string[])].sort(), [rows])
 
   const filtered = useMemo(() => {
     let r = [...rows]
@@ -779,19 +778,19 @@ export default function ProspectionPage() {
   }
 
   async function del(p: Prospect) {
-    // Protection: refuse si converti en compte
-    if (p.converted_at) {
-      toast('Ce prospect a ete converti en compte, suppression impossible.', false)
-      return
-    }
-    // Protection: refuse si le compte lie a des deals
+    // Si converti, vérifier si le compte existe encore
     if (p.converted_to_account_id) {
-      const { count } = await supabase.from('opportunities')
-        .select('id', { count: 'exact', head: true })
-        .eq('account_id', p.converted_to_account_id)
-      if (count && count > 0) {
-        toast(`Ce compte a ${count} deal(s), suppression impossible.`, false)
-        return
+      const { data: acc } = await supabase.from('accounts')
+        .select('id').eq('id', p.converted_to_account_id).maybeSingle()
+      if (acc) {
+        // Le compte existe — vérifier s'il a des deals
+        const { count } = await supabase.from('opportunities')
+          .select('id', { count: 'exact', head: true })
+          .eq('account_id', p.converted_to_account_id)
+        if (count && count > 0) {
+          toast(`Ce compte a ${count} deal(s), suppression impossible.`, false)
+          return
+        }
       }
     }
     if (!confirm(`Supprimer ${p.company_name} ?`)) return
@@ -1051,8 +1050,8 @@ export default function ProspectionPage() {
           <select value={regionFilter} onChange={e => setRegionFilter(e.target.value)}
             className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
             <option value="Tous">Région: Tous</option>
-            {[...new Set(rows.filter(x => !x.converted_at).map(x => x.region).filter(Boolean))].sort().map(r => (
-              <option key={r} value={r!}>{r}</option>
+            {['Rabat', 'Casablanca', 'Nord Ma', 'Sud Ma'].map(r => (
+              <option key={r} value={r}>{r}</option>
             ))}
           </select>
 
@@ -1466,7 +1465,7 @@ export default function ProspectionPage() {
                   </div>
                   <Sel label="Segment *" value={form.segment || 'Privé'} onChange={fld('segment')} options={SEGMENTS} />
                   <AutocompleteInput label="Secteur" value={form.sector} onChange={v => setForm((p: any) => ({ ...p, sector: v }))} suggestions={sectorSuggestions} placeholder="IT, Banque, BTP…" />
-                  <AutocompleteInput label="Région" value={form.region} onChange={v => setForm((p: any) => ({ ...p, region: v }))} suggestions={regionSuggestions} placeholder="Casablanca, Rabat…" />
+                  <Sel label="Région" value={form.region || 'Rabat'} onChange={fld('region')} options={['Rabat', 'Casablanca', 'Nord Ma', 'Sud Ma'] as any} />
                 </div>
               </div>
 
