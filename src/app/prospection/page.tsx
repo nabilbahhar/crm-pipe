@@ -89,7 +89,7 @@ const SEG_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
 const SOURCES = [
   'Outbound Call', 'LinkedIn', 'Événement / Salon', 'Référence client',
   'Constructeur / Éditeur', 'Distributeur / Partenaire', 'Appel d\'offres',
-  'Inbound (site/email)', 'Réseau professionnel', 'Autre',
+  'Inbound (site/email)', 'Réseau professionnel', 'Cross-selling / Upselling', 'Autre',
 ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -810,6 +810,17 @@ export default function ProspectionPage() {
       converted_to_account_id: accountId,
       converted_at: new Date().toISOString(),
     }).eq('id', convertP.id)
+    // Ajouter le contact du prospect au compte existant
+    if (convertP.contact_name?.trim()) {
+      await supabase.from('account_contacts').insert({
+        account_id: accountId,
+        full_name: convertP.contact_name.trim(),
+        email: convertP.contact_email?.trim() || null,
+        phone: convertP.contact_phone?.trim() || null,
+        role: convertP.contact_role?.trim() || null,
+        is_primary: false,
+      })
+    }
     await supabase.from('activity_log').insert({
       user_email: userEmail, action_type: 'create', entity_type: 'prospect',
       entity_name: convertP.company_name, detail: `Converti → compte : ${accountName}`,

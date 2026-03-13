@@ -242,6 +242,17 @@ export default function ProspectDetailPage() {
       converted_to_account_id: accountId,
       converted_at: new Date().toISOString(),
     }).eq('id', prospect.id)
+    // Ajouter le contact du prospect au compte existant
+    if (prospect.contact_name?.trim()) {
+      await supabase.from('account_contacts').insert({
+        account_id: accountId,
+        full_name: prospect.contact_name.trim(),
+        email: prospect.contact_email?.trim() || null,
+        phone: prospect.contact_phone?.trim() || null,
+        role: prospect.contact_role?.trim() || null,
+        is_primary: false,
+      })
+    }
     await logActivity({
       action_type: 'convert', entity_type: 'prospect',
       entity_id: prospect.id, entity_name: prospect.company_name,
