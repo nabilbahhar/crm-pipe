@@ -8,7 +8,7 @@ import {
   Plus, RefreshCw, X, Phone, Mail, ChevronRight,
   LayoutGrid, List, ArrowRightCircle,
   ArrowUp, ArrowDown, ChevronsUpDown, Download, Users, Trash2,
-  CheckCircle2, Building2, Eye, Pencil, Search, AlertCircle,
+  CheckCircle2, Building2, Eye, Pencil, Search, AlertCircle, Ban,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { getProspectionTarget, setProspectionTarget } from '@/lib/utils'
@@ -48,6 +48,7 @@ type Prospect = {
   converted_at: string | null
   created_by: string | null
   created_at: string
+  disqualify_reason: string | null
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -59,6 +60,7 @@ const STATUSES = [
   'RDV fait',
   'Relance',
   'Qualifié ✓',
+  'Non qualifié ✗',
 ] as const
 
 const STATUS_NEXT: Record<string, string> = {
@@ -78,6 +80,7 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; border: string; d
   'RDV fait':    { bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200', dot: 'bg-orange-400' },
   'Relance':     { bg: 'bg-pink-50',    text: 'text-pink-700',    border: 'border-pink-200',   dot: 'bg-pink-400'   },
   'Qualifié ✓':  { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200',dot: 'bg-emerald-500'},
+  'Non qualifié ✗':{ bg: 'bg-red-50',    text: 'text-red-700',     border: 'border-red-200',   dot: 'bg-red-400'   },
 }
 
 const SEGMENTS = ['Privé', 'Public', 'Semi-public'] as const
@@ -88,9 +91,20 @@ const SEG_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
 }
 const SOURCES = [
   'Cold Call', 'LinkedIn', 'Événement / Salon', 'Referral',
-  'Constructeur / Éditeur', 'Partenaire / Distributeur', 'Appel d\'offres',
-  'Inbound', 'Networking', 'Cross / Upselling', 'Autre',
+  'Transfert Direction', 'Constructeur / Éditeur', 'Partenaire / Distributeur',
+  'Appel d\'offres', 'Inbound', 'Networking', 'Cross / Upselling', 'Autre',
 ]
+
+const DISQUALIFY_REASONS = [
+  'Compte suivi par un autre AE',
+  'Conflit d\'intérêt direction',
+  'Budget inexistant',
+  'Pas de besoin identifié',
+  'Société inactive / fermée',
+  'Hors zone géographique',
+  'Doublon',
+  'Autre',
+] as const
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function isOverdue(d: string | null) {
@@ -331,6 +345,12 @@ export default function ProspectionPage() {
   const [targetBu, setTargetBu] = useState('')
   const [accountMatch, setAccountMatch] = useState<{ id: string; name: string } | null>(null)
 
+  // Disqualify modal
+  const [disqualifyP, setDisqualifyP] = useState<Prospect | null>(null)
+  const [disqualifyReason, setDisqualifyReason] = useState('')
+  const [disqualifyReasonOther, setDisqualifyReasonOther] = useState('')
+  const [disqualifySaving, setDisqualifySaving] = useState(false)
+
   // Qualify modal
   const [qualifyP, setQualifyP] = useState<Prospect | null>(null)
   const [qualifyForm, setQualifyForm] = useState({
@@ -407,7 +427,7 @@ export default function ProspectionPage() {
     if (segFilter !== 'Tous') r = r.filter(x => (x.segment || 'Privé') === segFilter)
     if (statusFilter !== 'Tous') r = r.filter(x => x.status === statusFilter)
     if (regionFilter !== 'Tous') r = r.filter(x => (x.region || '') === regionFilter)
-    if (showOverdue) r = r.filter(x => isOverdue(x.next_date) && x.status !== 'Qualifié ✓')
+    if (showOverdue) r = r.filter(x => isOverdue(x.next_date) && x.status !== 'Qualifié ✓' && x.status !== 'Non qualifié ✗')
     if (dateFrom) r = r.filter(x => (x.created_at || '') >= dateFrom)
     if (dateTo)   r = r.filter(x => (x.created_at || '') <= dateTo + 'T23:59:59')
     return r
@@ -434,12 +454,12 @@ export default function ProspectionPage() {
   }, [filtered, sortKey, sortDir])
 
   const overdueCount = useMemo(
-    () => rows.filter(x => !x.converted_at && isOverdue(x.next_date) && x.status !== 'Qualifié ✓').length,
+    () => rows.filter(x => !x.converted_at && x.status !== 'Non qualifié ✗' && isOverdue(x.next_date) && x.status !== 'Qualifié ✓').length,
     [rows]
   )
 
   const stats = useMemo(() => {
-    const active = rows.filter(x => !x.converted_at)
+    const active = rows.filter(x => !x.converted_at && x.status !== 'Non qualifié ✗')
     const converted = rows.filter(x => x.converted_at).length
     const bySource: Record<string, number> = {}
     const byRegion: Record<string, number> = {}
@@ -610,6 +630,40 @@ export default function ProspectionPage() {
     }
   }
 
+  function openDisqualify(p: Prospect) {
+    setDisqualifyP(p)
+    setDisqualifyReason('')
+    setDisqualifyReasonOther('')
+    setDisqualifySaving(false)
+  }
+
+  async function confirmDisqualify() {
+    if (!disqualifyP) return
+    const finalReason = disqualifyReason === 'Autre' ? disqualifyReasonOther.trim() : disqualifyReason
+    if (!finalReason) return
+    setDisqualifySaving(true)
+    try {
+      const { error } = await supabase.from('prospects').update({
+        status: 'Non qualifié ✗',
+        disqualify_reason: finalReason,
+      }).eq('id', disqualifyP.id)
+      if (error) { setDisqualifySaving(false); setErr(error.message); return }
+      await logActivity({
+        action_type: 'disqualify',
+        entity_type: 'prospect',
+        entity_id: disqualifyP.id,
+        entity_name: disqualifyP.company_name,
+        detail: `Non qualifié : ${finalReason}`,
+      })
+      toast(`${disqualifyP.company_name} → Non qualifié`)
+      setDisqualifyP(null)
+      load()
+    } catch (e: any) {
+      setDisqualifySaving(false)
+      setErr(e?.message || 'Erreur disqualification')
+    }
+  }
+
   async function advanceStatus(p: Prospect) {
     const next = STATUS_NEXT[p.status]
     if (!next) return
@@ -640,6 +694,13 @@ export default function ProspectionPage() {
     if (targetStatus === 'Qualifi\u00e9 \u2713') {
       setDragId(null)
       openQualify(p)
+      return
+    }
+
+    // Intercept: if target is "Non qualifie", open disqualify modal
+    if (targetStatus === 'Non qualifié ✗') {
+      setDragId(null)
+      openDisqualify(p)
       return
     }
 
@@ -1209,6 +1270,12 @@ export default function ProspectionPage() {
                               className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors" title="Modifier">
                               <Pencil className="h-3.5 w-3.5" />
                             </button>
+                            {p.status !== 'Qualifié ✓' && p.status !== 'Non qualifié ✗' && (
+                              <button onClick={() => openDisqualify(p)}
+                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-orange-400 hover:bg-orange-50 hover:text-orange-600 transition-colors" title="Non qualifié">
+                                <Ban className="h-3.5 w-3.5" />
+                              </button>
+                            )}
                             <button onClick={() => del(p)}
                               className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Supprimer">
                               <Trash2 className="h-3.5 w-3.5" />
@@ -1778,6 +1845,71 @@ export default function ProspectionPage() {
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* ── DISQUALIFY MODAL ──────────────────────────────────────────── */}
+      {disqualifyP && (
+        <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
+          role="presentation" onClick={e => { if (e.target === e.currentTarget) setDisqualifyP(null) }}>
+          <div className="flex w-full max-w-md flex-col rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl"
+            role="dialog" aria-modal="true" aria-label="Disqualifier le prospect">
+
+            <div className="flex shrink-0 items-center justify-between rounded-t-3xl bg-gradient-to-r from-red-700 to-red-500 px-6 py-5 sm:rounded-t-2xl">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Ban className="h-5 w-5 text-white" />
+                  <h2 className="text-base font-bold text-white">Non qualifié</h2>
+                </div>
+                <p className="mt-0.5 text-xs text-red-100">
+                  Marquer <strong>{disqualifyP.company_name}</strong> comme non qualifié
+                </p>
+              </div>
+              <button onClick={() => setDisqualifyP(null)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Raison de disqualification</div>
+              <div className="grid grid-cols-1 gap-2">
+                {DISQUALIFY_REASONS.map(reason => (
+                  <label key={reason}
+                    className={`flex items-center gap-3 rounded-xl border px-4 py-3 cursor-pointer transition-all
+                      ${disqualifyReason === reason ? 'border-red-400 bg-red-50 ring-1 ring-red-200' : 'border-slate-200 hover:bg-slate-50'}`}>
+                    <input type="radio" name="disqualify_reason" value={reason}
+                      checked={disqualifyReason === reason}
+                      onChange={() => setDisqualifyReason(reason)}
+                      className="accent-red-600" />
+                    <span className="text-sm text-slate-700">{reason}</span>
+                  </label>
+                ))}
+              </div>
+              {disqualifyReason === 'Autre' && (
+                <input type="text" value={disqualifyReasonOther}
+                  onChange={e => setDisqualifyReasonOther(e.target.value)}
+                  placeholder="Précisez la raison…"
+                  autoFocus
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100" />
+              )}
+            </div>
+
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-100 bg-white px-6 py-4">
+              <button onClick={() => setDisqualifyP(null)}
+                className="h-10 rounded-xl border border-slate-200 px-5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+                Annuler
+              </button>
+              <button onClick={confirmDisqualify}
+                disabled={disqualifySaving || !disqualifyReason || (disqualifyReason === 'Autre' && !disqualifyReasonOther.trim())}
+                className="flex h-10 items-center justify-center gap-2 rounded-xl bg-red-600 px-6 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50 transition-colors">
+                {disqualifySaving
+                  ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />En cours...</>
+                  : <><Ban className="h-4 w-4" /> Confirmer</>
+                }
+              </button>
+            </div>
           </div>
         </div>
       )}

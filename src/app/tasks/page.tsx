@@ -12,7 +12,7 @@ import {
   Shield, Key, BookOpen, Receipt, Crosshair,
 } from 'lucide-react'
 
-type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard' | 'eta_retard' | 'deal_relance'
+type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard' | 'eta_retard' | 'deal_relance' | 'compte_incomplet'
 
 // ── Types for new sections ──
 type WarrantyItem = {
@@ -84,6 +84,7 @@ const TYPE_LABELS: Record<TaskType, string> = {
   closing_retard: 'Closing retard',
   eta_retard: 'ETA retard',
   deal_relance: 'Suivi deal',
+  compte_incomplet: 'Fiche compte',
 }
 
 const STATUS_CFG: Record<FicheStatus, { label: string; icon: React.ReactNode; badge: string; row: string }> = {
@@ -137,13 +138,13 @@ export default function TasksPage() {
     setLoading(true); setErr(null)
     try {
       const year = new Date().getFullYear()
-      const [a, b, c, d, e, f, wonRes, openRes, warr, lic, drItems, invItems] = await Promise.all([
-        loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(), loadEtaRetards(), loadDealRelances(),
+      const [a, b, c, d, e, f, g, wonRes, openRes, warr, lic, drItems, invItems] = await Promise.all([
+        loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(), loadEtaRetards(), loadDealRelances(), loadComptesIncomplets(),
         supabase.from('opportunities').select('amount').eq('status', 'Won').gte('booking_month', `${year}-01`),
         supabase.from('opportunities').select('amount').eq('status', 'Open'),
         loadWarranties(), loadLicenses(), loadDRs(), loadOverdueInvoices(),
       ])
-      setTasks([...a, ...b, ...c, ...d, ...e, ...f])
+      setTasks([...a, ...b, ...c, ...d, ...e, ...f, ...g])
       if (wonRes.error) console.warn('tasks wonRes error:', wonRes.error.message)
       if (openRes.error) console.warn('tasks openRes error:', openRes.error.message)
       setWonYTD((wonRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
@@ -164,6 +165,7 @@ export default function TasksPage() {
       .select('id, company_name, contact_name, contact_phone, status, next_date, next_action')
       .is('converted_at', null)
       .neq('status', 'Qualifié ✓')
+      .neq('status', 'Non qualifié ✗')
       .lt('next_date', today)
       .order('next_date', { ascending: true })
     if (error) throw error
@@ -190,6 +192,7 @@ export default function TasksPage() {
       .select('id, company_name, contact_name, contact_phone, status, next_date, next_action')
       .is('converted_at', null)
       .neq('status', 'Qualifié ✓')
+      .neq('status', 'Non qualifié ✗')
       .gte('next_date', todayStr)
       .lte('next_date', endStr)
       .order('next_date', { ascending: true })
@@ -358,6 +361,73 @@ export default function TasksPage() {
     } catch { return [] }
   }
 
+  // ── Comptes incomplets (créés récemment, infos manquantes) ────
+  async function loadComptesIncomplets(): Promise<Task[]> {
+    try {
+      const cutoff = new Date()
+      cutoff.setDate(cutoff.getDate() - 30)
+      const cutoffStr = cutoff.toISOString()
+      const { data: accounts, error } = await supabase
+        .from('accounts')
+        .select('id, name, sector, region, segment, created_at')
+        .gte('created_at', cutoffStr)
+      if (error || !accounts) return []
+
+      // Get contacts for these accounts
+      const accIds = accounts.map(a => a.id)
+      if (accIds.length === 0) return []
+      const { data: contacts } = await supabase
+        .from('account_contacts')
+        .select('account_id, email, phone')
+        .in('account_id', accIds)
+
+      const contactInfo: Record<string, { hasEmail: boolean; hasPhone: boolean; count: number }> = {}
+      for (const c of (contacts || [])) {
+        if (!contactInfo[c.account_id]) contactInfo[c.account_id] = { hasEmail: false, hasPhone: false, count: 0 }
+        contactInfo[c.account_id].count++
+        if (c.email) contactInfo[c.account_id].hasEmail = true
+        if (c.phone) contactInfo[c.account_id].hasPhone = true
+      }
+
+      return accounts
+        .filter(a => {
+          const missing: string[] = []
+          if (!a.sector) missing.push('secteur')
+          if (!a.region) missing.push('région')
+          if (!a.segment) missing.push('segment')
+          const ci = contactInfo[a.id]
+          if (!ci || ci.count === 0) missing.push('contact')
+          else {
+            if (!ci.hasEmail) missing.push('email contact')
+            if (!ci.hasPhone) missing.push('tél contact')
+          }
+          return missing.length > 0
+        })
+        .map(a => {
+          const missing: string[] = []
+          if (!a.sector) missing.push('secteur')
+          if (!a.region) missing.push('région')
+          if (!a.segment) missing.push('segment')
+          const ci = contactInfo[a.id]
+          if (!ci || ci.count === 0) missing.push('contact')
+          else {
+            if (!ci.hasEmail) missing.push('email')
+            if (!ci.hasPhone) missing.push('tél')
+          }
+          return {
+            id: `compte_${a.id}`, type: 'compte_incomplet' as TaskType,
+            priority: 'medium' as Priority,
+            title: a.name, subtitle: 'Fiche incomplète',
+            detail: `Manque : ${missing.join(', ')}`,
+            amount: 0, daysLate: 0,
+            ficheStatus: 'a_faire' as FicheStatus,
+            ficheProgress: 0, linesTotal: missing.length, linesComplete: 0,
+            entity_id: a.id,
+          } as Task
+        })
+    } catch { return [] }
+  }
+
   // ── Renouvellements garantie ────────────────────────────
   async function loadWarranties(): Promise<WarrantyItem[]> {
     try {
@@ -504,6 +574,7 @@ export default function TasksPage() {
   const closingRetards  = useMemo(() => visible.filter(t => t.type === 'closing_retard'), [visible])
   const etaRetards      = useMemo(() => visible.filter(t => t.type === 'eta_retard'), [visible])
   const dealRelances    = useMemo(() => visible.filter(t => t.type === 'deal_relance'), [visible])
+  const comptesIncomplets = useMemo(() => visible.filter(t => t.type === 'compte_incomplet'), [visible])
 
   // Global counts for KPIs (unfiltered)
   const allRelances = useMemo(() => tasks.filter(t => t.type === 'relance_retard'), [tasks])
@@ -511,6 +582,7 @@ export default function TasksPage() {
   const allClosing  = useMemo(() => tasks.filter(t => t.type === 'closing_retard'), [tasks])
   const allSemaine  = useMemo(() => tasks.filter(t => t.type === 'relance_semaine'), [tasks])
   const allDealRel  = useMemo(() => tasks.filter(t => t.type === 'deal_relance'), [tasks])
+  const allComptes  = useMemo(() => tasks.filter(t => t.type === 'compte_incomplet'), [tasks])
   const totalAchatAmt = allAchats.reduce((s, t) => s + t.amount, 0)
   const closingAmt    = allClosing.reduce((s, t) => s + t.amount, 0)
 
@@ -665,6 +737,15 @@ export default function TasksPage() {
             color="orange"
             active={typeFilter === 'closing_retard'}
             onClick={() => setTypeFilter(typeFilter === 'closing_retard' ? 'Tous' : 'closing_retard')}
+          />
+          <KPICard
+            icon={<Users className="h-4 w-4" />}
+            label="Fiches compte"
+            value={String(allComptes.length)}
+            sub="infos à compléter"
+            color="violet"
+            active={typeFilter === 'compte_incomplet'}
+            onClick={() => setTypeFilter(typeFilter === 'compte_incomplet' ? 'Tous' : 'compte_incomplet')}
           />
         </div>
 
@@ -1227,6 +1308,43 @@ export default function TasksPage() {
                                 Voir <ChevronRight className="h-3.5 w-3.5" />
                               </button>
                             )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TaskSection>
+            )}
+
+            {/* ── Fiches compte incomplètes ── */}
+            {comptesIncomplets.length > 0 && (typeFilter === 'Tous' || typeFilter === 'compte_incomplet') && (
+              <TaskSection
+                icon={<Users className="h-4 w-4" />}
+                title="Fiches compte à compléter"
+                count={comptesIncomplets.length}
+                colorScheme="violet">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-slate-50/80 text-xs text-slate-500">
+                      <th className="px-4 py-2.5 text-left font-semibold">Compte</th>
+                      <th className="px-4 py-2.5 text-left font-semibold">Infos manquantes</th>
+                      <th className="px-4 py-2.5 text-center font-semibold w-[120px]">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {comptesIncomplets.map(t => (
+                      <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="font-semibold text-slate-800">{t.title}</div>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{t.detail}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-center">
+                            <button onClick={() => router.push('/accounts')}
+                              className="inline-flex h-8 items-center gap-1 rounded-xl bg-violet-600 px-3 text-xs font-bold text-white hover:bg-violet-700 transition-colors shadow-sm">
+                              Compléter <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>

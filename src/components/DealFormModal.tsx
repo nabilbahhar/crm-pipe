@@ -111,6 +111,7 @@ function ComboBox(props: {
   onPick: (id: string, label: string) => void
   hint?: React.ReactNode
   disabled?: boolean
+  onCreateNew?: (searchText: string) => void
 }) {
   const [open, setOpen]   = useState(false)
   const [q, setQ]         = useState('')
@@ -157,7 +158,12 @@ function ComboBox(props: {
         className="h-9 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-slate-400" />
       <div className="mt-2 max-h-[280px] overflow-auto space-y-0.5">
         {filtered.length === 0
-          ? <div className="px-3 py-2 text-sm text-slate-400">Aucun résultat.</div>
+          ? (props.onCreateNew && q.trim()
+            ? <button type="button" onClick={() => { props.onCreateNew!(q.trim()); setOpen(false); setQ('') }}
+                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 transition-colors">
+                <Plus className="h-3.5 w-3.5" /> Créer « {q.trim()} »
+              </button>
+            : <div className="px-3 py-2 text-sm text-slate-400">Aucun résultat.</div>)
           : filtered.map(it => (
               <button key={it.id} type="button"
                 className="flex w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50 transition-colors"
@@ -280,6 +286,38 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
   const [cards, setCards]       = useState<CardRow[]>([])
   const [saving, setSaving]     = useState(false)
   const [err, setErr]           = useState<string | null>(null)
+
+  // Inline account creation
+  const [showNewAccount, setShowNewAccount] = useState(false)
+  const [newAccName, setNewAccName] = useState('')
+  const [newAccSegment, setNewAccSegment] = useState('Privé')
+  const [newAccSector, setNewAccSector] = useState('')
+  const [newAccRegion, setNewAccRegion] = useState('Rabat')
+  const [newAccSaving, setNewAccSaving] = useState(false)
+  const [newAccErr, setNewAccErr] = useState<string | null>(null)
+
+  async function createInlineAccount() {
+    setNewAccErr(null)
+    if (!newAccName.trim()) { setNewAccErr('Nom du compte obligatoire.'); return }
+    setNewAccSaving(true)
+    try {
+      const { data, error } = await supabase.from('accounts').insert({
+        name: newAccName.trim(),
+        segment: newAccSegment,
+        sector: newAccSector.trim() || null,
+        region: newAccRegion,
+      }).select('id,name').single()
+      if (error) throw error
+      setAccounts(prev => [...prev, data as Account].sort((a, b) => a.name.localeCompare(b.name)))
+      setAccountId(data.id)
+      setShowNewAccount(false)
+      setNewAccName(''); setNewAccSector(''); setNewAccSegment('Privé'); setNewAccRegion('Rabat')
+    } catch (e: any) {
+      setNewAccErr(e?.message || 'Erreur création compte')
+    } finally {
+      setNewAccSaving(false)
+    }
+  }
 
   const accountItems = useMemo(() => accounts.map(a => ({ id: a.id, label: a.name })), [accounts])
   const cardItems    = useMemo(() => cards.map(c => ({ id: c.name, label: c.name })), [cards])
@@ -669,22 +707,59 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
 
             {/* Compte */}
-            <ComboBox
-              label="Compte *"
-              placeholder="Tape pour filtrer…"
-              items={accountItems}
-              valueId={accountId}
-              onPick={(id) => setAccountId(id)}
-              hint={
-                <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
-                  <span>Compte absent ? Ajoute-le dans Comptes.</span>
-                  <Link href="/accounts" target="_blank"
-                    className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium hover:bg-slate-50">
-                    <ExternalLink className="h-3 w-3" /> Comptes
-                  </Link>
+            <div>
+              <ComboBox
+                label="Compte *"
+                placeholder="Tape pour filtrer…"
+                items={accountItems}
+                valueId={accountId}
+                onPick={(id) => { setAccountId(id); setShowNewAccount(false) }}
+                onCreateNew={(text) => { setNewAccName(text); setShowNewAccount(true); setNewAccErr(null) }}
+                hint={
+                  <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+                    <span>Ou créer un compte directement</span>
+                    <Link href="/accounts" target="_blank"
+                      className="inline-flex items-center gap-1 rounded-lg border px-2 py-1.5 text-xs font-medium hover:bg-slate-50">
+                      <ExternalLink className="h-3 w-3" /> Comptes
+                    </Link>
+                  </div>
+                }
+              />
+              {showNewAccount && (
+                <div className="mt-2 rounded-xl border border-blue-200 bg-blue-50/50 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-blue-600">Nouveau compte</div>
+                    <button type="button" onClick={() => setShowNewAccount(false)} className="text-slate-400 hover:text-slate-600">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {newAccErr && <div className="text-xs text-red-600">{newAccErr}</div>}
+                  <input value={newAccName} onChange={e => setNewAccName(e.target.value)}
+                    placeholder="Nom du compte" className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400" />
+                  <div className="grid grid-cols-3 gap-2">
+                    <select value={newAccSegment} onChange={e => setNewAccSegment(e.target.value)}
+                      className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none">
+                      <option value="Privé">Privé</option>
+                      <option value="Public">Public</option>
+                      <option value="Semi-public">Semi-public</option>
+                    </select>
+                    <input value={newAccSector} onChange={e => setNewAccSector(e.target.value)}
+                      placeholder="Secteur" className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none" />
+                    <select value={newAccRegion} onChange={e => setNewAccRegion(e.target.value)}
+                      className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none">
+                      <option value="Rabat">Rabat</option>
+                      <option value="Casablanca">Casablanca</option>
+                      <option value="Nord Ma">Nord Ma</option>
+                      <option value="Sud Ma">Sud Ma</option>
+                    </select>
+                  </div>
+                  <button type="button" onClick={createInlineAccount} disabled={newAccSaving}
+                    className="h-8 w-full rounded-lg bg-blue-600 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                    {newAccSaving ? 'Création…' : 'Créer le compte'}
+                  </button>
                 </div>
-              }
-            />
+              )}
+            </div>
 
             {/* Titre */}
             <Field label="Intitulé du deal *" span3={false}>

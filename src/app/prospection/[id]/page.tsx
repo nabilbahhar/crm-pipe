@@ -24,11 +24,12 @@ type Prospect = {
   next_action: string | null; next_date: string | null; notes: string | null
   source: string | null; converted_to_account_id: string | null
   converted_at: string | null; created_by: string | null; created_at: string
+  disqualify_reason: string | null
 }
 
 const STATUSES = [
   'À contacter', '1er contact', 'RDV demandé', 'RDV confirmé',
-  'RDV fait', 'Relance', 'Qualifié ✓',
+  'RDV fait', 'Relance', 'Qualifié ✓', 'Non qualifié ✗',
 ] as const
 
 const STATUS_NEXT: Record<string, string> = {
@@ -45,6 +46,7 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; border: string; d
   'RDV fait': { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', dot: 'bg-orange-400' },
   'Relance': { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200', dot: 'bg-pink-400' },
   'Qualifié ✓': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
+  'Non qualifié ✗': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200', dot: 'bg-red-400' },
 }
 
 const SEG_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
@@ -304,6 +306,11 @@ export default function ProspectDetailPage() {
                   {isConverted && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-200">
                       <CheckCircle2 className="h-3 w-3" /> Converti
+                    </span>
+                  )}
+                  {prospect.status === 'Non qualifié ✗' && prospect.disqualify_reason && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500/20 px-2.5 py-0.5 text-xs font-semibold text-red-200">
+                      {prospect.disqualify_reason}
                     </span>
                   )}
                 </div>
