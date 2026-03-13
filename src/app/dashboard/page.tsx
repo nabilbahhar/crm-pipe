@@ -14,7 +14,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line,
   LabelList, ComposedChart, Area,
 } from 'recharts'
-import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget, getProspectionTarget, setProspectionTarget, ownerName, SUPPLY_STATUS_CFG, INVOICE_STATUS_CFG, type InvoiceStatus, fmtDate } from '@/lib/utils'
+import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget, ownerName, SUPPLY_STATUS_CFG, INVOICE_STATUS_CFG, type InvoiceStatus, fmtDate } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONSTANTS
@@ -268,23 +268,11 @@ export default function Dashboard() {
   const [editingTarget, setEditingTarget] = useState(false)
   const [targetInput, setTargetInput] = useState('')
 
-  // ── Objectif prospection ───────────────────────────────────────────────
-  const [PROSP_TARGET, setPT] = useState(50)
-  const [prospConverted, setProspConverted] = useState(0)
-  const [totalAccounts, setTotalAccounts] = useState(0)
-  const [editingProspTarget, setEditingProspTarget] = useState(false)
-  const [prospTargetInput, setProspTargetInput] = useState('')
-
-  useEffect(() => { document.title = 'Dashboard \u00b7 CRM-PIPE'; setAT(getAnnualTarget()); setPT(getProspectionTarget()) }, [])
+  useEffect(() => { document.title = 'Dashboard \u00b7 CRM-PIPE'; setAT(getAnnualTarget()) }, [])
   function saveTarget() {
     const v = Number(targetInput.replace(/\s/g, ''))
     if (v > 0) { setAnnualTarget(v); setAT(v) }
     setEditingTarget(false)
-  }
-  function saveProspTarget() {
-    const v = Number(prospTargetInput.replace(/\s/g, ''))
-    if (v > 0) { setProspectionTarget(v); setPT(v) }
-    setEditingProspTarget(false)
   }
 
   const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, v: string) =>
@@ -331,7 +319,7 @@ export default function Dashboard() {
         supabase.from('accounts').select('id,name,sector,segment,region'),
         supabase.from('purchase_lines').select('*, purchase_info(opportunity_id)'),
         supabase.from('supply_orders').select('id, opportunity_id, status, placed_at, updated_at'),
-        supabase.from('prospects').select('id,status,heat,converted_at,created_at'),
+        supabase.from('prospects').select('id,status,heat,converted_at,converted_to_account_id,created_at'),
       ])
       if (e1) throw e1; if (e2) throw e2
       if (e3) console.warn('purchase_lines error:', e3.message)
@@ -770,11 +758,25 @@ export default function Dashboard() {
     return { total, hot, warm, rdv, qualifie, convertedThisYear }
   },[prospects, year])
 
-  // Update prospection KPI state
-  useEffect(() => {
-    setProspConverted(prospectStats.convertedThisYear)
-    setTotalAccounts(accounts.length)
-  }, [prospectStats.convertedThisYear, accounts.length])
+
+  // ── CA Won split: prospection vs historique ─────────────────────────────
+  const caWonSplit = useMemo(() => {
+    // Build set of account_ids that came from prospection
+    const prospAccountIds = new Set(
+      prospects.filter(p => p.converted_to_account_id).map(p => p.converted_to_account_id)
+    )
+    let caProsp = 0, caHist = 0, countProsp = 0, countHist = 0
+    for (const d of wonDeals) {
+      if (d.account_id && prospAccountIds.has(d.account_id)) {
+        caProsp += d.amount; countProsp++
+      } else {
+        caHist += d.amount; countHist++
+      }
+    }
+    const total = caProsp + caHist
+    const pctProsp = total > 0 ? Math.round(caProsp / total * 100) : 0
+    return { caProsp, caHist, countProsp, countHist, total, pctProsp }
+  }, [wonDeals, prospects])
 
   // ── Top Open / Won ────────────────────────────────────────────────────────
   const topOpen = useMemo(()=>[...openDeals].sort((a,b)=>b.amount-a.amount).slice(0,12),[openDeals])
@@ -1058,60 +1060,55 @@ export default function Dashboard() {
           )
         })()}
 
-        {/* ══ OBJECTIF PROSPECTION ══ */}
-        {(() => {
-          const prospPct = PROSP_TARGET > 0 ? Math.min(100, Math.round(prospConverted / PROSP_TARGET * 100)) : 0
-          const prospRestant = Math.max(0, PROSP_TARGET - prospConverted)
-          const prospFromProspection = totalAccounts > 0 ? Math.round(prospConverted / totalAccounts * 100) : 0
-          return (
-            <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden">
-              <div className="px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-400 text-white shadow-md">
-                    <Users className="h-5 w-5"/>
-                  </div>
-                  <div>
-                    <div className="text-sm font-black text-slate-900">Objectif {year} — Prospection</div>
-                    {editingProspTarget ? (
-                      <div className="flex items-center gap-1">
-                        <input value={prospTargetInput} onChange={e => setProspTargetInput(e.target.value)}
-                          onKeyDown={e => { if (e.key==='Enter') saveProspTarget(); if (e.key==='Escape') setEditingProspTarget(false) }}
-                          autoFocus placeholder="50"
-                          className="h-6 w-16 rounded border border-slate-300 px-2 text-xs outline-none focus:border-emerald-400" />
-                        <button onClick={saveProspTarget} className="h-6 rounded bg-slate-900 px-2 text-[10px] font-bold text-white">OK</button>
-                        <button onClick={() => setEditingProspTarget(false)} className="h-6 rounded border px-2 text-[10px] text-slate-500">✕</button>
-                      </div>
-                    ) : (
-                      <button onClick={() => { setProspTargetInput(String(PROSP_TARGET)); setEditingProspTarget(true) }}
-                        className="text-xs text-slate-500 hover:text-emerald-600 transition-colors cursor-pointer">
-                        Cible : {PROSP_TARGET} nouveaux comptes ✎
-                      </button>
-                    )}
-                  </div>
+        {/* ══ CA WON : PROSPECTION vs HISTORIQUE ══ */}
+        {caWonSplit.total > 0 && (
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-400 text-white shadow-md">
+                  <Users className="h-5 w-5"/>
                 </div>
-                <div className="flex items-center gap-6">
-                  <div className="text-center">
-                    <div className="text-2xl font-black text-emerald-600">{prospConverted}/{PROSP_TARGET}</div>
-                    <div className="text-[10px] font-semibold text-slate-400">{prospPct}% atteint</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-lg font-bold text-slate-700">{prospRestant}</div>
-                    <div className="text-[10px] text-slate-500">restants</div>
-                  </div>
+                <div>
+                  <div className="text-sm font-black text-slate-900">CA Won — Origine des revenus</div>
+                  <div className="text-xs text-slate-500">Comptes prospectés vs portefeuille historique</div>
                 </div>
               </div>
-              <div className="px-6 pb-4">
-                <div className="h-4 w-full rounded-full bg-slate-100 overflow-hidden">
-                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-700 shadow-sm" style={{width:`${prospPct}%`}}/>
+              <div className="flex items-center gap-6">
+                <div className="text-center">
+                  <div className="text-xl font-black text-emerald-600">{caWonSplit.pctProsp}%</div>
+                  <div className="text-[10px] font-semibold text-emerald-500">Prospection</div>
                 </div>
-                <div className="flex justify-between mt-2 text-[10px] text-slate-400 font-medium">
-                  <span>{prospConverted} comptes issus de prospection</span>
-                  <span>{prospFromProspection}% du total ({totalAccounts} comptes)</span>
+                <div className="text-center">
+                  <div className="text-xl font-black text-blue-600">{100 - caWonSplit.pctProsp}%</div>
+                  <div className="text-[10px] font-semibold text-blue-500">Historique</div>
                 </div>
               </div>
             </div>
-          )
-        })()}
+            <div className="px-6 pb-4 space-y-3">
+              {/* Stacked bar */}
+              <div className="h-5 w-full rounded-full bg-slate-100 overflow-hidden flex">
+                {caWonSplit.pctProsp > 0 && (
+                  <div className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-700"
+                    style={{ width: `${caWonSplit.pctProsp}%` }} />
+                )}
+                <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400 transition-all duration-700 flex-1" />
+              </div>
+              {/* Détails */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="rounded-xl bg-emerald-50 p-3">
+                  <div className="text-[10px] font-bold uppercase text-emerald-400">CA Prospection</div>
+                  <div className="text-lg font-black text-emerald-700">{fmt(caWonSplit.caProsp)} MAD</div>
+                  <div className="text-[10px] text-emerald-500">{caWonSplit.countProsp} deals gagnés</div>
+                </div>
+                <div className="rounded-xl bg-blue-50 p-3">
+                  <div className="text-[10px] font-bold uppercase text-blue-400">CA Historique</div>
+                  <div className="text-lg font-black text-blue-700">{fmt(caWonSplit.caHist)} MAD</div>
+                  <div className="text-[10px] text-blue-500">{caWonSplit.countHist} deals gagnés</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ══ KPI ROW (6 métriques) ══ */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">

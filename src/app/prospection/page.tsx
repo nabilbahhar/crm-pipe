@@ -11,6 +11,7 @@ import {
   CheckCircle2, Building2, Eye, Pencil, Search, AlertCircle,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { getProspectionTarget, setProspectionTarget } from '@/lib/utils'
 import Toast from '@/components/Toast'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -85,7 +86,11 @@ const SEG_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
   'Public': { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
   'Semi-public': { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-400' },
 }
-const SOURCES  = ['LinkedIn', 'Cold Call', 'Salon / Événement', 'Référence', 'Site web', 'Email', 'Réseaux', 'Autre']
+const SOURCES = [
+  'Outbound Call', 'LinkedIn', 'Événement / Salon', 'Référence client',
+  'Constructeur / Éditeur', 'Distributeur / Partenaire', 'Appel d\'offres',
+  'Inbound (site/email)', 'Réseau professionnel', 'Autre',
+]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function isOverdue(d: string | null) {
@@ -348,6 +353,17 @@ export default function ProspectionPage() {
     'Services', 'Energie', 'Public', 'Sante', 'Autre',
   ] as const
 
+  // Objectif prospection
+  const [prospTarget, setProspTarget] = useState(50)
+  const [editingTarget, setEditingTarget] = useState(false)
+  const [targetInput, setTargetInput] = useState('')
+  useEffect(() => { setProspTarget(getProspectionTarget()) }, [])
+  function saveTarget() {
+    const v = Number(targetInput.replace(/\s/g, ''))
+    if (v > 0) { setProspectionTarget(v); setProspTarget(v) }
+    setEditingTarget(false)
+  }
+
   // Kanban drag & drop
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverStatus, setDragOverStatus] = useState<string | null>(null)
@@ -389,7 +405,7 @@ export default function ProspectionPage() {
   const regionSuggestions = useMemo(() => [...new Set(rows.map(r => r.region).filter(Boolean) as string[])].sort(), [rows])
 
   const filtered = useMemo(() => {
-    let r = rows.filter(x => !x.converted_at)
+    let r = [...rows]
     const q = search.trim().toLowerCase()
     if (q) r = r.filter(x =>
       x.company_name.toLowerCase().includes(q) ||
@@ -924,6 +940,40 @@ export default function ProspectionPage() {
             <div className="text-[11px] text-slate-500 mt-0.5">{showOverdue ? 'Filtre actif' : 'Clic pour filtrer'}</div>
           </button>
         </div>
+
+        {/* Objectif prospection */}
+        {(() => {
+          const qualified = rows.filter(x => x.converted_at).length
+          const pct = prospTarget > 0 ? Math.min(100, Math.round(qualified / prospTarget * 100)) : 0
+          return (
+            <div className="mt-3 rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">🎯 Objectif prospection {new Date().getFullYear()}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {editingTarget ? (
+                    <div className="flex items-center gap-1">
+                      <input value={targetInput} onChange={e => setTargetInput(e.target.value)}
+                        onKeyDown={e => { if (e.key==='Enter') saveTarget(); if (e.key==='Escape') setEditingTarget(false) }}
+                        autoFocus placeholder="50"
+                        className="h-6 w-14 rounded border border-slate-300 px-2 text-xs outline-none focus:border-emerald-400" />
+                      <button onClick={saveTarget} className="h-6 rounded bg-slate-900 px-2 text-[10px] font-bold text-white">OK</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setTargetInput(String(prospTarget)); setEditingTarget(true) }}
+                      className="text-xs text-slate-500 hover:text-emerald-600 transition-colors cursor-pointer">
+                      {qualified}/{prospTarget} qualifiés ({pct}%) ✎
+                    </button>
+                  )}
+                </div>
+              </div>
+              <div className="h-3 w-full rounded-full bg-slate-100 overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-700" style={{width:`${pct}%`}}/>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Source distribution */}
         {stats.topSources.length > 1 && (
@@ -1541,6 +1591,14 @@ export default function ProspectionPage() {
                     </div>
                   </div>
                   {editId && <Sel label="Statut" value={form.status} onChange={fld('status')} options={STATUSES} />}
+                  <div>
+                    <div className="mb-1.5 text-xs font-semibold text-slate-600">Source</div>
+                    <select value={form.source} onChange={fld('source')}
+                      className="h-10 w-full rounded-xl border bg-white px-3 text-sm outline-none focus:border-slate-400">
+                      <option value="">Choisir la source...</option>
+                      {SOURCES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
 
