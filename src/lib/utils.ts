@@ -209,6 +209,23 @@ export const setAnnualTarget = (value: number): void => {
   if (typeof window !== 'undefined') localStorage.setItem('crm_annual_target', String(value))
 }
 
+// ─── Objectif prospection ─────────────────────────────────────────────────────
+
+const DEFAULT_PROSPECTION_TARGET = 50
+
+/** Retourne l'objectif annuel de nouveaux comptes prospectés (localStorage override ou 50 par défaut) */
+export const getProspectionTarget = (): number => {
+  if (typeof window === 'undefined') return DEFAULT_PROSPECTION_TARGET
+  const stored = localStorage.getItem('crm_prospection_target')
+  if (stored) { const n = Number(stored); if (n > 0) return n }
+  return DEFAULT_PROSPECTION_TARGET
+}
+
+/** Persiste un nouvel objectif prospection */
+export const setProspectionTarget = (value: number): void => {
+  if (typeof window !== 'undefined') localStorage.setItem('crm_prospection_target', String(value))
+}
+
 // ─── Supply ───────────────────────────────────────────────────────────────────
 
 export type SupplyStatus = 'a_commander' | 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'

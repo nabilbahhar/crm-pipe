@@ -7,14 +7,14 @@ import {
   ChevronDown, BarChart2, Activity, ArrowUp, ArrowDown,
   CheckCircle2, XCircle, Clock, Flame, Info, Trophy,
   Building2, MapPin, Calendar, Filter, SlidersHorizontal, X,
-  Package,
+  Package, Users,
 } from 'lucide-react'
 import {
   ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line,
   LabelList, ComposedChart, Area,
 } from 'recharts'
-import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget, ownerName, SUPPLY_STATUS_CFG, INVOICE_STATUS_CFG, type InvoiceStatus, fmtDate } from '@/lib/utils'
+import { mad, fmt, ymFrom, normStatus, normSBU, SBU_COLORS, STAGE_CFG, getAnnualTarget, setAnnualTarget, getProspectionTarget, setProspectionTarget, ownerName, SUPPLY_STATUS_CFG, INVOICE_STATUS_CFG, type InvoiceStatus, fmtDate } from '@/lib/utils'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES & CONSTANTS
@@ -267,11 +267,24 @@ export default function Dashboard() {
   const [ANNUAL_TARGET, setAT] = useState(30_000_000)
   const [editingTarget, setEditingTarget] = useState(false)
   const [targetInput, setTargetInput] = useState('')
-  useEffect(() => { document.title = 'Dashboard \u00b7 CRM-PIPE'; setAT(getAnnualTarget()) }, [])
+
+  // ── Objectif prospection ───────────────────────────────────────────────
+  const [PROSP_TARGET, setPT] = useState(50)
+  const [prospConverted, setProspConverted] = useState(0)
+  const [totalAccounts, setTotalAccounts] = useState(0)
+  const [editingProspTarget, setEditingProspTarget] = useState(false)
+  const [prospTargetInput, setProspTargetInput] = useState('')
+
+  useEffect(() => { document.title = 'Dashboard \u00b7 CRM-PIPE'; setAT(getAnnualTarget()); setPT(getProspectionTarget()) }, [])
   function saveTarget() {
     const v = Number(targetInput.replace(/\s/g, ''))
     if (v > 0) { setAnnualTarget(v); setAT(v) }
     setEditingTarget(false)
+  }
+  function saveProspTarget() {
+    const v = Number(prospTargetInput.replace(/\s/g, ''))
+    if (v > 0) { setProspectionTarget(v); setPT(v) }
+    setEditingProspTarget(false)
   }
 
   const toggleSet = (setter: React.Dispatch<React.SetStateAction<Set<string>>>, v: string) =>
@@ -318,7 +331,7 @@ export default function Dashboard() {
         supabase.from('accounts').select('id,name,sector,segment,region'),
         supabase.from('purchase_lines').select('*, purchase_info(opportunity_id)'),
         supabase.from('supply_orders').select('id, opportunity_id, status, placed_at, updated_at'),
-        supabase.from('prospects').select('id,status,heat,converted_at,created_at').is('converted_at', null),
+        supabase.from('prospects').select('id,status,heat,converted_at,created_at'),
       ])
       if (e1) throw e1; if (e2) throw e2
       if (e3) console.warn('purchase_lines error:', e3.message)
@@ -745,13 +758,23 @@ export default function Dashboard() {
 
   // ── Prospect stats ──────────────────────────────────────────────────────
   const prospectStats = useMemo(()=>{
-    const total = prospects.length
-    const hot   = prospects.filter(p => p.heat === 'hot').length
-    const warm  = prospects.filter(p => p.heat === 'warm').length
-    const rdv   = prospects.filter(p => ['RDV demandé','RDV confirmé','RDV fait'].includes(p.status)).length
-    const qualifie = prospects.filter(p => p.status === 'Qualifié ✓').length
-    return { total, hot, warm, rdv, qualifie }
-  },[prospects])
+    const active = prospects.filter(p => !p.converted_at)
+    const total = active.length
+    const hot   = active.filter(p => p.heat === 'hot').length
+    const warm  = active.filter(p => p.heat === 'warm').length
+    const rdv   = active.filter(p => ['RDV demandé','RDV confirmé','RDV fait'].includes(p.status)).length
+    const qualifie = active.filter(p => p.status === 'Qualifié ✓').length
+    // Prospection KPI: converted this year
+    const yearStart = `${year}-01-01`
+    const convertedThisYear = prospects.filter(p => p.converted_at && p.converted_at >= yearStart).length
+    return { total, hot, warm, rdv, qualifie, convertedThisYear }
+  },[prospects, year])
+
+  // Update prospection KPI state
+  useEffect(() => {
+    setProspConverted(prospectStats.convertedThisYear)
+    setTotalAccounts(accounts.length)
+  }, [prospectStats.convertedThisYear, accounts.length])
 
   // ── Top Open / Won ────────────────────────────────────────────────────────
   const topOpen = useMemo(()=>[...openDeals].sort((a,b)=>b.amount-a.amount).slice(0,12),[openDeals])
@@ -1029,6 +1052,61 @@ export default function Dashboard() {
                 <div className="flex justify-between mt-2 text-[10px] text-slate-400 font-medium">
                   <span>{fmt(kpis.annualWon)} won</span>
                   <span>{fmt(ANNUAL_TARGET)}</span>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ══ OBJECTIF PROSPECTION ══ */}
+        {(() => {
+          const prospPct = PROSP_TARGET > 0 ? Math.min(100, Math.round(prospConverted / PROSP_TARGET * 100)) : 0
+          const prospRestant = Math.max(0, PROSP_TARGET - prospConverted)
+          const prospFromProspection = totalAccounts > 0 ? Math.round(prospConverted / totalAccounts * 100) : 0
+          return (
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-400 text-white shadow-md">
+                    <Users className="h-5 w-5"/>
+                  </div>
+                  <div>
+                    <div className="text-sm font-black text-slate-900">Objectif {year} — Prospection</div>
+                    {editingProspTarget ? (
+                      <div className="flex items-center gap-1">
+                        <input value={prospTargetInput} onChange={e => setProspTargetInput(e.target.value)}
+                          onKeyDown={e => { if (e.key==='Enter') saveProspTarget(); if (e.key==='Escape') setEditingProspTarget(false) }}
+                          autoFocus placeholder="50"
+                          className="h-6 w-16 rounded border border-slate-300 px-2 text-xs outline-none focus:border-emerald-400" />
+                        <button onClick={saveProspTarget} className="h-6 rounded bg-slate-900 px-2 text-[10px] font-bold text-white">OK</button>
+                        <button onClick={() => setEditingProspTarget(false)} className="h-6 rounded border px-2 text-[10px] text-slate-500">✕</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setProspTargetInput(String(PROSP_TARGET)); setEditingProspTarget(true) }}
+                        className="text-xs text-slate-500 hover:text-emerald-600 transition-colors cursor-pointer">
+                        Cible : {PROSP_TARGET} nouveaux comptes ✎
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-6">
+                  <div className="text-center">
+                    <div className="text-2xl font-black text-emerald-600">{prospConverted}/{PROSP_TARGET}</div>
+                    <div className="text-[10px] font-semibold text-slate-400">{prospPct}% atteint</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-lg font-bold text-slate-700">{prospRestant}</div>
+                    <div className="text-[10px] text-slate-500">restants</div>
+                  </div>
+                </div>
+              </div>
+              <div className="px-6 pb-4">
+                <div className="h-4 w-full rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-700 shadow-sm" style={{width:`${prospPct}%`}}/>
+                </div>
+                <div className="flex justify-between mt-2 text-[10px] text-slate-400 font-medium">
+                  <span>{prospConverted} comptes issus de prospection</span>
+                  <span>{prospFromProspection}% du total ({totalAccounts} comptes)</span>
                 </div>
               </div>
             </div>

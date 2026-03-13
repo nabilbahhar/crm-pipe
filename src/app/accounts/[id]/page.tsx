@@ -21,6 +21,7 @@ type DealRow = { id: string; title: string; amount: number; status: string; stag
 type MeetingRow = { id: string; account_id: string; title: string; meeting_date: string; attendees: string | null; summary: string; created_by: string | null; created_at: string; updated_at: string | null }
 type AccountFile = { id: string; account_id: string; file_type: string; file_name: string; file_url: string; uploaded_by: string | null; created_at: string }
 type ActivityRow = { id: string; action_type: string; entity_type: string; entity_name: string; detail: string; created_at: string; user_email?: string }
+type ProspectRow = { id: string; company_name: string; status: string; heat: string; attempts: number; source: string | null; created_at: string; converted_at: string | null; last_contact_at: string | null; next_action: string | null; next_date: string | null; notes: string | null; segment: string | null }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const SEG_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
@@ -103,6 +104,8 @@ export default function AccountDetailPage() {
   const [files, setFiles] = useState<AccountFile[]>([])
   const [fileUrls, setFileUrls] = useState<Record<string, string>>({})
   const [activities, setActivities] = useState<ActivityRow[]>([])
+  const [prospect, setProspect] = useState<ProspectRow | null>(null)
+  const [prospectActivities, setProspectActivities] = useState<ActivityRow[]>([])
   const [loading, setLoading] = useState(true)
 
   // Toast / confirm
@@ -154,6 +157,17 @@ export default function AccountDetailPage() {
     const f = (filesRes.data || []) as AccountFile[]
     setFiles(f)
     setActivities((actRes.data || []) as ActivityRow[])
+
+    // Load linked prospect (if this account was created from prospection)
+    const { data: prospData } = await supabase.from('prospects').select('*').eq('converted_to_account_id', id).limit(1)
+    const linkedProspect = (prospData && prospData[0]) ? prospData[0] as ProspectRow : null
+    setProspect(linkedProspect)
+    if (linkedProspect) {
+      const { data: pAct } = await supabase.from('activity_log').select('*').eq('entity_type', 'prospect').eq('entity_id', linkedProspect.id).order('created_at', { ascending: true })
+      setProspectActivities((pAct || []) as ActivityRow[])
+    } else {
+      setProspectActivities([])
+    }
 
     // Generate signed URLs for files
     const urls: Record<string, string> = {}
@@ -631,6 +645,53 @@ export default function AccountDetailPage() {
             </div>
           </div>
         )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            SECTION 6b — Origine Prospection
+        ═══════════════════════════════════════════════════════════ */}
+        <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+          <div className="border-b border-slate-50 bg-slate-50/50 px-5 py-3">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">🎯 Origine prospection</span>
+          </div>
+          {prospect ? (
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="rounded-xl bg-blue-50 p-3 text-center">
+                  <div className="text-[10px] font-bold uppercase text-blue-400">Source</div>
+                  <div className="mt-1 text-sm font-bold text-blue-700">{prospect.source || '—'}</div>
+                </div>
+                <div className="rounded-xl bg-violet-50 p-3 text-center">
+                  <div className="text-[10px] font-bold uppercase text-violet-400">Tentatives</div>
+                  <div className="mt-1 text-sm font-bold text-violet-700">{prospect.attempts}</div>
+                </div>
+                <div className="rounded-xl bg-emerald-50 p-3 text-center">
+                  <div className="text-[10px] font-bold uppercase text-emerald-400">Prospecté le</div>
+                  <div className="mt-1 text-sm font-bold text-emerald-700">{fmtDate(prospect.created_at)}</div>
+                </div>
+                <div className="rounded-xl bg-amber-50 p-3 text-center">
+                  <div className="text-[10px] font-bold uppercase text-amber-400">Converti le</div>
+                  <div className="mt-1 text-sm font-bold text-amber-700">{fmtDate(prospect.converted_at)}</div>
+                </div>
+              </div>
+              {prospectActivities.length > 0 && (
+                <div>
+                  <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Parcours prospection</div>
+                  <div className="relative pl-4 border-l-2 border-slate-200 space-y-3">
+                    {prospectActivities.map(a => (
+                      <div key={a.id} className="relative">
+                        <div className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-blue-400 ring-2 ring-white" />
+                        <div className="text-xs text-slate-600">{a.detail || `${a.action_type} ${a.entity_type}`}</div>
+                        <div className="text-[10px] text-slate-400 tabular-nums">{fmtDateTime(a.created_at)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="px-5 py-4 text-sm text-slate-400 italic">Compte historique — non issu de prospection</div>
+          )}
+        </div>
 
         {/* ═══════════════════════════════════════════════════════════
             SECTION 7 — Historique d'activité

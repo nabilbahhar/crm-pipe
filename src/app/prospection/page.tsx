@@ -34,6 +34,7 @@ type Prospect = {
   contact_phone: string | null
   contact_email: string | null
   type: string
+  segment: string | null
   heat: 'cold' | 'warm' | 'hot'
   status: string
   attempts: number
@@ -78,7 +79,12 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; border: string; d
   'Qualifié ✓':  { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200',dot: 'bg-emerald-500'},
 }
 
-const TYPES    = ['Direct', 'Marché Public', 'Prescripteur', 'Référencement', 'Partenaire'] as const
+const SEGMENTS = ['Privé', 'Public', 'Semi-public'] as const
+const SEG_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
+  'Privé': { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-400' },
+  'Public': { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  'Semi-public': { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-400' },
+}
 const SOURCES  = ['LinkedIn', 'Cold Call', 'Salon / Événement', 'Référence', 'Site web', 'Email', 'Réseaux', 'Autre']
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -141,7 +147,7 @@ function Sel({ label, value, onChange, options }: {
 
 const EMPTY: any = {
   company_name: '', sector: '', region: '', contact_name: '', contact_role: '',
-  contact_phone: '', contact_email: '', type: 'Direct', heat: 'cold',
+  contact_phone: '', contact_email: '', type: 'Direct', segment: 'Privé', heat: 'cold',
   status: 'À contacter', next_action: '', next_date: '', notes: '', source: '',
 }
 
@@ -294,7 +300,7 @@ export default function ProspectionPage() {
   // Filters
   const [search, setSearch]           = useState('')
   const [heatFilter, setHeatFilter]     = useState('Tous')
-  const [typeFilter, setTypeFilter]     = useState('Tous')
+  const [segFilter, setSegFilter]     = useState('Tous')
   const [statusFilter, setStatusFilter] = useState('Tous')
   const [regionFilter, setRegionFilter] = useState('Tous')
   const [showOverdue, setShowOverdue]   = useState(false)
@@ -392,14 +398,14 @@ export default function ProspectionPage() {
       (x.sector || '').toLowerCase().includes(q)
     )
     if (heatFilter !== 'Tous') r = r.filter(x => x.heat === heatFilter)
-    if (typeFilter !== 'Tous') r = r.filter(x => x.type === typeFilter)
+    if (segFilter !== 'Tous') r = r.filter(x => (x.segment || 'Privé') === segFilter)
     if (statusFilter !== 'Tous') r = r.filter(x => x.status === statusFilter)
     if (regionFilter !== 'Tous') r = r.filter(x => (x.region || '') === regionFilter)
     if (showOverdue) r = r.filter(x => isOverdue(x.next_date) && x.status !== 'Qualifié ✓')
     if (dateFrom) r = r.filter(x => (x.created_at || '') >= dateFrom)
     if (dateTo)   r = r.filter(x => (x.created_at || '') <= dateTo + 'T23:59:59')
     return r
-  }, [rows, search, heatFilter, typeFilter, statusFilter, regionFilter, showOverdue, dateFrom, dateTo])
+  }, [rows, search, heatFilter, segFilter, statusFilter, regionFilter, showOverdue, dateFrom, dateTo])
 
   type SortKey = 'created_at'|'company_name'|'status'|'heat'|'next_date'|'type'
   const [sortKey, setSortKey] = useState<SortKey>('created_at')
@@ -414,7 +420,7 @@ export default function ProspectionPage() {
         case 'status':   va = a.status; vb = b.status; break
         case 'heat':     va = ['cold','warm','hot'].indexOf(a.heat); vb = ['cold','warm','hot'].indexOf(b.heat); break
         case 'next_date':va = a.next_date||''; vb = b.next_date||''; break
-        case 'type':     va = a.type; vb = b.type; break
+        case 'type':     va = a.segment || 'Privé'; vb = b.segment || 'Privé'; break
         default:         va = a.created_at||''; vb = b.created_at||''
       }
       if (typeof va === 'number') return dir * (va - vb)
@@ -457,14 +463,14 @@ export default function ProspectionPage() {
         sheets: [{
           name: 'Prospects',
           title: `Prospection · ${sorted.length} prospects · ${new Date().toLocaleDateString('fr-MA')}`,
-          headers: ['Société','Contact','Rôle','Téléphone','Email','Statut','Heat','Dernière relance','Prochaine action','Prochaine date','Source','Secteur','Région','Créé le'],
+          headers: ['Société','Contact','Rôle','Téléphone','Email','Segment','Statut','Heat','Dernière relance','Prochaine action','Prochaine date','Source','Secteur','Région','Créé le'],
           rows: sorted.map(p => [
             p.company_name, p.contact_name, p.contact_role||'—', p.contact_phone||'—',
-            p.contact_email||'—', p.status, p.heat,
+            p.contact_email||'—', p.segment||'Privé', p.status, p.heat,
             p.last_contact_at||'—', p.next_action||'—', p.next_date||'—',
             p.source||'—', p.sector||'—', p.region||'—', (p.created_at||'').slice(0,10),
           ]),
-          totalsRow: ['TOTAL', `${sorted.length} prospects`, '', '', '', '', '', '', '', '', '', '', '', ''],
+          totalsRow: ['TOTAL', `${sorted.length} prospects`, '', '', '', '', '', '', '', '', '', '', '', '', ''],
         }],
         summary: {
           title: `Résumé Prospection · ${new Date().toLocaleDateString('fr-MA')}`,
@@ -531,8 +537,8 @@ export default function ProspectionPage() {
         .from('accounts')
         .insert({
           name: qualifyForm.nom_compte.trim(),
-          segment: qualifyForm.secteur.trim(),
-          sector: 'Prive',
+          segment: qualifyP.segment || 'Privé',
+          sector: qualifyForm.secteur.trim(),
           region: qualifyForm.ville.trim(),
         })
         .select('id')
@@ -692,7 +698,7 @@ export default function ProspectionPage() {
       company_name: form.company_name.trim(), sector: form.sector || null,
       region: form.region || null, contact_name: form.contact_name.trim(),
       contact_role: form.contact_role || null, contact_phone: form.contact_phone || null,
-      contact_email: form.contact_email || null, type: form.type, heat: form.heat,
+      contact_email: form.contact_email || null, type: form.type, segment: form.segment || 'Privé', heat: form.heat,
       status: form.status, next_action: form.next_action || null,
       next_date: form.next_date || null,
       notes: grandCompteMode
@@ -833,7 +839,7 @@ export default function ProspectionPage() {
       company_name: p.company_name, sector: p.sector || '', region: p.region || '',
       contact_name: p.contact_name, contact_role: p.contact_role || '',
       contact_phone: p.contact_phone || '', contact_email: p.contact_email || '',
-      type: p.type, heat: p.heat, status: p.status,
+      type: p.type, segment: p.segment || 'Privé', heat: p.heat, status: p.status,
       next_action: p.next_action || '', next_date: p.next_date || '',
       notes: isGC ? (p.notes?.replace(/\[GRAND COMPTE · BU: .+?\]\n?/, '') || '') : (p.notes || ''),
       source: p.source || '',
@@ -985,10 +991,10 @@ export default function ProspectionPage() {
           </div>
 
           {/* Type filter */}
-          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+          <select value={segFilter} onChange={e => setSegFilter(e.target.value)}
             className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
-            <option value="Tous">Type: Tous</option>
-            {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            <option value="Tous">Segment: Tous</option>
+            {SEGMENTS.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
 
           {/* Region filter */}
@@ -1020,8 +1026,8 @@ export default function ProspectionPage() {
           )}
 
           {/* Active filter indicator */}
-          {(statusFilter !== 'Tous' || typeFilter !== 'Tous' || heatFilter !== 'Tous' || regionFilter !== 'Tous' || dateFrom || dateTo || showOverdue) && (
-            <button onClick={() => { setStatusFilter('Tous'); setTypeFilter('Tous'); setHeatFilter('Tous'); setRegionFilter('Tous'); setDateFrom(''); setDateTo(''); setShowOverdue(false) }}
+          {(statusFilter !== 'Tous' || segFilter !== 'Tous' || heatFilter !== 'Tous' || regionFilter !== 'Tous' || dateFrom || dateTo || showOverdue) && (
+            <button onClick={() => { setStatusFilter('Tous'); setSegFilter('Tous'); setHeatFilter('Tous'); setRegionFilter('Tous'); setDateFrom(''); setDateTo(''); setShowOverdue(false) }}
               className="inline-flex h-9 items-center gap-1 rounded-xl border bg-white px-3 text-xs text-slate-500 hover:text-red-500 shadow-sm">
               <X className="h-3.5 w-3.5" /> Reset
             </button>
@@ -1055,7 +1061,7 @@ export default function ProspectionPage() {
                       { col: 'created_at',   label: 'Créé',       w: 'w-[78px]' },
                       { col: 'company_name', label: 'Société',    w: '' },
                       { col: 'type',         label: 'Contact',    w: '', noSort: true },
-                      { col: 'type',         label: 'Type',       w: '' },
+                      { col: 'type',         label: 'Segment',    w: '' },
                       { col: 'status',       label: 'Statut',     w: '' },
                       { col: 'next_date',    label: 'Next Step',  w: '', noSort: true },
                       { col: 'next_date',    label: 'Relance',    w: '' },
@@ -1143,7 +1149,7 @@ export default function ProspectionPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{p.type}</span>
+                          {(() => { const seg = p.segment || 'Privé'; const s = SEG_STYLE[seg] || SEG_STYLE['Privé']; return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${s.bg} ${s.text}`}><span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />{seg}</span> })()}
                         </td>
                         <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
                         <td className="px-4 py-3 max-w-[160px]">
@@ -1218,7 +1224,7 @@ export default function ProspectionPage() {
                               <HeatIcon heat={p.heat} />
                               <span className="font-semibold text-slate-900 text-xs leading-tight truncate">{p.company_name}</span>
                             </div>
-                            <span className="inline-flex rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 flex-shrink-0">{p.type}</span>
+                            {(() => { const seg = p.segment || 'Privé'; const s = SEG_STYLE[seg] || SEG_STYLE['Privé']; return <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold flex-shrink-0 ${s.bg} ${s.text}`}><span className={`h-1 w-1 rounded-full ${s.dot}`} />{seg}</span> })()}
                           </div>
                           <div className="mt-1 flex items-center gap-1 text-xs text-slate-500">
                             <span>{p.contact_name}{p.contact_role ? ` · ${p.contact_role}` : ''}</span>
@@ -1408,6 +1414,7 @@ export default function ProspectionPage() {
                       return null
                     })()}
                   </div>
+                  <Sel label="Segment *" value={form.segment || 'Privé'} onChange={fld('segment')} options={SEGMENTS} />
                   <AutocompleteInput label="Secteur" value={form.sector} onChange={v => setForm((p: any) => ({ ...p, sector: v }))} suggestions={sectorSuggestions} placeholder="IT, Banque, BTP…" />
                   <AutocompleteInput label="Région" value={form.region} onChange={v => setForm((p: any) => ({ ...p, region: v }))} suggestions={regionSuggestions} placeholder="Casablanca, Rabat…" />
                 </div>

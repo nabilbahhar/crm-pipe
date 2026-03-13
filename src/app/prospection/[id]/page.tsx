@@ -19,7 +19,7 @@ type ProspectContact = {
 type Prospect = {
   id: string; company_name: string; sector: string | null; region: string | null
   contact_name: string; contact_role: string | null; contact_phone: string | null
-  contact_email: string | null; type: string; heat: 'cold' | 'warm' | 'hot'
+  contact_email: string | null; type: string; segment: string | null; heat: 'cold' | 'warm' | 'hot'
   status: string; attempts: number; last_contact_at: string | null
   next_action: string | null; next_date: string | null; notes: string | null
   source: string | null; converted_to_account_id: string | null
@@ -45,6 +45,12 @@ const STATUS_STYLE: Record<string, { bg: string; text: string; border: string; d
   'RDV fait': { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200', dot: 'bg-orange-400' },
   'Relance': { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200', dot: 'bg-pink-400' },
   'Qualifié ✓': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-200', dot: 'bg-emerald-500' },
+}
+
+const SEG_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
+  'Privé': { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-400' },
+  'Public': { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  'Semi-public': { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-400' },
 }
 
 const SECTEUR_OPTIONS = [
@@ -184,8 +190,8 @@ export default function ProspectDetailPage() {
       // Create account
       const { data: newAcc, error: accErr } = await supabase.from('accounts').insert({
         name: qualifyForm.nom_compte.trim(),
-        segment: qualifyForm.secteur.trim(),
-        sector: 'Prive',
+        segment: prospect.segment || 'Privé',
+        sector: qualifyForm.secteur.trim(),
         region: qualifyForm.ville.trim(),
       }).select('id').single()
       if (accErr || !newAcc) { setQualifyErr(accErr?.message || 'Erreur'); setQualifySaving(false); return }
@@ -295,8 +301,8 @@ export default function ProspectDetailPage() {
                 <div className="mt-1 flex items-center gap-2 flex-wrap">
                   <HeatBadge heat={prospect.heat} />
                   <StatusBadge status={prospect.status} />
-                  {prospect.type && (
-                    <span className="inline-flex rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold text-white">{prospect.type}</span>
+                  {(prospect.segment || 'Privé') && (
+                    <span className="inline-flex rounded-full bg-white/20 px-2.5 py-0.5 text-xs font-semibold text-white">{prospect.segment || 'Privé'}</span>
                   )}
                   {isConverted && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-xs font-semibold text-emerald-200">
@@ -447,7 +453,7 @@ export default function ProspectDetailPage() {
               <div className="space-y-3 text-sm">
                 {prospect.sector && <div className="flex justify-between"><span className="text-slate-400">Secteur</span><span className="font-semibold text-slate-700">{prospect.sector}</span></div>}
                 {prospect.region && <div className="flex justify-between"><span className="text-slate-400">Region</span><span className="font-semibold text-slate-700">{prospect.region}</span></div>}
-                <div className="flex justify-between"><span className="text-slate-400">Type</span><span className="font-semibold text-slate-700">{prospect.type}</span></div>
+                <div className="flex justify-between"><span className="text-slate-400">Segment</span>{(() => { const seg = prospect.segment || 'Privé'; const s = SEG_STYLE[seg] || SEG_STYLE['Privé']; return <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold ${s.bg} ${s.text}`}><span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />{seg}</span> })()}</div>
                 <div className="flex justify-between"><span className="text-slate-400">Cree le</span><span className="font-semibold text-slate-700">{fmtDate(prospect.created_at)}</span></div>
                 {prospect.created_by && <div className="flex justify-between"><span className="text-slate-400">Par</span><span className="font-semibold text-slate-700">{prospect.created_by}</span></div>}
               </div>
