@@ -13,6 +13,7 @@ import {
 import { useRouter } from 'next/navigation'
 import { getProspectionTarget, setProspectionTarget } from '@/lib/utils'
 import Toast from '@/components/Toast'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type ProspectContact = {
@@ -441,8 +442,13 @@ export default function ProspectionPage() {
     const active = rows.filter(x => !x.converted_at)
     const converted = rows.filter(x => x.converted_at).length
     const bySource: Record<string, number> = {}
-    for (const r of active) { const s = r.source || 'Autre'; bySource[s] = (bySource[s] || 0) + 1 }
-    const topSources = Object.entries(bySource).sort((a, b) => b[1] - a[1]).slice(0, 6)
+    const byRegion: Record<string, number> = {}
+    for (const r of active) {
+      const s = r.source || 'Autre'; bySource[s] = (bySource[s] || 0) + 1
+      const reg = r.region || 'N/A'; byRegion[reg] = (byRegion[reg] || 0) + 1
+    }
+    const topSources = Object.entries(bySource).sort((a, b) => b[1] - a[1]).slice(0, 8)
+    const topRegions = Object.entries(byRegion).sort((a, b) => b[1] - a[1])
     return {
       total: active.length,
       qualifie: active.filter(x => x.status === 'Qualifié ✓').length,
@@ -450,6 +456,7 @@ export default function ProspectionPage() {
       convRate: rows.length > 0 ? Math.round(converted / rows.length * 100) : 0,
       bySt: Object.fromEntries(STATUSES.map(s => [s, active.filter(x => x.status === s).length])),
       topSources,
+      topRegions,
     }
   }, [rows])
 
@@ -886,46 +893,40 @@ export default function ProspectionPage() {
         {err && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0" />{err}</div>}
         {info && <Toast message={info.msg} type={info.ok ? 'success' : 'error'} onClose={() => setInfo(null)} />}
 
-        {/* ── KPIs ── */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        {/* ── KPI STRIP ── */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600"><Users className="h-3.5 w-3.5" /></div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total actifs</span>
-            </div>
-            <div className="text-2xl font-black text-slate-900">{stats.total}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">{stats.converted} convertis</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-400">Total actifs</div>
+            <div className="mt-1 text-3xl font-black text-slate-900">{stats.total}</div>
+            <div className="mt-0.5 text-xs text-slate-500">{stats.converted} convertis</div>
           </div>
-          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5" /></div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Qualifies</span>
-            </div>
-            <div className="text-2xl font-black text-emerald-700">{stats.qualifie}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">Prets pour un deal</div>
+          <div className="rounded-2xl bg-emerald-50 ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-xs font-semibold uppercase tracking-wider text-emerald-700">Qualifiés</div>
+            <div className="mt-1 text-3xl font-black text-emerald-700">{stats.qualifie}</div>
+            <div className="mt-0.5 text-xs text-emerald-700 opacity-70">Prêts pour un deal</div>
+          </div>
+          <div className="rounded-2xl bg-blue-50 ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-xs font-semibold uppercase tracking-wider text-blue-700">Taux conversion</div>
+            <div className="mt-1 text-3xl font-black text-blue-700">{stats.convRate}%</div>
+            <div className="mt-0.5 text-xs text-blue-700 opacity-70">{stats.converted}/{rows.length} prospects</div>
           </div>
           <button onClick={() => setShowOverdue(v => !v)}
             className={`rounded-2xl ring-1 shadow-sm p-4 text-left transition-all hover:shadow-md
               ${showOverdue ? 'bg-red-50 ring-red-300 ring-2' : 'bg-white ring-slate-200'}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${showOverdue ? 'bg-red-200 text-red-700' : 'bg-amber-100 text-amber-600'}`}><AlertCircle className="h-3.5 w-3.5" /></div>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Relances retard</span>
-            </div>
-            <div className={`text-2xl font-black ${overdueCount > 0 ? 'text-red-700' : 'text-slate-900'}`}>{overdueCount}</div>
-            <div className="text-[11px] text-slate-500 mt-0.5">{showOverdue ? 'Filtre actif' : 'Clic pour filtrer'}</div>
+            <div className={`text-xs font-semibold uppercase tracking-wider ${showOverdue ? 'text-red-700' : 'text-slate-400'}`}>Relances retard</div>
+            <div className={`mt-1 text-3xl font-black ${overdueCount > 0 ? 'text-red-700' : 'text-slate-900'}`}>{overdueCount}</div>
+            <div className="mt-0.5 text-xs text-slate-500">{showOverdue ? 'Filtre actif' : 'Clic pour filtrer'}</div>
           </button>
         </div>
 
-        {/* Objectif prospection */}
+        {/* ── OBJECTIF PROSPECTION ── */}
         {(() => {
           const qualified = rows.filter(x => x.converted_at).length
           const pct = prospTarget > 0 ? Math.min(100, Math.round(qualified / prospTarget * 100)) : 0
           return (
-            <div className="mt-3 rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
               <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">🎯 Objectif prospection {new Date().getFullYear()}</span>
-                </div>
+                <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Objectif prospection {new Date().getFullYear()}</div>
                 <div className="flex items-center gap-3">
                   {editingTarget ? (
                     <div className="flex items-center gap-1">
@@ -938,7 +939,7 @@ export default function ProspectionPage() {
                   ) : (
                     <button onClick={() => { setTargetInput(String(prospTarget)); setEditingTarget(true) }}
                       className="text-xs text-slate-500 hover:text-emerald-600 transition-colors cursor-pointer">
-                      {qualified}/{prospTarget} qualifiés ({pct}%) ✎
+                      {qualified}/{prospTarget} qualifiés ({pct}%)
                     </button>
                   )}
                 </div>
@@ -950,36 +951,54 @@ export default function ProspectionPage() {
           )
         })()}
 
-        {/* Source distribution */}
-        {stats.topSources.length > 1 && (
-          <div className="mt-3 rounded-2xl border bg-white p-4 shadow-sm">
-            <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Sources de prospection</div>
-            <div className="flex gap-1 items-end h-8">
-              {stats.topSources.map(([src, cnt]) => {
-                const maxCnt = stats.topSources[0][1] as number
-                const pct = maxCnt > 0 ? (cnt as number) / (maxCnt as number) * 100 : 0
-                return (
-                  <div key={src} className="flex-1 flex flex-col items-center gap-1" title={`${src}: ${cnt}`}>
-                    <div className="w-full rounded-t bg-slate-900 transition-all" style={{ height: `${Math.max(pct, 8)}%` }} />
-                  </div>
-                )
-              })}
+        {/* ── CHARTS SOURCES / RÉGION ── */}
+        {stats.total > 0 && (() => {
+          const SOURCE_COLORS = ['#1e293b', '#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#6366f1', '#64748b']
+          const REGION_COLORS = ['#3b82f6', '#6366f1', '#10b981', '#f59e0b', '#ef4444']
+          const sourceData = stats.topSources.map(([name, value]) => ({ name: name as string, value: value as number }))
+          const regionData = stats.topRegions.map(([name, value]) => ({ name: name as string, value: value as number }))
+          return (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="rounded-2xl bg-white ring-1 ring-slate-100 shadow-sm p-4">
+                <div className="mb-2 text-xs font-bold text-slate-700">Sources de prospection</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={sourceData} layout="vertical" margin={{ top: 0, right: 12, bottom: 0, left: 4 }}>
+                    <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
+                      formatter={(v: any) => [`${v} prospect${Number(v) > 1 ? 's' : ''}`, '']} />
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]} maxBarSize={20}>
+                      {sourceData.map((_entry, idx) => (
+                        <Cell key={idx} fill={SOURCE_COLORS[idx % SOURCE_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="rounded-2xl bg-white ring-1 ring-slate-100 shadow-sm p-4">
+                <div className="mb-2 text-xs font-bold text-slate-700">Répartition par région</div>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={regionData} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+                    <XAxis dataKey="name" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid #e2e8f0' }}
+                      formatter={(v: any) => [`${v} prospect${Number(v) > 1 ? 's' : ''}`, '']} />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                      {regionData.map((_entry, idx) => (
+                        <Cell key={idx} fill={REGION_COLORS[idx % REGION_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-            <div className="flex gap-1 mt-1">
-              {stats.topSources.map(([src, cnt]) => (
-                <div key={src} className="flex-1 text-center">
-                  <div className="text-[9px] font-semibold text-slate-500 truncate">{src}</div>
-                  <div className="text-[10px] font-bold text-slate-700">{cnt as number}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+          )
+        })()}
 
-        {/* Funnel */}
-        <div className="mt-4 rounded-2xl border bg-white p-4 shadow-sm">
-          <div className="mb-3 text-xs font-semibold text-slate-400 uppercase tracking-wide">Funnel prospection</div>
-          <div className="flex gap-1 overflow-x-auto pb-1">
+        {/* ── FUNNEL PROSPECTION ── */}
+        <div className="rounded-2xl bg-white ring-1 ring-slate-100 shadow-sm p-4">
+          <div className="mb-3 text-xs font-bold text-slate-700">Funnel prospection</div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
             {STATUSES.map(s => {
               const st = STATUS_STYLE[s]
               const active = statusFilter === s
@@ -987,7 +1006,7 @@ export default function ProspectionPage() {
                 <div key={s}
                   onClick={() => setStatusFilter(active ? 'Tous' : s)}
                   className={`flex-1 min-w-[90px] rounded-xl px-3 py-2.5 cursor-pointer transition-all
-                    ${active ? 'shadow-md scale-[1.03] border-2 ' + st.border : 'border border-transparent hover:shadow-sm hover:scale-[1.01]'}
+                    ${active ? 'shadow-md scale-[1.03] ring-2 ' + st.border.replace('border-', 'ring-') : 'hover:shadow-sm hover:scale-[1.01]'}
                     ${st.bg}`}>
                   <div className={`text-[10px] font-semibold uppercase tracking-wide truncate ${st.text}`}>{s}</div>
                   <div className={`mt-0.5 text-xl font-bold ${st.text}`}>{stats.bySt[s] || 0}</div>
