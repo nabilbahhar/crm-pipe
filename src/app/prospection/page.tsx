@@ -778,21 +778,6 @@ export default function ProspectionPage() {
   }
 
   async function del(p: Prospect) {
-    // Si converti, vérifier si le compte existe encore
-    if (p.converted_to_account_id) {
-      const { data: acc } = await supabase.from('accounts')
-        .select('id').eq('id', p.converted_to_account_id).maybeSingle()
-      if (acc) {
-        // Le compte existe — vérifier s'il a des deals
-        const { count } = await supabase.from('opportunities')
-          .select('id', { count: 'exact', head: true })
-          .eq('account_id', p.converted_to_account_id)
-        if (count && count > 0) {
-          toast(`Ce compte a ${count} deal(s), suppression impossible.`, false)
-          return
-        }
-      }
-    }
     if (!confirm(`Supprimer ${p.company_name} ?`)) return
     setRows(prev => prev.filter(r => r.id !== p.id))
     undoCancelled.current = false
