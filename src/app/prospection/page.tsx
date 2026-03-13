@@ -8,8 +8,9 @@ import {
   Plus, RefreshCw, X, Phone, Mail, ChevronRight,
   LayoutGrid, List, Flame, Thermometer, Snowflake, ArrowRightCircle,
   ArrowUp, ArrowDown, ChevronsUpDown, Download, Users, Trash2,
-  CheckCircle2, Building2,
+  CheckCircle2, Building2, Eye, Pencil, Search, AlertCircle,
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import Toast from '@/components/Toast'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -295,6 +296,7 @@ function AutocompleteInput({ label, value, onChange, suggestions, placeholder }:
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function ProspectionPage() {
+  const router = useRouter()
   const [rows, setRows]     = useState<Prospect[]>([])
   const [loading, setLoading] = useState(true)
   const [err, setErr]       = useState<string | null>(null)
@@ -769,7 +771,22 @@ export default function ProspectionPage() {
     setModalOpen(false); setEditId(null); load()
   }
 
-  function del(p: Prospect) {
+  async function del(p: Prospect) {
+    // Protection: refuse si converti en compte
+    if (p.converted_at) {
+      toast('Ce prospect a ete converti en compte, suppression impossible.', false)
+      return
+    }
+    // Protection: refuse si le compte lie a des deals
+    if (p.converted_to_account_id) {
+      const { count } = await supabase.from('opportunities')
+        .select('id', { count: 'exact', head: true })
+        .eq('account_id', p.converted_to_account_id)
+      if (count && count > 0) {
+        toast(`Ce compte a ${count} deal(s), suppression impossible.`, false)
+        return
+      }
+    }
     if (!confirm(`Supprimer ${p.company_name} ?`)) return
     setRows(prev => prev.filter(r => r.id !== p.id))
     undoCancelled.current = false
@@ -846,64 +863,75 @@ export default function ProspectionPage() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-[1500px] px-4 py-6">
+    <div className="min-h-screen bg-[#f8fafc]">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
-        {/* Header */}
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="text-2xl font-bold text-slate-900">Prospection</div>
-            <div className="text-sm text-slate-500">
-              Phase pré-deal — de la prise de contact jusqu'au 1er dossier · {stats.total} prospects actifs
+        {/* ── HEADER ── */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 text-white shadow-lg">
+              <Users className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Prospection</h1>
+              <p className="text-xs text-slate-500">{stats.total} prospects actifs · {stats.converted} convertis · {stats.convRate}% taux</p>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
             <button onClick={openCreate}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm text-white hover:bg-slate-800">
-              <Plus className="h-4 w-4" /> Nouveau prospect
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-900 bg-slate-900 px-3.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition-colors">
+              <Plus className="h-4 w-4" /> Nouveau
             </button>
-            <button onClick={exportExcel} disabled={exporting} title="Export Excel"
-              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50 disabled:opacity-60">
+            <button onClick={exportExcel} disabled={exporting}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-60">
               <Download className="h-4 w-4" /> {exporting ? 'Export…' : 'Excel'}
             </button>
             <button onClick={load} disabled={loading}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
               <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
 
-        {err  && <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{err}</div>}
+        {err && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-center gap-2"><AlertCircle className="h-4 w-4 shrink-0" />{err}</div>}
         {info && <Toast message={info.msg} type={info.ok ? 'success' : 'error'} onClose={() => setInfo(null)} />}
 
-        {/* KPIs */}
-        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Total actifs</div>
-            <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
-            <div className="text-xs text-slate-400 mt-0.5">{stats.converted} convertis · {stats.convRate}% taux</div>
-          </div>
-          <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-1 text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">
-              <Flame className="h-3.5 w-3.5 text-red-500" /> Chauds
+        {/* ── KPIs ── */}
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600"><Users className="h-3.5 w-3.5" /></div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total actifs</span>
             </div>
-            <div className="text-2xl font-bold text-red-600">{stats.hot}</div>
-            <div className="text-xs text-slate-400 mt-0.5">Heat = hot</div>
+            <div className="text-2xl font-black text-slate-900">{stats.total}</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">{stats.converted} convertis</div>
           </div>
-          <div className="rounded-2xl border bg-white p-4 shadow-sm">
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">Qualifiés ✓</div>
-            <div className="text-2xl font-bold text-emerald-700">{stats.qualifie}</div>
-            <div className="text-xs text-slate-400">Prêts pour un deal</div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100 text-red-600"><Flame className="h-3.5 w-3.5" /></div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Chauds</span>
+            </div>
+            <div className="text-2xl font-black text-red-700">{stats.hot}</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">Heat = hot</div>
           </div>
-          <div
-            onClick={() => setShowOverdue(v => !v)}
-            className={`rounded-2xl border p-4 shadow-sm cursor-pointer transition-colors
-              ${showOverdue ? 'bg-red-50 border-red-200' : 'bg-white hover:bg-red-50'}`}
-          >
-            <div className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">⚠ Relances retard</div>
-            <div className={`text-2xl font-bold ${overdueCount > 0 ? 'text-red-600' : 'text-slate-700'}`}>{overdueCount}</div>
-            <div className="text-xs text-slate-400">{showOverdue ? 'Clic → tout voir' : 'Clic → filtrer'}</div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-100 text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5" /></div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Qualifies</span>
+            </div>
+            <div className="text-2xl font-black text-emerald-700">{stats.qualifie}</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">Prets pour un deal</div>
           </div>
+          <button onClick={() => setShowOverdue(v => !v)}
+            className={`rounded-2xl ring-1 shadow-sm p-4 text-left transition-all hover:shadow-md
+              ${showOverdue ? 'bg-red-50 ring-red-300 ring-2' : 'bg-white ring-slate-200'}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${showOverdue ? 'bg-red-200 text-red-700' : 'bg-amber-100 text-amber-600'}`}><AlertCircle className="h-3.5 w-3.5" /></div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Relances retard</span>
+            </div>
+            <div className={`text-2xl font-black ${overdueCount > 0 ? 'text-red-700' : 'text-slate-900'}`}>{overdueCount}</div>
+            <div className="text-[11px] text-slate-500 mt-0.5">{showOverdue ? 'Filtre actif' : 'Clic pour filtrer'}</div>
+          </button>
         </div>
 
         {/* Source distribution */}
@@ -953,14 +981,13 @@ export default function ProspectionPage() {
           </div>
         </div>
 
-        {/* Toolbar */}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3 shadow-sm">
-            <svg className="h-3.5 w-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
-            </svg>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Société, contact…"
-              className="w-44 bg-transparent text-sm outline-none placeholder:text-slate-400" />
+        {/* ── TOOLBAR ── */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 shadow-sm min-w-[200px]">
+            <Search className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher…"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400" />
+            {search && <button onClick={() => setSearch('')}><X className="h-3.5 w-3.5 text-slate-300 hover:text-slate-600" /></button>}
           </div>
 
           {/* Heat */}
@@ -1136,13 +1163,7 @@ export default function ProspectionPage() {
                         </td>
                         <td className="px-4 py-3"><StatusBadge status={p.status} /></td>
                         <td className="px-4 py-3">
-                          <div className="flex flex-col gap-1.5">
-                            <AttemptsBar n={p.attempts} />
-                            <button onClick={() => addAttempt(p)}
-                              className="inline-flex h-6 items-center gap-1 rounded-md border px-2 text-[11px] text-slate-500 hover:bg-slate-100 hover:text-slate-900">
-                              + tentative
-                            </button>
-                          </div>
+                          <AttemptsBar n={p.attempts} />
                         </td>
                         <td className="px-4 py-3 max-w-[160px]">
                           <div className="truncate text-xs text-slate-500" title={p.next_action || ''}>
@@ -1157,30 +1178,19 @@ export default function ProspectionPage() {
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-400">{p.source || '—'}</td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {nextS && nextS !== 'Qualifi\u00e9 \u2713' && (
-                              <button onClick={() => advanceStatus(p)}
-                                className="inline-flex h-7 items-center gap-1 rounded-lg border bg-slate-900 px-2 text-[11px] text-white hover:bg-slate-700">
-                                <ChevronRight className="h-3.5 w-3.5" />
-                                {nextS}
-                              </button>
-                            )}
-                            {nextS === 'Qualifi\u00e9 \u2713' && (
-                              <button onClick={() => advanceStatus(p)}
-                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-emerald-400 bg-emerald-600 px-2.5 text-[11px] text-white hover:bg-emerald-700 shadow-sm">
-                                <CheckCircle2 className="h-3.5 w-3.5" /> Qualifier
-                              </button>
-                            )}
-                            {p.status === 'Qualifi\u00e9 \u2713' && !p.converted_at && (
-                              <button onClick={() => openConvert(p)}
-                                className="inline-flex h-7 items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2 text-[11px] text-emerald-700 hover:bg-emerald-100">
-                                <ArrowRightCircle className="h-3.5 w-3.5" /> Convertir
-                              </button>
-                            )}
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => router.push(`/prospection/${p.id}`)}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors" title="Voir la fiche">
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
                             <button onClick={() => openEdit(p)}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border text-slate-500 hover:bg-slate-100">✎</button>
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors" title="Modifier">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
                             <button onClick={() => del(p)}
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border text-red-400 hover:bg-red-50">✕</button>
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors" title="Supprimer">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1249,26 +1259,14 @@ export default function ProspectionPage() {
                             </div>
                           )}
                           <div className="mt-2 flex items-center gap-1.5 border-t pt-2">
-                            {nextS && nextS !== 'Qualifi\u00e9 \u2713' ? (
-                              <button onClick={() => advanceStatus(p)}
-                                className="flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-lg border bg-slate-900 text-[11px] text-white hover:bg-slate-700">
-                                <ChevronRight className="h-3 w-3" />{nextS}
-                              </button>
-                            ) : nextS === 'Qualifi\u00e9 \u2713' ? (
-                              <button onClick={() => advanceStatus(p)}
-                                className="flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-lg border border-emerald-400 bg-emerald-600 text-[11px] text-white hover:bg-emerald-700">
-                                <CheckCircle2 className="h-3 w-3" /> Qualifier
-                              </button>
-                            ) : (!p.converted_at && (
-                              <button onClick={() => openConvert(p)}
-                                className="flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 text-[11px] text-emerald-700 hover:bg-emerald-100">
-                                <ArrowRightCircle className="h-3 w-3" /> Convertir
-                              </button>
-                            ))}
-                            <button onClick={() => addAttempt(p)}
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100 text-[10px]" title="+1 tentative">+1</button>
+                            <button onClick={() => router.push(`/prospection/${p.id}`)}
+                              className="flex-1 inline-flex h-6 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white text-[11px] font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                              <Eye className="h-3 w-3" /> Voir
+                            </button>
                             <button onClick={() => openEdit(p)}
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border text-slate-400 hover:bg-slate-100 text-[10px]">✎</button>
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:bg-slate-100 transition-colors" title="Modifier">
+                              <Pencil className="h-3 w-3" />
+                            </button>
                           </div>
                         </div>
                       )
