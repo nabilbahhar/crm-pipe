@@ -9,10 +9,10 @@ import {
   Search, ArrowUp, ArrowDown, ChevronsUpDown, X, Download,
   Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
   FileText, AlertTriangle, TrendingUp, Users, Target, Zap, Sun,
-  Shield, Key, BookOpen, Receipt,
+  Shield, Key, BookOpen, Receipt, Crosshair,
 } from 'lucide-react'
 
-type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard' | 'eta_retard'
+type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard' | 'eta_retard' | 'deal_relance'
 
 // ── Types for new sections ──
 type WarrantyItem = {
@@ -83,6 +83,7 @@ const TYPE_LABELS: Record<TaskType, string> = {
   achat_manquant: 'Fiche achat',
   closing_retard: 'Closing retard',
   eta_retard: 'ETA retard',
+  deal_relance: 'Suivi deal',
 }
 
 const STATUS_CFG: Record<FicheStatus, { label: string; icon: React.ReactNode; badge: string; row: string }> = {
@@ -136,13 +137,13 @@ export default function TasksPage() {
     setLoading(true); setErr(null)
     try {
       const year = new Date().getFullYear()
-      const [a, b, c, d, e, wonRes, openRes, warr, lic, drItems, invItems] = await Promise.all([
-        loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(), loadEtaRetards(),
+      const [a, b, c, d, e, f, wonRes, openRes, warr, lic, drItems, invItems] = await Promise.all([
+        loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(), loadEtaRetards(), loadDealRelances(),
         supabase.from('opportunities').select('amount').eq('status', 'Won').gte('booking_month', `${year}-01`),
         supabase.from('opportunities').select('amount').eq('status', 'Open'),
         loadWarranties(), loadLicenses(), loadDRs(), loadOverdueInvoices(),
       ])
-      setTasks([...a, ...b, ...c, ...d, ...e])
+      setTasks([...a, ...b, ...c, ...d, ...e, ...f])
       if (wonRes.error) console.warn('tasks wonRes error:', wonRes.error.message)
       if (openRes.error) console.warn('tasks openRes error:', openRes.error.message)
       setWonYTD((wonRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
@@ -320,6 +321,43 @@ export default function TasksPage() {
     }
   }
 
+  // ── Deal relances (next_step_date) ────────────────────────
+  async function loadDealRelances(): Promise<Task[]> {
+    try {
+      const today = new Date()
+      const todayStr = today.toISOString().split('T')[0]
+      // Load Open deals with next_step_date set (overdue + upcoming 7 days)
+      const endOfWeek = new Date(today)
+      endOfWeek.setDate(today.getDate() + 7)
+      const endStr = endOfWeek.toISOString().split('T')[0]
+      const { data, error } = await supabase
+        .from('opportunities')
+        .select('id, title, amount, bu, stage, next_step, next_step_date, accounts(name)')
+        .eq('status', 'Open')
+        .not('next_step_date', 'is', null)
+        .lte('next_step_date', endStr)
+        .order('next_step_date', { ascending: true })
+      if (error || !data) return []
+      return data.map((d: any) => {
+        const stepDate = new Date(d.next_step_date)
+        const daysLate = Math.floor((today.getTime() - stepDate.getTime()) / 86400000)
+        const isOverdue = d.next_step_date < todayStr
+        const isToday = d.next_step_date === todayStr
+        return {
+          id: `deal_rel_${d.id}`, type: 'deal_relance' as TaskType,
+          priority: (isOverdue || isToday ? 'high' : 'medium') as Priority,
+          title: (d.accounts as any)?.name || d.title,
+          subtitle: d.title,
+          detail: `${d.next_step || 'Suivre'} · ${d.stage || '—'} · ${d.bu || '—'}`,
+          amount: d.amount || 0, daysLate: isOverdue ? daysLate : -daysLate,
+          ficheStatus: 'a_faire' as FicheStatus,
+          ficheProgress: 0, linesTotal: 0, linesComplete: 0,
+          entity_id: d.id, entity: d,
+        } as Task
+      })
+    } catch { return [] }
+  }
+
   // ── Renouvellements garantie ────────────────────────────
   async function loadWarranties(): Promise<WarrantyItem[]> {
     try {
@@ -465,12 +503,14 @@ export default function TasksPage() {
   const achats          = useMemo(() => visible.filter(t => t.type === 'achat_manquant'), [visible])
   const closingRetards  = useMemo(() => visible.filter(t => t.type === 'closing_retard'), [visible])
   const etaRetards      = useMemo(() => visible.filter(t => t.type === 'eta_retard'), [visible])
+  const dealRelances    = useMemo(() => visible.filter(t => t.type === 'deal_relance'), [visible])
 
   // Global counts for KPIs (unfiltered)
   const allRelances = useMemo(() => tasks.filter(t => t.type === 'relance_retard'), [tasks])
   const allAchats   = useMemo(() => tasks.filter(t => t.type === 'achat_manquant'), [tasks])
   const allClosing  = useMemo(() => tasks.filter(t => t.type === 'closing_retard'), [tasks])
   const allSemaine  = useMemo(() => tasks.filter(t => t.type === 'relance_semaine'), [tasks])
+  const allDealRel  = useMemo(() => tasks.filter(t => t.type === 'deal_relance'), [tasks])
   const totalAchatAmt = allAchats.reduce((s, t) => s + t.amount, 0)
   const closingAmt    = allClosing.reduce((s, t) => s + t.amount, 0)
 
@@ -571,7 +611,7 @@ export default function TasksPage() {
         </div>
 
         {/* ── KPI STRIP ── */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
           <KPICard
             icon={<AlertTriangle className="h-4 w-4" />}
             label="Total tâches"
@@ -580,6 +620,15 @@ export default function TasksPage() {
             color="slate"
             active={typeFilter === 'Tous'}
             onClick={() => setTypeFilter('Tous')}
+          />
+          <KPICard
+            icon={<Crosshair className="h-4 w-4" />}
+            label="Suivi deals"
+            value={String(allDealRel.length)}
+            sub={allDealRel.filter(t => t.daysLate > 0).length + ' en retard'}
+            color="indigo"
+            active={typeFilter === 'deal_relance'}
+            onClick={() => setTypeFilter(typeFilter === 'deal_relance' ? 'Tous' : 'deal_relance')}
           />
           <KPICard
             icon={<FileText className="h-4 w-4" />}
@@ -686,6 +735,10 @@ export default function TasksPage() {
 
           // Smart recommendations
           const tips: string[] = []
+          const dealRelOverdue = allDealRel.filter(t => t.daysLate > 0).length
+          const dealRelToday = allDealRel.filter(t => t.daysLate === 0).length
+          if (dealRelToday > 0) tips.push(`🎯 ${dealRelToday} deal${dealRelToday > 1 ? 's' : ''} à suivre aujourd'hui`)
+          if (dealRelOverdue > 0) tips.push(`⚠️ ${dealRelOverdue} suivi${dealRelOverdue > 1 ? 's' : ''} deal en retard — rappelle tes prospects !`)
           if (allRelances.length > 5) tips.push(`🔴 ${allRelances.length} relances en retard — priorise les plus anciennes`)
           if (allAchats.length > 0) tips.push(`📋 ${allAchats.length} fiches achat à compléter (${fmt(totalAchatAmt)} MAD)`)
           if (allClosing.length > 3) tips.push(`⏰ ${allClosing.length} deals avec closing dépassé — requalifie ou relance`)
@@ -882,6 +935,70 @@ export default function TasksPage() {
                                   ${t.ficheStatus === 'en_cours' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'}`}>
                                 <Package className="h-3.5 w-3.5" />
                                 {t.ficheStatus === 'en_cours' ? 'Compléter' : 'Remplir'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </TaskSection>
+            )}
+
+            {/* ── Suivi deals (next_step_date) ── */}
+            {dealRelances.length > 0 && (typeFilter === 'Tous' || typeFilter === 'deal_relance') && (
+              <TaskSection
+                icon={<Crosshair className="h-4 w-4" />}
+                title="Suivi deals — prochaines actions"
+                count={dealRelances.length}
+                colorScheme="indigo"
+                amount={dealRelances.reduce((s,t)=>s+t.amount,0)}>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/70">
+                      <TH col="title" label="Compte" />
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Deal</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Action / Etape</th>
+                      <TH col="amount" label="Montant" right />
+                      <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Quand</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {dealRelances.map(t => {
+                      const isOverdue = t.daysLate > 0
+                      const isToday = t.daysLate === 0
+                      const daysAbs = Math.abs(t.daysLate)
+                      const dayLabel = isOverdue ? `${daysAbs}j retard` : isToday ? "Aujourd'hui" : daysAbs === 1 ? 'Demain' : `Dans ${daysAbs}j`
+                      return (
+                        <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className={`h-2 w-2 rounded-full shrink-0 ${isOverdue || isToday ? 'bg-red-500' : 'bg-indigo-400'} ${isToday ? 'animate-pulse' : ''}`} />
+                              <span className="font-bold text-slate-900 text-xs">{t.title}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-500 max-w-[160px]">
+                            <span className="truncate block">{t.subtitle}</span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-slate-600 max-w-[200px]">
+                            <span className="truncate block">{t.detail}</span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap text-xs">
+                            {t.amount > 0 ? mad(t.amount) : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full
+                              ${isOverdue ? 'bg-red-100 text-red-700' : isToday ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600'}`}>
+                              {dayLabel}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex justify-center">
+                              <button onClick={() => router.push(`/opportunities/${t.entity_id}`)}
+                                className="inline-flex h-8 items-center gap-1 rounded-xl bg-indigo-600 px-3 text-xs font-bold text-white hover:bg-indigo-700 transition-colors shadow-sm">
+                                Suivre <ChevronRight className="h-3.5 w-3.5" />
                               </button>
                             </div>
                           </td>
@@ -1346,7 +1463,7 @@ export default function TasksPage() {
 // ── KPI Card ──────────────────────────────────────────────────
 function KPICard({ icon, label, value, sub, color, active, onClick }: {
   icon: React.ReactNode; label: string; value: string; sub: string
-  color: 'slate' | 'amber' | 'red' | 'blue' | 'orange' | 'emerald' | 'violet' | 'teal' | 'rose'
+  color: 'slate' | 'amber' | 'red' | 'blue' | 'orange' | 'emerald' | 'violet' | 'teal' | 'rose' | 'indigo'
   active: boolean; onClick: () => void
 }) {
   const colorMap: Record<string, { ring: string; icon: string; val: string }> = {
@@ -1359,6 +1476,7 @@ function KPICard({ icon, label, value, sub, color, active, onClick }: {
     violet:  { ring: active ? 'ring-violet-400'  : 'ring-slate-200', icon: 'bg-violet-100 text-violet-600',   val: 'text-violet-700'  },
     teal:    { ring: active ? 'ring-teal-400'    : 'ring-slate-200', icon: 'bg-teal-100 text-teal-600',       val: 'text-teal-700'    },
     rose:    { ring: active ? 'ring-rose-400'    : 'ring-slate-200', icon: 'bg-rose-100 text-rose-600',       val: 'text-rose-700'    },
+    indigo:  { ring: active ? 'ring-indigo-400'  : 'ring-slate-200', icon: 'bg-indigo-100 text-indigo-600',   val: 'text-indigo-700'  },
   }
   const colors = colorMap[color]
 
@@ -1378,7 +1496,7 @@ function KPICard({ icon, label, value, sub, color, active, onClick }: {
 // ── TaskSection ────────────────────────────────────────────────
 function TaskSection({ icon, title, count, colorScheme, amount, children }: {
   icon: React.ReactNode; title: string; count: number
-  colorScheme: 'amber' | 'red' | 'blue' | 'orange' | 'emerald' | 'violet' | 'teal' | 'rose'
+  colorScheme: 'amber' | 'red' | 'blue' | 'orange' | 'emerald' | 'violet' | 'teal' | 'rose' | 'indigo'
   amount?: number; children: React.ReactNode
 }) {
   const cfgMap: Record<string, { border: string; bg: string; text: string; badge: string; icon: string }> = {
@@ -1390,6 +1508,7 @@ function TaskSection({ icon, title, count, colorScheme, amount, children }: {
     violet:  { border: 'border-violet-200',  bg: 'bg-violet-50',  text: 'text-violet-800',  badge: 'bg-violet-200 text-violet-800',   icon: 'text-violet-600'  },
     teal:    { border: 'border-teal-200',    bg: 'bg-teal-50',    text: 'text-teal-800',    badge: 'bg-teal-200 text-teal-800',       icon: 'text-teal-600'    },
     rose:    { border: 'border-rose-200',    bg: 'bg-rose-50',    text: 'text-rose-800',    badge: 'bg-rose-200 text-rose-800',       icon: 'text-rose-600'    },
+    indigo:  { border: 'border-indigo-200',  bg: 'bg-indigo-50',  text: 'text-indigo-800',  badge: 'bg-indigo-200 text-indigo-800',   icon: 'text-indigo-600'  },
   }
   const cfg = cfgMap[colorScheme]
 

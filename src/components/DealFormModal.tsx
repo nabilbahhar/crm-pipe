@@ -32,6 +32,40 @@ const BUS = ['HCI', 'Network', 'Storage', 'Cyber', 'Service', 'CSG'] as const
 const SERVICE_CARD = 'Prestation'
 const isService = (v: any) => String(v || '').trim().toLowerCase() === 'service'
 
+// ── Lost reasons (Compucom-specific) ────────────────────────────────────────
+const LOST_REASONS = [
+  'Moins disant (prix)',
+  'Pas mieux disant (technique)',
+  'Client a annulé la demande',
+  'Client a changé de constructeur',
+  'Client a choisi un concurrent direct',
+  'Budget annulé ou reporté',
+  'Projet gelé / suspendu',
+  'Changement de décideur',
+  'Hors scope Compucom (pas notre métier)',
+  'Délai de livraison trop long',
+  'Conditions de paiement refusées',
+  'Client a internalisé le projet',
+  'Partenaire non référencé chez le client',
+  'Autre',
+] as const
+
+// ── Next step suggestions ───────────────────────────────────────────────────
+const NEXT_STEP_SUGGESTIONS = [
+  'Relancer le client',
+  'Envoyer l\'offre technique',
+  'Envoyer l\'offre commerciale',
+  'Préparer le devis',
+  'Planifier un RDV',
+  'Faire une démo / POC',
+  'Relancer les achats',
+  'Attendre validation DSI',
+  'Attendre BC client',
+  'Négocier les conditions',
+  'Closer le deal',
+  'Aucun retour du client',
+] as const
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function computeStatus(stage: string): 'Open' | 'Won' | 'Lost' {
   const s = (stage || '').toLowerCase()
@@ -275,6 +309,13 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
 
   const lastNonServiceCard = useRef('Dell')
 
+  // Next step date (pour tâches/rappels)
+  const [nextStepDate, setNextStepDate] = useState('')
+
+  // Lost reason
+  const [lostReason,      setLostReason]      = useState('')
+  const [lostReasonOther, setLostReasonOther] = useState('')
+
   // Deal Registration (DR)
   const [drLines, setDrLines] = useState<DRLine[]>([])
 
@@ -344,12 +385,28 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
     setStage((r.stage as any) || 'Lead')
 
     const p = Number(r.prob ?? NaN)
-    if (Number.isFinite(p)) { setAutoProb(false); setProb(clamp(p, 0, 100)) }
-    else { setAutoProb(true); setProb(STAGE_PROB[r.stage ?? 'Lead'] ?? 10) }
+    const expectedProb = STAGE_PROB[r.stage ?? 'Lead'] ?? 10
+    if (Number.isFinite(p) && p !== expectedProb) {
+      // Prob was manually overridden — keep it manual
+      setAutoProb(false); setProb(clamp(p, 0, 100))
+    } else {
+      // Prob matches stage default — keep Auto checked
+      setAutoProb(true); setProb(expectedProb)
+    }
 
     setBookingMonth(r.booking_month || defaultMonth)
     setNextStep(r.next_step || '')
+    setNextStepDate(r.next_step_date || '')
     setNotes(r.notes || '')
+
+    // Lost reason
+    const lr = r.lost_reason || ''
+    if (lr && LOST_REASONS.includes(lr as any)) {
+      setLostReason(lr)
+    } else if (lr) {
+      setLostReason('Autre')
+      setLostReasonOther(lr)
+    }
     setPoNumber(String(r.po_number || '').trim())
     setPoDateDMY(isoToDMY(r.po_date))
 
@@ -452,6 +509,10 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
 
     setSaving(true)
     try {
+      const finalLostReason = status === 'Lost'
+        ? (lostReason === 'Autre' ? lostReasonOther.trim() : lostReason) || null
+        : null
+
       const payload: any = {
         account_id: accountId,
         title: title.trim(),
@@ -460,10 +521,12 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
         prob: clamp(Number(prob) || 0, 0, 100),
         booking_month: bookingMonth || null,
         next_step: nextStep.trim(),
+        next_step_date: (status === 'Open' && nextStepDate) ? nextStepDate : null,
         notes: notes.trim() || null,
         multi_bu: Boolean(multiBu),
         po_number: status === 'Won' ? poNumber.trim() : null,
         po_date:   status === 'Won' ? dmyToISO(poDateDMY) : null,
+        lost_reason: finalLostReason,
       }
 
       if (!multiBu) {
@@ -691,6 +754,33 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                   {poDateDMY && !isValidDMY(poDateDMY) &&
                     <div className="mt-1 text-xs text-red-600">Format attendu : JJ/MM/AAAA</div>}
                 </Field>
+              </div>
+            </Section>
+          )}
+
+          {/* ── Lost reason ── */}
+          {status === 'Lost' && (
+            <Section title="❌ Raison de perte — pourquoi on a perdu ce deal ?">
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {LOST_REASONS.map(r => (
+                    <label key={r}
+                      className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm cursor-pointer select-none transition-all
+                        ${lostReason === r ? 'border-red-300 bg-red-50 text-red-800 font-semibold ring-1 ring-red-200' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>
+                      <input type="radio" name="lost_reason" value={r} checked={lostReason === r}
+                        onChange={() => setLostReason(r)}
+                        className="h-3.5 w-3.5 accent-red-600" />
+                      {r}
+                    </label>
+                  ))}
+                </div>
+                {lostReason === 'Autre' && (
+                  <Field label="Précise la raison">
+                    <input value={lostReasonOther} onChange={e => setLostReasonOther(e.target.value)}
+                      placeholder="Décris la raison de la perte..."
+                      className={inp} />
+                  </Field>
+                )}
               </div>
             </Section>
           )}
@@ -971,14 +1061,64 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
             </div>
           </Section>
 
-          {/* ── Next step + Notes ── */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <Field label="Next step *">
-              <input value={nextStep} onChange={e => setNextStep(e.target.value)}
-                placeholder="Ex: Relancer lundi, envoyer offre…"
-                className={inp} />
-            </Field>
-            <Field label="Notes" span3={false}>
+          {/* ── Next step + Date rappel + Notes ── */}
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <Field label="Next step *">
+                  <input value={nextStep} onChange={e => setNextStep(e.target.value)}
+                    placeholder="Ex: Relancer lundi, envoyer offre…"
+                    className={inp} />
+                </Field>
+              </div>
+              {status === 'Open' && (
+                <Field label="📅 Date rappel">
+                  <input type="date" value={nextStepDate} onChange={e => setNextStepDate(e.target.value)}
+                    min={new Date().toISOString().slice(0, 10)}
+                    className={inp} />
+                </Field>
+              )}
+            </div>
+
+            {/* Quick date buttons */}
+            {status === 'Open' && (
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { label: 'Demain', days: 1 },
+                  { label: 'Dans 2j', days: 2 },
+                  { label: 'Dans 3j', days: 3 },
+                  { label: 'Lundi', days: (() => { const d = new Date(); const diff = (8 - d.getDay()) % 7 || 7; return diff })() },
+                  { label: 'Dans 1 sem.', days: 7 },
+                  { label: 'Dans 2 sem.', days: 14 },
+                  { label: 'Fin du mois', days: (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate() })() },
+                ].map(({ label, days }) => {
+                  const target = new Date(); target.setDate(target.getDate() + days)
+                  const iso = target.toISOString().slice(0, 10)
+                  return (
+                    <button key={label} type="button" onClick={() => setNextStepDate(iso)}
+                      className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all
+                        ${nextStepDate === iso ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
+                      📅 {label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Next step suggestions */}
+            {status === 'Open' && (
+              <div className="flex flex-wrap gap-1.5">
+                {NEXT_STEP_SUGGESTIONS.map(s => (
+                  <button key={s} type="button" onClick={() => setNextStep(s)}
+                    className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all
+                      ${nextStep === s ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:border-slate-300'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <Field label="Notes">
               <textarea value={notes} onChange={e => setNotes(e.target.value)}
                 rows={2} placeholder="Notes internes…"
                 className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 resize-none" />

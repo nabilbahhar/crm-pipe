@@ -196,7 +196,7 @@ export const STAGE_CFG: Record<string, { bg: string; text: string; dot: string; 
 
 const DEFAULT_ANNUAL_TARGET = 30_000_000 // 30M MAD
 
-/** Retourne l'objectif annuel Won (localStorage override ou 30M par défaut) */
+/** Retourne l'objectif annuel CA Won (localStorage override ou 30M par défaut) */
 export const getAnnualTarget = (): number => {
   if (typeof window === 'undefined') return DEFAULT_ANNUAL_TARGET
   const stored = localStorage.getItem('crm_annual_target')
