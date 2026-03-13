@@ -88,7 +88,7 @@ const SEG_STYLE: Record<string, { bg: string; text: string; dot: string }> = {
 const SOURCES = [
   'Cold Call', 'LinkedIn', 'Événement / Salon', 'Referral',
   'Constructeur / Éditeur', 'Partenaire / Distributeur', 'Appel d\'offres',
-  'Inbound', 'Networking', 'Cross-selling', 'Upselling', 'Autre',
+  'Inbound', 'Networking', 'Cross / Upselling', 'Autre',
 ]
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
