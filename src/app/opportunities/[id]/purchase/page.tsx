@@ -277,7 +277,7 @@ export default function PurchasePage() {
           license_months: l.license_months || 0,
           warranty_expiry: l.warranty_expiry || '',
           license_expiry: l.license_expiry || '',
-          selected_contact_ids: l.selected_contact_ids ? (typeof l.selected_contact_ids === 'string' ? JSON.parse(l.selected_contact_ids) : l.selected_contact_ids) : [],
+          selected_contact_ids: l.selected_contact_ids ? (typeof l.selected_contact_ids === 'string' ? (() => { try { return JSON.parse(l.selected_contact_ids) } catch { return [] } })() : l.selected_contact_ids) : [],
         })))
         setExtracted(true)
         setLoading(false)
@@ -631,10 +631,11 @@ export default function PurchasePage() {
 
   async function deleteDbFile(fileId: string, fileUrl: string) {
     try {
-      await authFetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [fileUrl], fileIds: [fileId] }) })
+      const res = await authFetch('/api/upload', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paths: [fileUrl], fileIds: [fileId] }) })
+      if (!res.ok) { setErr('Erreur suppression fichier'); return }
       setDbFiles(p => p.filter(f => f.id !== fileId))
     } catch (e: any) {
-      setErr(`Erreur suppression : ${e?.message}`)
+      setErr('Erreur suppression fichier')
     }
   }
 

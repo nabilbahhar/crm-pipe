@@ -135,11 +135,12 @@ function FacturationModal({
       const dueDate = getDueDate()
 
       for (const lineId of selectedIds) {
-        await authFetch('/api/supply', {
+        const lineRes = await authFetch('/api/supply', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lineId, updates: { line_status: 'facture' } }),
         })
+        if (!lineRes.ok) throw new Error('Erreur mise à jour ligne')
       }
 
       const remainingNonFacture = lines.filter(l =>
@@ -148,7 +149,7 @@ function FacturationModal({
       const allFactured = remainingNonFacture.length === 0
 
       if (allFactured) {
-        await authFetch('/api/supply', {
+        const orderRes = await authFetch('/api/supply', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -160,6 +161,7 @@ function FacturationModal({
             },
           }),
         })
+        if (!orderRes.ok) throw new Error('Erreur mise à jour commande')
       }
 
       const { error: invError } = await supabase.from('invoices').insert({
@@ -501,7 +503,7 @@ function OrderSlidePanel({
           en_stock: 'received_at', livre: 'delivered_at', facture: 'invoiced_at',
         }
         const tsField = timestamps[derived]
-        await authFetch('/api/supply', {
+        const oRes = await authFetch('/api/supply', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -513,6 +515,7 @@ function OrderSlidePanel({
             },
           }),
         })
+        if (!oRes.ok) console.error('[supply] Failed to auto-update order status')
       }
 
       showToast(`Ligne → ${LINE_STATUS_CFG[newStatus]?.label || newStatus}`)
