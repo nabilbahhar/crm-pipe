@@ -1085,7 +1085,7 @@ export default function PurchasePage() {
                           )}
                           <button onClick={() => setEditingIdx(null)}
                             className="flex items-center gap-1 rounded-md bg-slate-700 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-slate-800 transition">
-                            <CheckCircle2 className="h-3 w-3" /> OK
+                            <CheckCircle2 className="h-3 w-3" /> Terminé
                           </button>
                         </div>
 
@@ -1230,14 +1230,10 @@ export default function PurchasePage() {
                           })()}
 
                           {/* Footer */}
-                          <div className="flex items-center justify-between pt-1">
+                          <div className="flex items-center pt-1">
                             <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
                               className="flex items-center gap-1 text-[10px] font-medium text-red-400 hover:text-red-600 transition">
                               <Trash2 className="h-3 w-3" /> Supprimer
-                            </button>
-                            <button onClick={() => setEditingIdx(null)}
-                              className="flex items-center gap-1 rounded-md bg-slate-700 px-3 py-1 text-[10px] font-semibold text-white hover:bg-slate-800 transition">
-                              <CheckCircle2 className="h-3 w-3" /> Terminé
                             </button>
                           </div>
                         </div>
