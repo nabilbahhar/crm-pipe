@@ -170,6 +170,38 @@ export async function POST(req: NextRequest) {
 }
 
 /**
+ * GET /api/upload?opportunity_id=xxx  OR  ?account_id=xxx
+ * List files for a deal or account (service role key — bypasses RLS)
+ */
+export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (auth instanceof NextResponse) return auth
+
+  const oppId = req.nextUrl.searchParams.get('opportunity_id')
+  const accId = req.nextUrl.searchParams.get('account_id')
+
+  try {
+    if (oppId) {
+      const { data, error } = await supabaseServer
+        .from('deal_files').select('id, file_type, file_name, file_url')
+        .eq('opportunity_id', oppId).order('created_at', { ascending: false })
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ files: data || [] })
+    }
+    if (accId) {
+      const { data, error } = await supabaseServer
+        .from('account_files').select('id, file_type, file_name, file_url')
+        .eq('account_id', accId).order('created_at', { ascending: false })
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ files: data || [] })
+    }
+    return NextResponse.json({ error: 'opportunity_id ou account_id requis' }, { status: 400 })
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Erreur' }, { status: 500 })
+  }
+}
+
+/**
  * DELETE /api/upload
  * Server-side file deletion from Supabase Storage + optional DB record deletion.
  */

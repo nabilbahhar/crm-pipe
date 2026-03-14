@@ -175,11 +175,14 @@ export default function PurchasePage() {
       .from('purchase_info').select('*, purchase_lines(*)')
       .eq('opportunity_id', id).maybeSingle()
 
-    // Existing files (always load from DB to persist across sessions)
-    const { data: files } = await supabase
-      .from('deal_files').select('id, file_type, file_name, file_url')
-      .eq('opportunity_id', id)
-    if (files) setDbFiles(files)
+    // Existing files — via server route (service role → bypasses RLS)
+    try {
+      const filesRes = await authFetch(`/api/upload?opportunity_id=${id}`)
+      if (filesRes.ok) {
+        const { files } = await filesRes.json()
+        if (files) setDbFiles(files)
+      }
+    } catch { /* silent */ }
 
     if (info) {
       setExistingInfo(info)
@@ -407,24 +410,8 @@ export default function PurchasePage() {
       ...autreFiles.map(f => ({ file: f, type: 'autre' })),
     ]
     for (const u of toUpload) {
-      const path = `${id}/${u.type}/${Date.now()}_${u.file.name}`
-      const { data: stored, error } = await supabase.storage
-        .from('deal-files').upload(path, u.file, { upsert: true })
-      if (!error && stored) {
-        if (u.type !== 'autre') {
-          await supabase.from('deal_files').delete()
-            .eq('opportunity_id', id).eq('file_type', u.type)
-        }
-        await supabase.from('deal_files').insert({
-          opportunity_id: id, file_type: u.type,
-          file_name: u.file.name, file_url: stored.path, uploaded_by: userEmail,
-        })
-      }
+      await uploadFileNow(u.file as File, u.type as 'bc_client' | 'devis_compucom' | 'autre')
     }
-    const { data: files } = await supabase
-      .from('deal_files').select('id, file_type, file_name, file_url')
-      .eq('opportunity_id', id)
-    if (files) setDbFiles(files)
   }
 
   const [uploadingFile, setUploadingFile] = useState<string | null>(null)
@@ -468,10 +455,10 @@ export default function PurchasePage() {
         return
       }
 
-      // Recharger depuis DB pour avoir tous les fichiers
-      const { data: fresh } = await supabase.from('deal_files')
-        .select('id, file_type, file_name, file_url').eq('opportunity_id', id)
-      if (fresh) setDbFiles(fresh)
+      // Mettre à jour dbFiles depuis la réponse serveur (pas de re-query anon key)
+      if (result.dbRecord) {
+        setDbFiles(prev => [...prev.filter(f => !(type !== 'autre' && f.file_type === type)), result.dbRecord])
+      }
     } catch (e: any) {
       setUploadError(`Erreur inattendue : ${e?.message || 'inconnue'}`)
     }
@@ -687,24 +674,24 @@ export default function PurchasePage() {
           )}
 
           <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full" style={{ minWidth: 1340 }}>
+            <table className="w-full" style={{ minWidth: 1500 }}>
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50">
                   {[
-                    { l:'Réf',        w:80,  r:false },
-                    { l:'Désignation *', w:0, r:false },
-                    { l:'Qté',        w:70,  r:true  },
-                    { l:'PU Vente',   w:120, r:true  },
-                    { l:'PT Vente',   w:130, r:true  },
-                    { l:'PU Achat ★', w:120, r:true, amber:true },
-                    { l:'PT Achat',   w:130, r:true  },
-                    { l:'Marge',      w:80,  r:true  },
-                    { l:'Fin garantie', w:130, r:false },
-                    { l:'Fin licence', w:130, r:false },
-                    { l:'Fournisseur / Contact',w:260, r:false },
+                    { l:'Réf',        w:70,  r:false },
+                    { l:'Désignation *', w:280, r:false },
+                    { l:'Qté',        w:65,  r:true  },
+                    { l:'PU Vente',   w:110, r:true  },
+                    { l:'PT Vente',   w:120, r:true  },
+                    { l:'PU Achat ★', w:110, r:true, amber:true },
+                    { l:'PT Achat',   w:120, r:true  },
+                    { l:'Marge',      w:75,  r:true  },
+                    { l:'Fin garantie', w:125, r:false },
+                    { l:'Fin licence', w:125, r:false },
+                    { l:'Fournisseur / Contact',w:250, r:false },
                     { l:'',           w:40,  r:false },
                   ].map(({ l, w, r, amber }, i) => (
-                    <th key={i} style={w ? { width: w } : {}} className={`px-4 py-3 text-[11px] font-bold uppercase tracking-wide ${r?'text-right':'text-left'} ${amber?'text-amber-500':'text-slate-400'}`}>
+                    <th key={i} style={w ? { width: w, minWidth: w } : {}} className={`px-3 py-3 text-[11px] font-bold uppercase tracking-wide ${r?'text-right':'text-left'} ${amber?'text-amber-500':'text-slate-400'}`}>
                       {l}
                     </th>
                   ))}
@@ -722,14 +709,14 @@ export default function PurchasePage() {
                         <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)}
                           placeholder="C1300…" className={inp} />
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-3">
                         <textarea value={l.designation}
-                          onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=Math.max(e.target.scrollHeight, 72)+'px' }}
-                          onFocus={e => { e.target.style.height='auto'; e.target.style.height=Math.max(e.target.scrollHeight, 72)+'px' }}
+                          onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=Math.max(e.target.scrollHeight, 56)+'px' }}
+                          onFocus={e => { e.target.style.height='auto'; e.target.style.height=Math.max(e.target.scrollHeight, 56)+'px' }}
                           placeholder="Description du produit *"
-                          rows={3}
-                          className={`${inp} resize-none overflow-hidden leading-snug py-2.5 ${!l.designation.trim()?'border-red-300 bg-red-50 focus:border-red-400':''}`}
-                          style={{ minHeight: 72 }} />
+                          rows={2}
+                          className={`${inp} resize-none overflow-hidden leading-snug py-2 text-xs ${!l.designation.trim()?'border-red-300 bg-red-50 focus:border-red-400':''}`}
+                          style={{ minHeight: 56, minWidth: 250 }} />
                       </td>
                       <td className="px-4 py-3">
                         <input type="number" min={1} value={Number(l.qty) || 1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
