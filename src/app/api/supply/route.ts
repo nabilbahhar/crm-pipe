@@ -26,8 +26,7 @@ export async function GET(req: NextRequest) {
 
     if (ordErr) throw ordErr
 
-    // Filter out any lingering a_commander orders
-    const validOrders = (orders || []).filter((o: any) => o.status !== 'a_commander')
+    const validOrders = (orders || [])
 
     if (validOrders.length === 0) {
       return NextResponse.json({ orders: [] })

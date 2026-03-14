@@ -5,15 +5,15 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
 import { getSignedUrls } from '@/lib/getSignedUrls'
-import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName, paymentTermLabel } from '@/lib/utils'
+import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName, paymentTermLabel, PRESCRIPTION_STATUS_CFG, type PrescriptionStatus, PROJECT_SERVICE_STATUS_CFG, type ProjectServiceStatus, INVOICE_STATUS_CFG, type InvoiceStatus } from '@/lib/utils'
 
 import {
   ArrowLeft, Package, Mail, Edit2, Loader2, X,
   Check, ExternalLink, FileText, Building2,
   Clock, ShieldCheck, AlertTriangle, CheckCircle2,
-  TrendingUp, Download, Phone, Globe, MapPin,
-  ChevronRight, Activity, Target, Calendar, Zap,
-  BarChart2, User, Tag, Flag, Truck, Save,
+  TrendingUp, Download, Phone, MapPin,
+  ChevronRight, Target, Calendar,
+  User, Tag, Truck, Save,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -55,6 +55,20 @@ type SupplyOrder = {
 type Activity = {
   id: string; action_type: string; entity_type: string
   entity_name: string; detail: string; created_at: string; user_email?: string
+}
+type ProjectService = {
+  id: string; opportunity_id: string; title: string; description: string | null
+  assigned_to: string | null; bu: string | null
+  status: ProjectServiceStatus; start_date: string | null; end_date: string | null
+  notes: string | null; sort_order: number
+  prescription_status: PrescriptionStatus | null
+  created_at: string; updated_at: string | null
+}
+type Invoice = {
+  id: string; opportunity_id: string; invoice_number: string | null
+  amount: number; issue_date: string | null; due_date: string | null
+  status: InvoiceStatus; payment_terms: string | null; notes: string | null
+  created_at: string
 }
 
 // ─── Formatters ───────────────────────────────────────────────
@@ -297,6 +311,8 @@ export default function OpportunityDetailPage() {
   const [supply, setSupply]       = useState<SupplyOrder | null>(null)
   const [activities, setActivities] = useState<Activity[]>([])
   const [drs, setDrs]             = useState<DealRegistration[]>([])
+  const [services, setServices]   = useState<ProjectService[]>([])
+  const [invoices, setInvoices]   = useState<Invoice[]>([])
   const [loading, setLoading]     = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [emailCopied, setEmailCopied] = useState(false)
@@ -340,11 +356,17 @@ export default function OpportunityDetailPage() {
     if (mySupply) setSupply(mySupply)
     setActivities(actRes.data || [])
 
-    // Load Deal Registrations
+    // Load Deal Registrations, Project Services, Invoices
     try {
-      const { data: drData } = await supabase.from('deal_registrations').select('*').eq('opportunity_id', id)
-      setDrs(drData || [])
-    } catch {} // table may not exist yet
+      const [drRes, svcRes, invRes] = await Promise.all([
+        supabase.from('deal_registrations').select('*').eq('opportunity_id', id),
+        supabase.from('project_services').select('*').eq('opportunity_id', id).order('sort_order'),
+        supabase.from('invoices').select('*').eq('opportunity_id', id).order('issue_date', { ascending: false }),
+      ])
+      setDrs(drRes.data || [])
+      setServices(svcRes.data || [])
+      setInvoices(invRes.data || [])
+    } catch {} // tables may not exist yet
 
     setLoading(false)
   }
@@ -609,6 +631,49 @@ export default function OpportunityDetailPage() {
             </div>
           </div>
         )}
+
+        {/* ══ SECTION : PRESCRIPTION ══ */}
+        {(() => {
+          const prescription = services.find(s => s.title === 'Prescription')
+          if (!prescription) return null
+          const psCfg = PRESCRIPTION_STATUS_CFG[(prescription.prescription_status || 'en_attente') as PrescriptionStatus]
+          return (
+            <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+              <div className="border-b border-slate-50 bg-slate-50/50 px-5 py-3 flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">📋 Prescription</span>
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${psCfg.bg} ${psCfg.color}`}>
+                  {psCfg.icon} {psCfg.label}
+                </span>
+              </div>
+              <div className="px-5 py-4 flex items-center gap-6">
+                {prescription.assigned_to && (
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Ingénieur presales</div>
+                    <div className="text-sm font-semibold text-slate-700">{prescription.assigned_to}</div>
+                  </div>
+                )}
+                {prescription.bu && (
+                  <div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">BU</div>
+                    <div className="text-sm font-semibold text-slate-700">{prescription.bu}</div>
+                  </div>
+                )}
+                {prescription.description && (
+                  <div className="flex-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Description</div>
+                    <div className="text-xs text-slate-600">{prescription.description}</div>
+                  </div>
+                )}
+                {prescription.notes && (
+                  <div className="flex-1">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Notes</div>
+                    <div className="text-xs text-slate-500 italic">{prescription.notes}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ══ SECTION 3 : FICHE ACHAT (Won uniquement) ══ */}
         {isWon && (
@@ -875,6 +940,130 @@ export default function OpportunityDetailPage() {
                   className="inline-flex h-9 items-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-bold text-white hover:bg-amber-600 transition-colors">
                   <Package className="h-4 w-4" /> Remplir la fiche achat
                 </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ SECTION : PROJET & DÉPLOIEMENT ══ */}
+        {(() => {
+          const deployServices = services.filter(s => s.title !== 'Prescription')
+          if (deployServices.length === 0) return null
+          const done = deployServices.filter(s => s.status === 'termine').length
+          const pct = Math.round((done / deployServices.length) * 100)
+          return (
+            <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+              <div className="border-b border-slate-50 bg-slate-50/50 px-5 py-3 flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">🚀 Projet & Déploiement</span>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-24 rounded-full bg-slate-200 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                      style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs font-bold text-slate-600">{pct}%</span>
+                  <span className="text-[10px] text-slate-400">{done}/{deployServices.length}</span>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/30 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <th className="px-5 py-2 text-left">Titre</th>
+                      <th className="px-4 py-2 text-left">Ingénieur</th>
+                      <th className="px-4 py-2 text-center">Statut</th>
+                      <th className="px-4 py-2 text-left">Début</th>
+                      <th className="px-4 py-2 text-left">Fin</th>
+                      <th className="px-4 py-2 text-left">Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {deployServices.map(svc => {
+                      const cfg = PROJECT_SERVICE_STATUS_CFG[svc.status]
+                      return (
+                        <tr key={svc.id} className="hover:bg-slate-50/50">
+                          <td className="px-5 py-2.5 font-semibold text-slate-800">{svc.title}</td>
+                          <td className="px-4 py-2.5 text-slate-600">{svc.assigned_to || '—'}</td>
+                          <td className="px-4 py-2.5 text-center">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${cfg.bg} ${cfg.color}`}>
+                              {cfg.icon} {cfg.label}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-slate-500">{fmtDate(svc.start_date)}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-500">{fmtDate(svc.end_date)}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400 max-w-[150px] truncate" title={svc.notes || ''}>{svc.notes || '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* ══ SECTION : FACTURATION ══ */}
+        {isWon && (
+          <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+            <div className="border-b border-slate-50 bg-slate-50/50 px-5 py-3 flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">💰 Facturation</span>
+              {invoices.length > 0 && (() => {
+                const totalFacture = invoices.reduce((s, inv) => s + (inv.amount || 0), 0)
+                const dealAmt = opp.amount || 1
+                const factPct = Math.min(100, Math.round((totalFacture / dealAmt) * 100))
+                return (
+                  <div className="flex items-center gap-2">
+                    <div className="h-2 w-24 rounded-full bg-slate-200 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${factPct === 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                        style={{ width: `${factPct}%` }} />
+                    </div>
+                    <span className="text-xs font-bold text-slate-600">{mad(totalFacture)}</span>
+                    <span className="text-[10px] text-slate-400">/ {mad(opp.amount)}</span>
+                  </div>
+                )
+              })()}
+            </div>
+            {invoices.length === 0 ? (
+              <div className="px-5 py-6 text-center">
+                <p className="text-sm text-slate-400">Aucune facture pour ce deal</p>
+                <Link href="/invoices" className="text-xs text-blue-600 hover:underline font-semibold mt-1 inline-block">
+                  Gérer les factures →
+                </Link>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/30 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <th className="px-5 py-2 text-left">N° Facture</th>
+                      <th className="px-4 py-2 text-right">Montant</th>
+                      <th className="px-4 py-2 text-left">Émise le</th>
+                      <th className="px-4 py-2 text-left">Échéance</th>
+                      <th className="px-4 py-2 text-center">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {invoices.map(inv => {
+                      const cfg = INVOICE_STATUS_CFG[inv.status]
+                      const isOverdue = inv.due_date && inv.status !== 'payee' && new Date(inv.due_date) < new Date()
+                      return (
+                        <tr key={inv.id} className={`hover:bg-slate-50/50 ${isOverdue ? 'bg-red-50/30' : ''}`}>
+                          <td className="px-5 py-2.5 font-semibold text-slate-800">{inv.invoice_number || '—'}</td>
+                          <td className="px-4 py-2.5 text-right font-bold text-slate-900">{mad(inv.amount)}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-500">{fmtDate(inv.issue_date)}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-500">
+                            {fmtDate(inv.due_date)}
+                            {isOverdue && <span className="ml-1 text-[9px] font-bold text-red-600">en retard</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${cfg.bg} ${cfg.color}`}>
+                              {cfg.icon} {cfg.label}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

@@ -188,9 +188,12 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       // Cascade: supprimer les données liées avant l'opportunité
       const { data: piRows } = await supabase.from('purchase_info').select('id').eq('opportunity_id', deal.id)
       const piIds = (piRows || []).map((r: any) => r.id)
+      // Delete supply_order via API (bypasses RLS)
+      const supplyRes = await authFetch('/api/supply').then(r => r.json()).catch(() => ({ orders: [] }))
+      const supplyOrder = (supplyRes?.orders || []).find((o: any) => o.opportunity_id === deal.id)
       await Promise.all([
         supabase.from('deal_files').delete().eq('opportunity_id', deal.id),
-        supabase.from('supply_orders').delete().eq('opportunity_id', deal.id),
+        supplyOrder ? authFetch(`/api/supply?orderId=${supplyOrder.id}`, { method: 'DELETE' }) : Promise.resolve(),
         ...(piIds.length ? [supabase.from('purchase_lines').delete().in('purchase_info_id', piIds)] : []),
       ])
       if (piIds.length) await supabase.from('purchase_info').delete().eq('opportunity_id', deal.id)
