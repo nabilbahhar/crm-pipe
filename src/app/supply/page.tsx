@@ -135,9 +135,11 @@ function FacturationModal({
       const dueDate = getDueDate()
 
       for (const lineId of selectedIds) {
-        await supabase.from('purchase_lines').update({
-          line_status: 'facture' as LineStatus,
-        }).eq('id', lineId)
+        await authFetch('/api/supply', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lineId, updates: { line_status: 'facture' } }),
+        })
       }
 
       const remainingNonFacture = lines.filter(l =>
@@ -146,11 +148,18 @@ function FacturationModal({
       const allFactured = remainingNonFacture.length === 0
 
       if (allFactured) {
-        await supabase.from('supply_orders').update({
-          status: 'facture' as SupplyStatus,
-          invoiced_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }).eq('id', order.id)
+        await authFetch('/api/supply', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: order.id,
+            updates: {
+              status: 'facture',
+              invoiced_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
       }
 
       const { error: invError } = await supabase.from('invoices').insert({
@@ -499,10 +508,12 @@ function OrderSlidePanel({
     if (busyLines.has(lineId)) return
     setBusyLines(prev => new Set(prev).add(lineId))
     try {
-      const { error } = await supabase.from('purchase_lines').update({
-        line_status: newStatus,
-      }).eq('id', lineId)
-      if (error) { showToast('Erreur mise à jour ligne', false); return }
+      const res = await authFetch('/api/supply', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lineId, updates: { line_status: newStatus } }),
+      })
+      if (!res.ok) { showToast('Erreur mise à jour ligne', false); return }
 
       // Auto-derive order status
       const updatedLines = lines.map(l => l.id === lineId ? { ...l, line_status: newStatus } : l)
@@ -513,11 +524,18 @@ function OrderSlidePanel({
           en_stock: 'received_at', livre: 'delivered_at', facture: 'invoiced_at',
         }
         const tsField = timestamps[derived]
-        await supabase.from('supply_orders').update({
-          status: derived,
-          ...(tsField ? { [tsField]: new Date().toISOString() } : {}),
-          updated_at: new Date().toISOString(),
-        }).eq('id', order.id)
+        await authFetch('/api/supply', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId: order.id,
+            updates: {
+              status: derived,
+              ...(tsField ? { [tsField]: new Date().toISOString() } : {}),
+              updated_at: new Date().toISOString(),
+            },
+          }),
+        })
       }
 
       showToast(`Ligne → ${LINE_STATUS_CFG[newStatus]?.label || newStatus}`)
@@ -531,11 +549,12 @@ function OrderSlidePanel({
     if (busyLines.has(lineId)) return
     setBusyLines(prev => new Set(prev).add(lineId))
     try {
-      const { error } = await supabase.from('purchase_lines').update({
-        eta: eta || null,
-        eta_updated_at: new Date().toISOString(),
-      }).eq('id', lineId)
-      if (error) { showToast('Erreur mise à jour ETA', false); return }
+      const res = await authFetch('/api/supply', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lineId, updates: { eta: eta || null, eta_updated_at: new Date().toISOString() } }),
+      })
+      if (!res.ok) { showToast('Erreur mise à jour ETA', false); return }
       showToast('ETA mise à jour')
       onReload()
     } finally {
@@ -547,10 +566,12 @@ function OrderSlidePanel({
     if (busyLines.has(lineId)) return
     setBusyLines(prev => new Set(prev).add(lineId))
     try {
-      const { error } = await supabase.from('purchase_lines').update({
-        status_note: note || null,
-      }).eq('id', lineId)
-      if (error) { showToast('Erreur mise à jour note', false); return }
+      const res = await authFetch('/api/supply', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lineId, updates: { status_note: note || null } }),
+      })
+      if (!res.ok) { showToast('Erreur mise à jour note', false); return }
       showToast('Note mise à jour')
       onReload()
     } finally {
@@ -561,11 +582,15 @@ function OrderSlidePanel({
   async function saveOrderNote() {
     setSavingNote(true)
     try {
-      const { error } = await supabase.from('supply_orders').update({
-        supply_notes: noteText || null,
-        updated_at: new Date().toISOString(),
-      }).eq('id', order.id)
-      if (error) { showToast('Erreur note', false); return }
+      const res = await authFetch('/api/supply', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          updates: { supply_notes: noteText || null, updated_at: new Date().toISOString() },
+        }),
+      })
+      if (!res.ok) { showToast('Erreur note', false); return }
       showToast('Note mise à jour')
       setNoteOpen(false)
       onReload()
@@ -773,22 +798,12 @@ export default function SupplyPage() {
   async function load() {
     setLoading(true); setErr(null)
     try {
-      const { data, error } = await supabase
-        .from('supply_orders')
-        .select(`
-          *,
-          opportunities (
-            id, title, amount, po_number, po_date, bu, vendor,
-            accounts(name),
-            purchase_info(id, frais_engagement, payment_terms, notes, purchase_lines(*))
-          )
-        `)
-        .order('created_at', { ascending: false })
+      const res = await authFetch('/api/supply')
+      const result = await res.json()
+      if (!res.ok) { setErr(result.error || 'Erreur chargement'); return }
 
-      if (error) { setErr(error.message); return }
-      // Filter out any lingering a_commander orders
-      const validOrders = (data || []).filter((o: any) => o.status !== 'a_commander')
-      setOrders(validOrders as Order[])
+      const validOrders = (result.orders || []) as Order[]
+      setOrders(validOrders)
 
       // Update selected order if still open
       if (selectedOrder) {
@@ -853,14 +868,20 @@ export default function SupplyPage() {
       const oldLabel = STATUS_CONFIG[order.status]?.label || order.status
       const newLabel = STATUS_CONFIG[newStatus]?.label || newStatus
 
-      const { error } = await supabase.from('supply_orders').update({
-        status: newStatus,
-        ...(tsField ? { [tsField]: now } : {}),
-        updated_by: userEmail,
-        updated_at: now,
-      }).eq('id', order.id)
-
-      if (error) { showToast('Erreur mise à jour statut', false); return }
+      const res = await authFetch('/api/supply', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderId: order.id,
+          updates: {
+            status: newStatus,
+            ...(tsField ? { [tsField]: now } : {}),
+            updated_by: userEmail,
+            updated_at: now,
+          },
+        }),
+      })
+      if (!res.ok) { showToast('Erreur mise à jour statut', false); return }
 
       logActivity({
         action_type: 'update',
