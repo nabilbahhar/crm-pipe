@@ -207,7 +207,7 @@ export default function InvoicesPage() {
       entity_type: 'invoice',
       entity_id: inv.id,
       entity_name: inv.invoice_number || '—',
-      detail: `Statut: ${STATUS_CONFIG[inv.status].label} -> ${STATUS_CONFIG[newStatus].label}`,
+      detail: `Statut: ${STATUS_CONFIG[inv.status]?.label || inv.status} -> ${STATUS_CONFIG[newStatus]?.label || newStatus}`,
     })
     load()
   }
@@ -519,7 +519,7 @@ export default function InvoicesPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {filtered.map(inv => {
-                    const cfg = STATUS_CONFIG[inv.status]
+                    const cfg = STATUS_CONFIG[inv.status] || STATUS_CONFIG.emise
                     const nextStatus = cfg.next
                     const today = new Date().toISOString().slice(0, 10)
                     const isOverdue = inv.due_date < today && inv.status !== 'payee'

@@ -43,8 +43,17 @@ export async function POST(req: NextRequest) {
   if (auth instanceof NextResponse) return auth
 
   try {
-    const body = await req.json()
+    // Body size check (max 2MB)
+    const rawText = await req.text()
+    if (rawText.length > 2 * 1024 * 1024) {
+      return NextResponse.json({ error: 'Payload trop volumineux' }, { status: 413 })
+    }
+    const body = JSON.parse(rawText)
     const { purchaseInfo, lines, supplyOrder, existingInfoId } = body
+
+    if (!purchaseInfo?.opportunity_id) {
+      return NextResponse.json({ error: 'opportunity_id requis' }, { status: 400 })
+    }
 
     let infoId = existingInfoId
 
@@ -125,9 +134,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, infoId })
   } catch (e: any) {
     console.error('[purchase-save]', e)
+    // Generic error to avoid leaking DB structure
+    const isConstraint = e?.message?.includes('violates') || e?.message?.includes('constraint')
     return NextResponse.json(
-      { error: e?.message || 'Erreur sauvegarde' },
-      { status: 500 }
+      { error: isConstraint ? 'Conflit de données — vérifiez les doublons' : 'Erreur sauvegarde' },
+      { status: isConstraint ? 409 : 500 }
     )
   }
 }

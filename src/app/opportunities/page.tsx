@@ -204,6 +204,9 @@ function DealsPageInner() {
         await Promise.all([
           supabase.from('deal_files').delete().eq('opportunity_id', deal.id),
           supabase.from('supply_orders').delete().eq('opportunity_id', deal.id),
+          supabase.from('project_services').delete().eq('opportunity_id', deal.id),
+          supabase.from('deal_registrations').delete().eq('opportunity_id', deal.id),
+          supabase.from('invoices').delete().eq('opportunity_id', deal.id),
           ...(piIds.length ? [supabase.from('purchase_lines').delete().in('purchase_info_id', piIds)] : []),
         ])
         if (piIds.length) await supabase.from('purchase_info').delete().eq('opportunity_id', deal.id)

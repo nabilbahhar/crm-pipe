@@ -21,7 +21,7 @@ import {
   RefreshCw, Package, ChevronRight, ChevronDown, Search,
   AlertCircle, Download, Clock, Mail, Copy, ExternalLink, X,
   FileText, CheckSquare, Square, Check, MessageSquare, Truck,
-  ArrowRight, CalendarDays, ShieldCheck, Eye,
+  CalendarDays, Eye,
 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -650,10 +650,10 @@ function OrderSlidePanel({
                 </div>
               </div>
               <div className="h-2 rounded-full bg-slate-100 overflow-hidden flex">
-                {factureCount > 0 && (
+                {factureCount > 0 && total > 0 && (
                   <div className="h-full bg-slate-500 transition-all" style={{ width: `${(factureCount / total) * 100}%` }} />
                 )}
-                {(livreCount - factureCount) > 0 && (
+                {(livreCount - factureCount) > 0 && total > 0 && (
                   <div className="h-full bg-emerald-500 transition-all" style={{ width: `${((livreCount - factureCount) / total) * 100}%` }} />
                 )}
               </div>

@@ -362,7 +362,7 @@ export default function ProjectsPage() {
       action_type: 'update', entity_type: 'project_service',
       entity_id: oppId,
       entity_name: deal?.title || '',
-      detail: `Statut prescription: ${PRESCRIPTION_STATUS_CFG[newStatus].label}`,
+      detail: `Statut prescription: ${PRESCRIPTION_STATUS_CFG[newStatus]?.label || newStatus}`,
     })
 
     load()
@@ -414,7 +414,7 @@ export default function ProjectsPage() {
       action_type: 'update', entity_type: 'project_service',
       entity_id: oppId,
       entity_name: deal?.title || '',
-      detail: `Prestation "${svc?.title}": ${PROJECT_SERVICE_STATUS_CFG[newStatus].label}`,
+      detail: `Prestation "${svc?.title}": ${PROJECT_SERVICE_STATUS_CFG[newStatus]?.label || newStatus}`,
     })
 
     load()

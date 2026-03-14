@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ orders: merged })
   } catch (e: any) {
     console.error('[supply GET]', e)
-    return NextResponse.json({ error: e?.message || 'Erreur lecture' }, { status: 500 })
+    return NextResponse.json({ error: 'Erreur lecture supply' }, { status: 500 })
   }
 }
 
@@ -100,7 +100,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'orderId ou lineId requis' }, { status: 400 })
   } catch (e: any) {
     console.error('[supply PATCH]', e)
-    return NextResponse.json({ error: e?.message || 'Erreur mise à jour' }, { status: 500 })
+    return NextResponse.json({ error: 'Erreur mise à jour supply' }, { status: 500 })
   }
 }
 
@@ -126,6 +126,6 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true })
   } catch (e: any) {
     console.error('[supply DELETE]', e)
-    return NextResponse.json({ error: e?.message || 'Erreur suppression' }, { status: 500 })
+    return NextResponse.json({ error: 'Erreur suppression supply' }, { status: 500 })
   }
 }

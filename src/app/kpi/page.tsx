@@ -208,7 +208,7 @@ export default function KPIPage() {
                 <div className="text-xs font-semibold text-slate-500 mb-2">Condition 1 — Won ≥ 7,5M</div>
                 <div className={`text-2xl font-black ${selQ.total>=selQ.target?'text-emerald-700':'text-slate-400'}`}>{fmtMAD(selQ.total,true)}</div>
                 <div className="mt-2 h-2 w-full rounded-full bg-slate-200 overflow-hidden">
-                  <div className={`h-full rounded-full ${selQ.total>=selQ.target?'bg-emerald-500':'bg-slate-400'}`} style={{width:`${Math.min(100,(selQ.total/selQ.target)*100)}%`}}/>
+                  <div className={`h-full rounded-full ${selQ.total>=selQ.target?'bg-emerald-500':'bg-slate-400'}`} style={{width:`${selQ.target > 0 ? Math.min(100,(selQ.total/selQ.target)*100) : 0}%`}}/>
                 </div>
                 <div className="text-xs mt-1 text-slate-500">{selQ.total>=selQ.target?'OK':'Manque '+fmtMAD(selQ.target-selQ.total,true)}</div>
               </div>
