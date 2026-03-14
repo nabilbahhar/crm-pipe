@@ -86,6 +86,16 @@ function normalizePhone(raw: string) {
   return raw
 }
 
+// ─── Render bold markdown ─────────────────────────────────────
+function renderDesignation(text: string) {
+  if (!text) return ''
+  // Convert **text** to <strong>text</strong>, \n to <br/>
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\\n/g, '<br/>').replace(/\n/g, '<br/>')
+}
+
 // ─── Page ─────────────────────────────────────────────────────
 export default function PurchasePage() {
   const params = useParams()
@@ -111,6 +121,8 @@ export default function PurchasePage() {
   const [extracted, setExtracted]   = useState(false)
   const [existingInfo, setExistingInfo] = useState<any>(null)
   const [draftAge, setDraftAge]         = useState<string | null>(null)
+  const [editingIdx, setEditingIdx]     = useState<number | null>(null)
+  const [viewMode, setViewMode]         = useState<'cards' | 'table' | 'devis'>('cards')
 
   // Files
   const [bcFile, setBcFile]         = useState<File | null>(null)
@@ -652,6 +664,14 @@ export default function PurchasePage() {
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <SecTitle>📋 Lignes produits · {lines.length} article{lines.length>1?'s':''}</SecTitle>
+            <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5">
+              {([['cards','Cartes'],['table','Tableau'],['devis','Devis Pro']] as const).map(([k,label]) => (
+                <button key={k} onClick={() => setViewMode(k)}
+                  className={`rounded-md px-3 py-1.5 text-[11px] font-semibold transition ${viewMode===k?'bg-white text-slate-800 shadow-sm':'text-slate-500 hover:text-slate-700'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Progress */}
@@ -673,6 +693,7 @@ export default function PurchasePage() {
             </div>
           )}
 
+          {viewMode === 'cards' && (<>
           {/* ── Product Line Cards ── */}
           <div className="space-y-3">
             {lines.map((l, i) => {
@@ -700,17 +721,29 @@ export default function PurchasePage() {
                     </button>
                   </div>
 
-                  {/* Designation — full width auto-grow */}
+                  {/* Designation — formatted display / edit on click */}
                   <div className="px-4 pt-3 pb-2">
-                    <textarea value={l.designation}
-                      onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
-                      onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
-                      ref={el => { if (el && l.designation) { el.style.height='auto'; el.style.height=el.scrollHeight+'px' } }}
-                      placeholder="Description du produit *"
-                      rows={1}
-                      className={`w-full rounded-lg border px-3 py-2.5 text-[13px] leading-relaxed outline-none resize-none overflow-hidden transition focus:ring-2 focus:ring-slate-100
-                        ${!l.designation.trim() ? 'border-red-200 bg-red-50/40 placeholder:text-red-300 focus:border-red-300' : 'border-slate-200 bg-slate-50/30 placeholder:text-slate-300 focus:border-slate-400 focus:bg-white'}`}
-                      style={{ minHeight: 40 }} />
+                    {editingIdx === i ? (
+                      <textarea value={l.designation}
+                        autoFocus spellCheck={false}
+                        onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                        onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                        onBlur={() => setEditingIdx(null)}
+                        placeholder="Description du produit *"
+                        rows={3}
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-[13px] leading-relaxed outline-none resize-none overflow-hidden transition focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                        style={{ minHeight: 80 }} />
+                    ) : (
+                      <div onClick={() => setEditingIdx(i)}
+                        className={`w-full min-h-[40px] rounded-lg border px-3 py-2.5 text-[13px] leading-relaxed cursor-text transition hover:border-slate-300
+                          ${!l.designation.trim()
+                            ? 'border-red-200 bg-red-50/40 text-red-300 italic'
+                            : 'border-slate-200 bg-slate-50/30 text-slate-700'}`}>
+                        {l.designation.trim()
+                          ? <div dangerouslySetInnerHTML={{ __html: renderDesignation(l.designation) }} />
+                          : 'Cliquer pour saisir la désignation…'}
+                      </div>
+                    )}
                   </div>
 
                   {/* Numbers grid — 6 columns */}
@@ -856,9 +889,279 @@ export default function PurchasePage() {
               )
             })}
           </div>
+          </>)}
 
-          {/* Totals bar */}
-          {lines.length > 1 && (
+// ═══ VIEW: TABLEAU COMPACT (Proposal A) ═══
+// Inspired by Compucom devis layout — clean table, no scroll, expandable rows
+          {viewMode === 'table' && (<>
+          <div className="rounded-xl border border-slate-200 overflow-hidden">
+            {/* Table header */}
+            <div className="grid grid-cols-[60px_100px_1fr_65px_100px_110px_40px] bg-slate-50 border-b border-slate-200 px-3 py-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <span>#</span><span>Réf</span><span>Désignation</span><span className="text-right">Qté</span><span className="text-right">PU/HT</span><span className="text-right">PT/HT</span><span></span>
+            </div>
+            {/* Rows */}
+            {lines.map((l, i) => {
+              const ptVente = Number(l.pt_vente) || Number(l.qty)*Number(l.pu_vente)
+              const ptAchat = Number(l.qty)*Number(l.pu_achat)
+              const marge = ptVente - ptAchat
+              const margePc = ptVente > 0 ? (marge/ptVente)*100 : 0
+              const isOpen = editingIdx === i
+              return (
+                <div key={i} className={`border-b border-slate-100 last:border-0 ${isOpen?'bg-blue-50/30':i%2===0?'bg-white':'bg-slate-50/50'}`}>
+                  {/* Main row — click to expand */}
+                  <div onClick={() => setEditingIdx(isOpen ? null : i)}
+                    className="grid grid-cols-[60px_100px_1fr_65px_100px_110px_40px] items-center px-3 py-3 cursor-pointer hover:bg-slate-50 transition group">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-700 text-[10px] font-bold text-white">{i+1}</span>
+                    <span className="text-xs font-mono text-slate-500 truncate">{l.ref || '—'}</span>
+                    <div className="pr-3 min-w-0">
+                      {l.designation.trim() ? (
+                        <div className="text-sm text-slate-800 line-clamp-2" dangerouslySetInnerHTML={{ __html: renderDesignation(l.designation) }} />
+                      ) : (
+                        <span className="text-xs text-red-300 italic">Saisir désignation…</span>
+                      )}
+                    </div>
+                    <span className="text-sm text-right font-semibold text-slate-700">{l.qty}</span>
+                    <span className="text-sm text-right text-slate-600">{l.pu_vente ? numFmt(l.pu_vente) : '—'}</span>
+                    <span className="text-sm text-right font-bold text-slate-800">{ptVente > 0 ? numFmt(ptVente) : '—'}</span>
+                    <span className={`text-[10px] transition-transform ${isOpen?'rotate-180':''}`}>▾</span>
+                  </div>
+                  {/* Expanded detail */}
+                  {isOpen && (
+                    <div className="px-3 pb-4 pt-1 border-t border-slate-100 space-y-3 animate-in slide-in-from-top-1">
+                      {/* Designation edit */}
+                      <div className="grid grid-cols-[100px_1fr] gap-3">
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Réf</label>
+                          <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)} spellCheck={false}
+                            placeholder="Réf…" className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs font-mono outline-none focus:border-slate-400" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Désignation</label>
+                          <textarea value={l.designation} spellCheck={false}
+                            onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                            onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                            rows={2}
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-relaxed outline-none resize-none overflow-hidden focus:border-slate-400"
+                            style={{ minHeight: 60 }} />
+                        </div>
+                      </div>
+                      {/* Numbers + Fournisseur */}
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Qté</label>
+                          <input type="number" min={1} value={Number(l.qty)||1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)} spellCheck={false}
+                            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-right font-semibold outline-none focus:border-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">PU Vente</label>
+                          <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
+                            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-right outline-none focus:border-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-amber-500">PU Achat ★</label>
+                          <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
+                            className="h-8 w-full rounded-lg border border-amber-200 bg-amber-50 px-2 text-sm text-right font-bold outline-none focus:border-amber-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">PT Achat</label>
+                          <div className="flex h-8 items-center justify-end rounded-lg bg-slate-100 px-2 text-sm font-bold">{ptAchat > 0 ? numFmt(ptAchat) : '—'}</div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Marge</label>
+                          <div className="flex h-8 items-center justify-center">
+                            {l.pu_achat > 0 && ptVente > 0 ? (
+                              <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
+                            ) : <span className="text-slate-300 text-xs">—</span>}
+                          </div>
+                        </div>
+                      </div>
+                      {/* Fournisseur row */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fournisseur</label>
+                          <div className="flex gap-1.5">
+                            <select value={l.fournisseur_id||''} onChange={e => {
+                              const fid = e.target.value || null
+                              setLines(prev => prev.map((ln, idx) => idx !== i ? ln : { ...ln, fournisseur_id: fid, selected_contact_ids: [], contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '' }))
+                            }}
+                              className={`h-8 flex-1 rounded-lg border px-2 text-xs outline-none ${l.fournisseur_id?'border-slate-300 bg-white font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                              <option value="">Choisir…</option>
+                              {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                            </select>
+                            <button onClick={() => setShowFournModal(true)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:text-slate-600"><Plus className="h-3.5 w-3.5" /></button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fin garantie</label>
+                          <input type="month" value={l.warranty_expiry||''} onChange={e => updateLine(i,'warranty_expiry',e.target.value)}
+                            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400" />
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fin licence</label>
+                          <input type="month" value={l.license_expiry||''} onChange={e => updateLine(i,'license_expiry',e.target.value)}
+                            className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400" />
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
+                          className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition">
+                          <Trash2 className="h-3 w-3" /> Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+          </>)}
+
+// ═══ VIEW: DEVIS PRO (Proposal B) ═══
+// Looks like a real professional devis — clean, document-like, print-ready
+          {viewMode === 'devis' && (<>
+          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+            {/* Devis header */}
+            <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h3 className="text-white font-bold text-sm">Devis Interne — Fiche Achat</h3>
+                <p className="text-slate-400 text-xs mt-0.5">{deal?.accounts?.name} · {deal?.title}</p>
+              </div>
+              <span className="text-white text-lg font-black">{mad(dealAmount)}</span>
+            </div>
+            {/* Lines as devis */}
+            <div className="divide-y divide-slate-100">
+              {lines.map((l, i) => {
+                const ptVente = Number(l.pt_vente) || Number(l.qty)*Number(l.pu_vente)
+                const ptAchat = Number(l.qty)*Number(l.pu_achat)
+                const marge = ptVente - ptAchat
+                const margePc = ptVente > 0 ? (marge/ptVente)*100 : 0
+                const isOpen = editingIdx === i
+                return (
+                  <div key={i} className={`${isOpen?'bg-blue-50/20':''}`}>
+                    {/* Devis line */}
+                    <div className="flex gap-4 px-6 py-4">
+                      {/* Left: # + Réf */}
+                      <div className="w-[90px] shrink-0">
+                        <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-slate-200 text-[10px] font-bold text-slate-600">{i+1}</span>
+                        {l.ref && <p className="mt-1 text-[11px] font-mono text-slate-400">{l.ref}</p>}
+                      </div>
+                      {/* Center: Designation */}
+                      <div className="flex-1 min-w-0">
+                        {isOpen ? (
+                          <div className="space-y-2">
+                            <div className="flex gap-2">
+                              <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)} spellCheck={false}
+                                placeholder="Réf…" className="h-7 w-[100px] rounded border border-slate-200 px-2 text-[11px] font-mono outline-none focus:border-slate-400" />
+                              <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
+                                className="h-7 rounded border border-red-200 bg-red-50 px-2 text-[10px] font-semibold text-red-500 hover:bg-red-100"><Trash2 className="h-3 w-3 inline" /></button>
+                            </div>
+                            <textarea value={l.designation} spellCheck={false}
+                              onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                              onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                              rows={3}
+                              className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-[13px] leading-relaxed outline-none resize-none overflow-hidden focus:border-blue-400"
+                              style={{ minHeight: 70 }} />
+                          </div>
+                        ) : (
+                          <div onClick={() => setEditingIdx(i)} className="cursor-text">
+                            {l.designation.trim() ? (
+                              <div className="text-[13px] text-slate-800 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderDesignation(l.designation) }} />
+                            ) : (
+                              <span className="text-xs text-slate-300 italic">Cliquer pour saisir…</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {/* Right: Numbers */}
+                      <div className="w-[260px] shrink-0">
+                        <div className="grid grid-cols-3 gap-2 text-right">
+                          <div>
+                            <span className="text-[9px] uppercase text-slate-400 block">Qté</span>
+                            {isOpen ? (
+                              <input type="number" min={1} value={Number(l.qty)||1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
+                                className="h-7 w-full rounded border border-slate-200 px-1.5 text-xs text-right font-semibold outline-none focus:border-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            ) : <span className="text-sm font-semibold text-slate-700">{l.qty}</span>}
+                          </div>
+                          <div>
+                            <span className="text-[9px] uppercase text-slate-400 block">PU/HT</span>
+                            {isOpen ? (
+                              <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
+                                className="h-7 w-full rounded border border-slate-200 px-1.5 text-xs text-right outline-none focus:border-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            ) : <span className="text-sm text-slate-600">{l.pu_vente ? numFmt(l.pu_vente) : '—'}</span>}
+                          </div>
+                          <div>
+                            <span className="text-[9px] uppercase text-slate-400 block">PT/HT</span>
+                            <span className="text-sm font-bold text-slate-800">{ptVente > 0 ? numFmt(ptVente) : '—'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Achat details bar (visible when expanded) */}
+                    {isOpen && (
+                      <div className="px-6 pb-4 space-y-3">
+                        <div className="flex flex-wrap items-end gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+                          <div className="w-[130px]">
+                            <label className="block text-[9px] font-bold uppercase text-amber-500 mb-0.5">PU Achat ★</label>
+                            <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
+                              className="h-8 w-full rounded border border-amber-300 bg-white px-2 text-sm text-right font-bold outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                          </div>
+                          <div className="text-sm"><span className="text-slate-400 text-xs">PT Achat:</span> <strong>{ptAchat > 0 ? mad(ptAchat) : '—'}</strong></div>
+                          {l.pu_achat > 0 && ptVente > 0 && (
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fournisseur</label>
+                            <div className="flex gap-1.5">
+                              <select value={l.fournisseur_id||''} onChange={e => {
+                                const fid = e.target.value || null
+                                setLines(prev => prev.map((ln, idx) => idx !== i ? ln : { ...ln, fournisseur_id: fid, selected_contact_ids: [], contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '' }))
+                              }}
+                                className={`h-8 flex-1 rounded-lg border px-2 text-xs outline-none ${l.fournisseur_id?'border-slate-300 bg-white font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                                <option value="">Choisir…</option>
+                                {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                              </select>
+                              <button onClick={() => setShowFournModal(true)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:text-slate-600"><Plus className="h-3.5 w-3.5" /></button>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fin garantie</label>
+                            <input type="month" value={l.warranty_expiry||''} onChange={e => updateLine(i,'warranty_expiry',e.target.value)}
+                              className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400" />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fin licence</label>
+                            <input type="month" value={l.license_expiry||''} onChange={e => updateLine(i,'license_expiry',e.target.value)}
+                              className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {/* Devis footer - totals */}
+            <div className="border-t-2 border-slate-300 bg-slate-50">
+              <div className="flex justify-end px-6 py-3">
+                <div className="w-[300px] space-y-1.5">
+                  <div className="flex justify-between text-sm"><span className="text-slate-500">Total HT</span><span className="font-bold text-slate-800">{numFmt(totalVente)}</span></div>
+                  {totalAchat > 0 && <>
+                    <div className="flex justify-between text-sm"><span className="text-slate-500">Total Achat</span><span className="font-semibold text-slate-600">{numFmt(totalAchat)}</span></div>
+                    <div className="flex justify-between text-sm border-t border-slate-200 pt-1.5"><span className="text-slate-500">Marge brute</span>
+                      <span className={`font-bold ${margePctBrute>=10?'text-emerald-700':'text-red-600'}`}>{mad(margeBrute)} ({pct(margePctBrute)})</span>
+                    </div>
+                  </>}
+                </div>
+              </div>
+            </div>
+          </div>
+          </>)}
+
+
+          {/* Totals bar (hidden for devis view which has its own footer) */}
+          {viewMode !== 'devis' && lines.length > 1 && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-900 px-5 py-3.5">
               <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Totaux · {lines.filter(l=>l.designation.trim()).length} ligne{lines.filter(l=>l.designation.trim()).length>1?'s':''}</span>
               <div className="flex flex-wrap items-center gap-4 sm:gap-6">
@@ -916,7 +1219,7 @@ export default function PurchasePage() {
                 )}
               </div>
             </div>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4}
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} spellCheck={false}
               placeholder="Notes internes, contexte, remarques…"
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-50 resize-none placeholder:text-slate-300" />
           </div>
@@ -956,7 +1259,7 @@ export default function PurchasePage() {
                 </button>
               ))}
             </div>
-            <textarea value={justifText} onChange={e => setJustifText(e.target.value)} rows={3}
+            <textarea value={justifText} onChange={e => setJustifText(e.target.value)} rows={3} spellCheck={false}
               placeholder="Ex : Client stratégique, remise accordée pour signature avant fin trimestre…"
               className={`w-full rounded-xl border px-4 py-3 text-sm outline-none resize-none transition ${justifText.trim().length>=10?'border-amber-300 bg-white':'border-red-300 bg-red-50'}`} />
             <div className="mt-2 flex items-center justify-between">

@@ -66,7 +66,7 @@ Format exact :
   "lines": [
     {
       "ref": "C1300-12XS",
-      "designation": "Catalyst 1300 12-port SFP+, 2x10GE Shared",
+      "designation": "**Processor:** 13th Gen Intel Core i7-1365U vPro\\n**Memory:** 32 GB DDR5",
       "qty": 2,
       "pu_vente": 20325,
       "pt_vente": 40650
@@ -78,7 +78,8 @@ Notes:
 - Si ref est vide ou absent, utilise ""
 - qty, pu_vente, pt_vente sont des nombres (pas des strings)
 - Capture TOUTES les lignes, y compris les accessoires sans ref
-- Si le devis est multi-pages, capture toutes les pages`,
+- Si le devis est multi-pages, capture toutes les pages
+- IMPORTANT: Préserve le formatage gras du PDF dans la désignation en utilisant **texte** (markdown bold). Exemple: "**Processor:** 13th Gen Intel Core i7\\n**Memory:** 32 GB DDR5". Utilise \\n pour les sauts de ligne.`,
             },
           ],
         }],
