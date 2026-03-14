@@ -627,22 +627,44 @@ export default function ProjectsPage() {
       <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
         {/* ── Header ── */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
               <FolderKanban className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-xl font-black text-slate-900 tracking-tight">Gestion des Projets</h1>
-              <p className="text-xs text-slate-500">
-                Prescription & deploiement des projets Service
+              <h1 className="text-2xl font-bold text-slate-900">Projets</h1>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {deals.length} projet{deals.length !== 1 ? 's' : ''} &middot; Prescription & deploiement
               </p>
             </div>
           </div>
-          <button onClick={load} disabled={loading}
-            className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
-            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={load} disabled={loading}
+              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── KPI Cards ── */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">TOTAL PROJETS</div>
+            <div className="text-xl font-black text-slate-900 mt-1">{deals.length}</div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">EN COURS</div>
+            <div className="text-xl font-black text-slate-900 mt-1">{deployKpis.activeCount}</div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">TERMINES</div>
+            <div className="text-xl font-black text-slate-900 mt-1">{deployKpis.completedCount}</div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">PRESCRIPTIONS ACTIVES</div>
+            <div className="text-xl font-black text-slate-900 mt-1">{prescKpis.count}</div>
+          </div>
         </div>
 
         {err && (
@@ -678,25 +700,27 @@ export default function ProjectsPage() {
         </div>
 
         {/* ── Search + BU filter ── */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3 shadow-sm">
-            <Search className="h-3.5 w-3.5 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher un deal, client..."
-              className="w-56 bg-transparent text-sm outline-none placeholder:text-slate-400" />
-            {search && (
-              <button onClick={() => setSearch('')} className="text-slate-300 hover:text-slate-500">
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3">
+              <Search className="h-3.5 w-3.5 text-slate-400" />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Rechercher un deal, client..."
+                className="w-56 bg-transparent text-sm outline-none placeholder:text-slate-400" />
+              {search && (
+                <button onClick={() => setSearch('')} className="text-slate-300 hover:text-slate-500">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+            <select value={buFilter} onChange={e => setBuFilter(e.target.value)}
+              className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 outline-none">
+              <option value="Tous">BU: Tous</option>
+              <option value="CSG">CSG</option>
+              <option value="Infrastructure">Infrastructure</option>
+              <option value="Cyber Sécurité">Cyber Sécurité</option>
+            </select>
           </div>
-          <select value={buFilter} onChange={e => setBuFilter(e.target.value)}
-            className="h-9 rounded-xl border bg-white px-3 text-xs font-semibold text-slate-600 shadow-sm outline-none">
-            <option value="Tous">BU: Tous</option>
-            <option value="CSG">CSG</option>
-            <option value="Infrastructure">Infrastructure</option>
-            <option value="Cyber Sécurité">Cyber Sécurité</option>
-          </select>
         </div>
 
         {/* ── Mini pie chart — Projets par BU ── */}
@@ -1324,7 +1348,7 @@ export default function ProjectsPage() {
       {/* EMAIL PREVIEW MODAL                                                    */}
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       {emailModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
           role="presentation" onClick={e => { if (e.target === e.currentTarget) setEmailModal(null) }} onKeyDown={e => { if (e.key === 'Escape') setEmailModal(null) }}>
           <div className="relative w-full max-w-[700px] max-h-[85vh] rounded-2xl bg-white shadow-2xl overflow-hidden flex flex-col" role="dialog" aria-modal="true" aria-label="Aperçu email projet">
             {/* Modal header */}

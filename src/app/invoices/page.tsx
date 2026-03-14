@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
 import { logActivity } from '@/lib/logActivity'
@@ -21,6 +21,17 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type InvoiceLine = {
+  purchase_line_id: string
+  purchase_lines?: {
+    ref: string | null
+    designation: string | null
+    qty: number
+    pt_vente: number
+    fournisseur: string | null
+  } | null
+}
+
 type Invoice = {
   id: string
   opportunity_id: string
@@ -34,6 +45,7 @@ type Invoice = {
   created_by: string | null
   created_at: string
   updated_at: string | null
+  invoice_lines?: InvoiceLine[]
   opportunities?: {
     id: string
     title: string
@@ -76,6 +88,7 @@ export default function InvoicesPage() {
   const [showEmail, setShowEmail]     = useState<Invoice | null>(null)
   const [confirmDel, setConfirmDel]   = useState<Invoice | null>(null)
   const [deleting, setDeleting]       = useState(false)
+  const [expandedId, setExpandedId]   = useState<string | null>(null)
 
   // Overdue alert
   const [overdueAlert, setOverdueAlert] = useState<Invoice[]>([])
@@ -97,6 +110,10 @@ export default function InvoicesPage() {
           id, title, amount,
           accounts(name),
           purchase_info(payment_terms)
+        ),
+        invoice_lines (
+          purchase_line_id,
+          purchase_lines (ref, designation, qty, pt_vente, fournisseur)
         )
       `)
       .order('created_at', { ascending: false })
@@ -511,6 +528,7 @@ export default function InvoicesPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Deal</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Client</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400">Montant</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-400">Lignes</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Emission</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Echeance</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400">Statut</th>
@@ -526,9 +544,12 @@ export default function InvoicesPage() {
                     const daysOverdue = isOverdue
                       ? Math.floor((Date.now() - new Date(inv.due_date).getTime()) / 86400000)
                       : 0
+                    const lines = inv.invoice_lines || []
+                    const isExpanded = expandedId === inv.id
 
                     return (
-                      <tr key={inv.id} className={`hover:bg-slate-50/60 transition-colors ${isOverdue ? 'bg-red-50/40' : ''}`}>
+                      <React.Fragment key={inv.id}>
+                      <tr className={`hover:bg-slate-50/60 transition-colors ${isOverdue ? 'bg-red-50/40' : ''}`}>
                         <td className="px-4 py-3">
                           <div className="font-bold text-slate-900 text-xs">{inv.invoice_number || '—'}</div>
                           {inv.payment_terms && (
@@ -547,6 +568,24 @@ export default function InvoicesPage() {
                         </td>
                         <td className="px-4 py-3 text-right font-black text-slate-900 tabular-nums text-xs whitespace-nowrap">
                           {mad(inv.amount)}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {lines.length > 0 ? (
+                            <button
+                              onClick={() => setExpandedId(isExpanded ? null : inv.id)}
+                              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border transition-colors ${
+                                isExpanded
+                                  ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                  : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'
+                              }`}
+                              title="Voir les lignes facturées"
+                            >
+                              <FileText className="h-3 w-3" />
+                              {lines.length}
+                            </button>
+                          ) : (
+                            <span className="text-[10px] text-slate-300">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-600 tabular-nums whitespace-nowrap">
                           {fmtDate(inv.issue_date)}
@@ -604,6 +643,45 @@ export default function InvoicesPage() {
                           </div>
                         </td>
                       </tr>
+
+                      {/* Expandable row: invoice lines detail */}
+                      {isExpanded && lines.length > 0 && (
+                        <tr className="bg-blue-50/40">
+                          <td colSpan={9} className="px-4 py-3">
+                            <div className="rounded-xl bg-white border border-blue-100 overflow-hidden">
+                              <div className="px-3 py-2 bg-blue-50/60 border-b border-blue-100">
+                                <span className="text-[11px] font-bold text-blue-700">Lignes facturées ({lines.length})</span>
+                              </div>
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b border-slate-100">
+                                    <th className="px-3 py-1.5 text-left text-[10px] font-semibold text-slate-400">Ref</th>
+                                    <th className="px-3 py-1.5 text-left text-[10px] font-semibold text-slate-400">Designation</th>
+                                    <th className="px-3 py-1.5 text-right text-[10px] font-semibold text-slate-400">Qte</th>
+                                    <th className="px-3 py-1.5 text-right text-[10px] font-semibold text-slate-400">Pt Vente</th>
+                                    <th className="px-3 py-1.5 text-left text-[10px] font-semibold text-slate-400">Fournisseur</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                  {lines.map((ln, i) => {
+                                    const pl = ln.purchase_lines
+                                    return (
+                                      <tr key={ln.purchase_line_id || i} className="hover:bg-slate-50/60">
+                                        <td className="px-3 py-1.5 font-mono text-[11px] text-slate-700">{pl?.ref || '—'}</td>
+                                        <td className="px-3 py-1.5 text-[11px] text-slate-600 max-w-[250px] truncate">{pl?.designation || '—'}</td>
+                                        <td className="px-3 py-1.5 text-right tabular-nums text-[11px] font-semibold text-slate-800">{pl?.qty ?? '—'}</td>
+                                        <td className="px-3 py-1.5 text-right tabular-nums text-[11px] font-semibold text-slate-800">{pl?.pt_vente ? mad(pl.pt_vente) : '—'}</td>
+                                        <td className="px-3 py-1.5 text-[11px] text-slate-500">{pl?.fournisseur || '—'}</td>
+                                      </tr>
+                                    )
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
                     )
                   })}
                 </tbody>
@@ -644,7 +722,7 @@ export default function InvoicesPage() {
 
       {/* ── Confirm Delete Modal ── */}
       {confirmDel && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') setConfirmDel(null) }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') setConfirmDel(null) }}>
           <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden" role="alertdialog" aria-modal="true" aria-label="Confirmer la suppression de la facture">
             <div className="p-6">
               <div className="flex items-center gap-3 mb-4">
@@ -830,7 +908,7 @@ function InvoiceFormModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl" role="dialog" aria-modal="true" aria-label={isEdit ? 'Modifier la facture' : 'Nouvelle facture'}>
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
@@ -1040,7 +1118,7 @@ function EmailPreviewModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <div className="w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col" role="dialog" aria-modal="true" aria-label="Email de relance facture">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4 shrink-0">

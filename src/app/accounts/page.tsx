@@ -67,7 +67,7 @@ function Modal({ open, title, onClose, children }: { open: boolean; title: strin
   }, [open, onClose])
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }} role="presentation">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }} role="presentation">
       <div className="w-full max-w-4xl max-h-[88vh] flex flex-col rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200" role="dialog" aria-modal="true" aria-label={title}>
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div className="text-base font-bold text-slate-900">{title}</div>

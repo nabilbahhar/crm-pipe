@@ -1684,7 +1684,7 @@ export default function ProspectionPage() {
 
       {/* ── CONVERT MODAL ────────────────────────────────────────────────── */}
       {convertP && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') setConvertP(null) }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') setConvertP(null) }}>
           <div className="w-full max-w-md rounded-2xl bg-white shadow-xl" role="dialog" aria-modal="true" aria-label="Convertir en compte CRM">
             <div className="border-b px-5 py-4">
               <div className="text-sm font-semibold text-slate-900">Convertir en compte CRM</div>

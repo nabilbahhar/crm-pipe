@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
 import Link from 'next/link'
-import { RefreshCw, Filter, X, Download } from 'lucide-react'
+import { RefreshCw, Filter, X, Download, Activity as ActivityIcon } from 'lucide-react'
 import { ownerName } from '@/lib/utils'
 
 type Activity = {
@@ -172,16 +172,21 @@ export default function ActivityPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen">
       <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
         {/* Header */}
         <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Historique des activités</h1>
-            <p className="text-sm text-slate-500 mt-1">
-              {filtered.length} événement{filtered.length > 1 ? 's' : ''} · Toutes les modifications de l'équipe
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
+              <ActivityIcon className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Historique des activités</h1>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {filtered.length} événement{filtered.length > 1 ? 's' : ''} · Toutes les modifications de l'équipe
+              </p>
+            </div>
           </div>
           <div className="flex gap-2">
             <button onClick={exportExcel} disabled={exporting} title="Export Excel"
@@ -196,8 +201,39 @@ export default function ActivityPage() {
           </div>
         </div>
 
+        {/* KPI Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total</div>
+            <div className="text-xl font-black text-slate-900 mt-1">{filtered.length}</div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Aujourd&apos;hui</div>
+            <div className="text-xl font-black text-blue-600 mt-1">
+              {filtered.filter(a => new Date(a.created_at).toDateString() === new Date().toDateString()).length}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Cette semaine</div>
+            <div className="text-xl font-black text-emerald-600 mt-1">
+              {filtered.filter(a => {
+                const d = new Date(a.created_at)
+                const now = new Date()
+                const weekAgo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7)
+                return d >= weekAgo
+              }).length}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Par moi</div>
+            <div className="text-xl font-black text-violet-600 mt-1">
+              {filtered.filter(a => a.user_email === 'nabil.imdh@gmail.com').length}
+            </div>
+          </div>
+        </div>
+
         {/* Filters */}
-        <div className="bg-white rounded-2xl border shadow-sm p-4 mb-6">
+        <div className="bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-4">
           <div className="flex flex-wrap gap-3 items-end">
 
             {/* Search */}

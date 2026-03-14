@@ -253,7 +253,7 @@ export default function SupportPage() {
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white"><ShieldCheck className="h-5 w-5" /></div>
-          <div><h1 className="text-xl font-bold text-slate-900">Support / SAV</h1><p className="text-xs text-slate-500">Tickets, garanties & maintenance</p></div>
+          <div><h1 className="text-2xl font-bold text-slate-900">Support / SAV</h1><p className="text-sm text-slate-500">Tickets, garanties & maintenance</p></div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={exportExcel} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 h-9 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Download className="h-4 w-4" />Excel</button>
@@ -301,19 +301,21 @@ export default function SupportPage() {
       )}
 
       {/* Toolbar */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un ticket..." className={`${inputCls} pl-9`} />
+      <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4 mb-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un ticket..." className={`${inputCls} pl-9`} />
+          </div>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={`${selectCls} w-[160px]`}>
+            <option value="all">Tous statuts</option>
+            {Object.entries(TICKET_STATUS_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
+          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className={`${selectCls} w-[160px]`}>
+            <option value="all">Tous types</option>
+            {Object.entries(TICKET_TYPE_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+          </select>
         </div>
-        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} className={`${selectCls} w-[160px]`}>
-          <option value="all">Tous statuts</option>
-          {Object.entries(TICKET_STATUS_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} className={`${selectCls} w-[160px]`}>
-          <option value="all">Tous types</option>
-          {Object.entries(TICKET_TYPE_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
       </div>
 
       {/* Table */}
@@ -374,7 +376,7 @@ export default function SupportPage() {
 
       {/* ─── Create/Edit Modal ──────────────────────────────── */}
       {showModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }} onKeyDown={e => { if (e.key === 'Escape') setShowModal(false) }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" role="presentation" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }} onKeyDown={e => { if (e.key === 'Escape') setShowModal(false) }}>
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-200" role="dialog" aria-modal="true" aria-label={editId ? 'Modifier le ticket' : 'Nouveau ticket'}>
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-slate-900">{editId ? 'Modifier le ticket' : 'Nouveau ticket'}</h2>
@@ -431,7 +433,7 @@ export default function SupportPage() {
 
       {/* ─── Email Preview Modal ───────────────────────────── */}
       {emailHtml && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" role="presentation" onClick={e => { if (e.target === e.currentTarget) setEmailHtml(null) }} onKeyDown={e => { if (e.key === 'Escape') setEmailHtml(null) }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" role="presentation" onClick={e => { if (e.target === e.currentTarget) setEmailHtml(null) }} onKeyDown={e => { if (e.key === 'Escape') setEmailHtml(null) }}>
           <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200 overflow-hidden" role="dialog" aria-modal="true" aria-label="Email Support Mernassi">
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-slate-50">
               <div>

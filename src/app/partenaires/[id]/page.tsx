@@ -402,7 +402,7 @@ export default function PartenaireDetailPage() {
 
       {/* Edit Modal */}
       {editing && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           role="presentation" onClick={e => { if (e.target === e.currentTarget) setEditing(false) }}
           onKeyDown={e => { if (e.key === 'Escape') setEditing(false) }}>
           <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-slate-200 space-y-4" role="dialog" aria-modal="true">

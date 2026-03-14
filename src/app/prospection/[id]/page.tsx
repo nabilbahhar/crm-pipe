@@ -511,7 +511,7 @@ export default function ProspectDetailPage() {
 
       {/* ── QUALIFY MODAL ── */}
       {qualifyOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
           onClick={e => { if (e.target === e.currentTarget) setQualifyOpen(false) }}>
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
             <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-6 py-4">
@@ -574,7 +574,7 @@ export default function ProspectDetailPage() {
 
       {/* ── CONVERT MODAL ── */}
       {convertOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4"
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
           onClick={e => { if (e.target === e.currentTarget) setConvertOpen(false) }}>
           <div className="w-full max-w-sm rounded-2xl bg-white shadow-2xl overflow-hidden">
             <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-6 py-4">

@@ -7,6 +7,7 @@ import {
   mad, fmtDate, paymentTermLabel,
   SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus,
   LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus,
+  INVOICE_STATUS_CFG, type InvoiceStatus,
   COMPUCOM_EMAILS, ownerName,
   normMainBU, MAIN_BU_COLORS,
   PAYMENT_TERMS,
@@ -48,6 +49,16 @@ type PurchaseLine = {
   sort_order: number | null
 }
 
+type OrderInvoice = {
+  id: string
+  invoice_number: string
+  amount: number
+  status: string
+  issue_date: string | null
+  due_date: string | null
+  invoice_lines?: { purchase_line_id: string }[]
+}
+
 type Order = {
   id: string
   opportunity_id: string
@@ -59,6 +70,7 @@ type Order = {
   delivered_at: string | null
   invoiced_at: string | null
   updated_at: string | null
+  invoices?: OrderInvoice[]
   opportunities?: {
     id: string; title: string; amount: number
     po_number: string | null; po_date: string | null
@@ -164,7 +176,7 @@ function FacturationModal({
         if (!orderRes.ok) throw new Error('Erreur mise à jour commande')
       }
 
-      const { error: invError } = await supabase.from('invoices').insert({
+      const { data: newInv, error: invError } = await supabase.from('invoices').insert({
         opportunity_id: order.opportunity_id,
         invoice_number: invoiceNumber.trim(),
         amount: invoiceAmount,
@@ -176,8 +188,18 @@ function FacturationModal({
           ? `Facturation globale — ${selectedLines.length} lignes`
           : `Facturation partielle — ${selectedLines.length}/${lines.length} lignes`,
         created_by: userEmail,
-      })
+      }).select('id').single()
       if (invError) throw invError
+
+      // Link invoice to the specific purchase lines it covers
+      if (newInv) {
+        await supabase.from('invoice_lines').insert(
+          [...selectedIds].map(lineId => ({
+            invoice_id: newInv.id,
+            purchase_line_id: lineId,
+          }))
+        )
+      }
 
       await logActivity({
         action_type: 'update',
@@ -196,7 +218,7 @@ function FacturationModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
       role="presentation" onClick={onClose} onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
       <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl"
         role="dialog" aria-modal="true" aria-label="Facturer les lignes"
@@ -347,13 +369,14 @@ function FacturationModal({
 
 // ─── Single Line Card (avoids useState in map) ──────────────
 function LineCard({
-  line, busy, onUpdateStatus, onUpdateEta, onUpdateNote,
+  line, busy, onUpdateStatus, onUpdateEta, onUpdateNote, invoiceNumber,
 }: {
   line: PurchaseLine
   busy: boolean
   onUpdateStatus: (lineId: string, s: LineStatus) => void
   onUpdateEta: (lineId: string, eta: string) => void
   onUpdateNote: (lineId: string, note: string) => void
+  invoiceNumber?: string | null
 }) {
   const ls = (line.line_status as LineStatus) || 'pending'
   const lsCfg = LINE_STATUS_CFG[ls] || LINE_STATUS_CFG.pending
@@ -385,6 +408,11 @@ function LineCard({
               {line.fournisseur}
             </span>
           )}
+          {isFactured && invoiceNumber && (
+            <span className="flex-shrink-0 rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
+              {invoiceNumber}
+            </span>
+          )}
         </div>
         <select
           value={ls}
@@ -393,7 +421,7 @@ function LineCard({
           className={`h-6 rounded-md border px-1 text-[9px] font-bold outline-none cursor-pointer flex-shrink-0
             ${lsCfg.bg} ${lsCfg.border} ${lsCfg.color}
             disabled:opacity-40 disabled:cursor-not-allowed`}>
-          {LINE_STATUS_ORDER.map(s => (
+          {LINE_STATUS_ORDER.filter(s => s !== 'facture').map(s => (
             <option key={s} value={s}>{LINE_STATUS_CFG[s].icon} {LINE_STATUS_CFG[s].label}</option>
           ))}
         </select>
@@ -486,6 +514,7 @@ function OrderSlidePanel({
   }
 
   async function updateLineStatus(lineId: string, newStatus: LineStatus) {
+    if (newStatus === 'facture') return // Must use FacturationModal
     if (busyLines.has(lineId)) return
     setBusyLines(prev => new Set(prev).add(lineId))
     try {
@@ -668,16 +697,23 @@ function OrderSlidePanel({
 
         {/* Lines */}
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {lines.map(line => (
-            <LineCard
-              key={line.id}
-              line={line}
-              busy={busyLines.has(line.id)}
-              onUpdateStatus={updateLineStatus}
-              onUpdateEta={updateLineEta}
-              onUpdateNote={updateLineNote}
-            />
-          ))}
+          {lines.map(line => {
+            // Find invoice number for this line
+            const inv = (order.invoices || []).find(i =>
+              i.invoice_lines?.some(il => il.purchase_line_id === line.id)
+            )
+            return (
+              <LineCard
+                key={line.id}
+                line={line}
+                busy={busyLines.has(line.id)}
+                onUpdateStatus={updateLineStatus}
+                onUpdateEta={updateLineEta}
+                onUpdateNote={updateLineNote}
+                invoiceNumber={inv?.invoice_number}
+              />
+            )
+          })}
 
           {lines.length === 0 && (
             <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -719,6 +755,32 @@ function OrderSlidePanel({
               </button>
             )}
           </div>
+
+          {/* Invoices section */}
+          {(order.invoices || []).length > 0 && (
+            <div className="mb-3 space-y-1.5">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                <FileText className="inline h-3 w-3 mr-1" />
+                Factures ({order.invoices!.length})
+              </div>
+              {order.invoices!.map(inv => {
+                const invCfg = INVOICE_STATUS_CFG[inv.status as InvoiceStatus] || INVOICE_STATUS_CFG.emise
+                const lineCount = inv.invoice_lines?.length || 0
+                return (
+                  <div key={inv.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+                    <span className="text-xs font-bold text-slate-800">{inv.invoice_number}</span>
+                    <span className="text-[10px] font-semibold text-slate-500">{mad(inv.amount)}</span>
+                    <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${invCfg.bg} ${invCfg.color} border ${invCfg.border}`}>
+                      {invCfg.label}
+                    </span>
+                    {lineCount > 0 && (
+                      <span className="text-[9px] text-slate-400">{lineCount} ligne{lineCount > 1 ? 's' : ''}</span>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <Link href={`/opportunities/${opp?.id || order.opportunity_id}`}
@@ -1297,7 +1359,7 @@ export default function SupplyPage() {
 
       {/* Email preview modal */}
       {emailHtml && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
           role="presentation" onClick={() => setEmailHtml(null)} onKeyDown={e => { if (e.key === 'Escape') setEmailHtml(null) }}>
           <div className="relative w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-2xl"
             role="dialog" aria-modal="true" aria-label="Aperçu email Supply"

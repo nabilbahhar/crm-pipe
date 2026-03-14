@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
@@ -64,11 +64,16 @@ type ProjectService = {
   prescription_status: PrescriptionStatus | null
   created_at: string; updated_at: string | null
 }
+type InvoiceLine = {
+  purchase_line_id: string
+  purchase_lines?: { ref: string | null; designation: string | null; qty: number; pt_vente: number; fournisseur: string | null } | null
+}
 type Invoice = {
   id: string; opportunity_id: string; invoice_number: string | null
   amount: number; issue_date: string | null; due_date: string | null
   status: InvoiceStatus; payment_terms: string | null; notes: string | null
   created_at: string
+  invoice_lines?: InvoiceLine[]
 }
 
 // ─── Formatters ───────────────────────────────────────────────
@@ -313,6 +318,7 @@ export default function OpportunityDetailPage() {
   const [drs, setDrs]             = useState<DealRegistration[]>([])
   const [services, setServices]   = useState<ProjectService[]>([])
   const [invoices, setInvoices]   = useState<Invoice[]>([])
+  const [expandedInv, setExpandedInv] = useState<string | null>(null)
   const [loading, setLoading]     = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [emailCopied, setEmailCopied] = useState(false)
@@ -361,7 +367,7 @@ export default function OpportunityDetailPage() {
       const [drRes, svcRes, invRes] = await Promise.all([
         supabase.from('deal_registrations').select('*').eq('opportunity_id', id),
         supabase.from('project_services').select('*').eq('opportunity_id', id).order('sort_order'),
-        supabase.from('invoices').select('*').eq('opportunity_id', id).order('issue_date', { ascending: false }),
+        supabase.from('invoices').select('*, invoice_lines(purchase_line_id, purchase_lines(ref, designation, qty, pt_vente, fournisseur))').eq('opportunity_id', id).order('issue_date', { ascending: false }),
       ])
       setDrs(drRes.data || [])
       setServices(svcRes.data || [])
@@ -1036,6 +1042,7 @@ export default function OpportunityDetailPage() {
                     <tr className="border-b border-slate-100 bg-slate-50/30 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       <th className="px-5 py-2 text-left">N° Facture</th>
                       <th className="px-4 py-2 text-right">Montant</th>
+                      <th className="px-4 py-2 text-center">Lignes</th>
                       <th className="px-4 py-2 text-left">Émise le</th>
                       <th className="px-4 py-2 text-left">Échéance</th>
                       <th className="px-4 py-2 text-center">Statut</th>
@@ -1045,10 +1052,28 @@ export default function OpportunityDetailPage() {
                     {invoices.map(inv => {
                       const cfg = INVOICE_STATUS_CFG[inv.status]
                       const isOverdue = inv.due_date && inv.status !== 'payee' && new Date(inv.due_date) < new Date()
+                      const lines = inv.invoice_lines || []
                       return (
-                        <tr key={inv.id} className={`hover:bg-slate-50/50 ${isOverdue ? 'bg-red-50/30' : ''}`}>
+                        <React.Fragment key={inv.id}>
+                        <tr className={`hover:bg-slate-50/50 ${isOverdue ? 'bg-red-50/30' : ''}`}>
                           <td className="px-5 py-2.5 font-semibold text-slate-800">{inv.invoice_number || '—'}</td>
                           <td className="px-4 py-2.5 text-right font-bold text-slate-900">{mad(inv.amount)}</td>
+                          <td className="px-4 py-2.5 text-center">
+                            {lines.length > 0 ? (
+                              <button
+                                onClick={() => setExpandedInv(expandedInv === inv.id ? null : inv.id)}
+                                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold border transition-colors ${
+                                  expandedInv === inv.id
+                                    ? 'bg-blue-100 text-blue-700 border-blue-200'
+                                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-blue-50 hover:text-blue-600'
+                                }`}
+                              >
+                                {lines.length} ligne{lines.length > 1 ? 's' : ''}
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-slate-300">—</span>
+                            )}
+                          </td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{fmtDate(inv.issue_date)}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">
                             {fmtDate(inv.due_date)}
@@ -1060,6 +1085,40 @@ export default function OpportunityDetailPage() {
                             </span>
                           </td>
                         </tr>
+                        {expandedInv === inv.id && lines.length > 0 && (
+                          <tr className="bg-blue-50/30">
+                            <td colSpan={6} className="px-5 py-2">
+                              <div className="rounded-lg bg-white border border-blue-100 overflow-hidden">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b border-slate-100 text-[9px] font-bold uppercase text-slate-400">
+                                      <th className="px-3 py-1.5 text-left">Ref</th>
+                                      <th className="px-3 py-1.5 text-left">Désignation</th>
+                                      <th className="px-3 py-1.5 text-right">Qté</th>
+                                      <th className="px-3 py-1.5 text-right">Pt Vente</th>
+                                      <th className="px-3 py-1.5 text-left">Fournisseur</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-50">
+                                    {lines.map((ln, i) => {
+                                      const pl = ln.purchase_lines
+                                      return (
+                                        <tr key={ln.purchase_line_id || i}>
+                                          <td className="px-3 py-1.5 font-mono text-[11px] text-slate-700">{pl?.ref || '—'}</td>
+                                          <td className="px-3 py-1.5 text-[11px] text-slate-600 max-w-[200px] truncate">{pl?.designation || '—'}</td>
+                                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">{pl?.qty ?? '—'}</td>
+                                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">{pl?.pt_vente ? mad(pl.pt_vente) : '—'}</td>
+                                          <td className="px-3 py-1.5 text-slate-500">{pl?.fournisseur || '—'}</td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        </React.Fragment>
                       )
                     })}
                   </tbody>

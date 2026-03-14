@@ -111,7 +111,7 @@ function Modal({ open, title, onClose, children, wide }: { open: boolean; title:
   }, [open, onClose])
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }} role="presentation">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }} role="presentation">
       <div className={`w-full ${wide ? 'max-w-5xl' : 'max-w-2xl'} max-h-[88vh] flex flex-col rounded-2xl bg-white shadow-2xl ring-1 ring-slate-200`} role="dialog" aria-modal="true" aria-label={title}>
         <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
           <div className="text-base font-bold text-slate-900">{title}</div>
@@ -449,38 +449,36 @@ export default function EventsPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100/80">
+    <div className="min-h-screen">
 
       {/* ── Toast ─────────────────────────────────────────────────────────── */}
       {toast && <Toast message={toast} type="success" onClose={() => setToast(null)} />}
 
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white">
-        <div className="mx-auto max-w-[1500px] px-4 py-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-2xl font-extrabold tracking-tight flex items-center gap-3">
-                <CalendarDays className="h-7 w-7 text-blue-400" />
-                Evenements
-              </h1>
-              <p className="mt-1 text-sm text-slate-400">Suivi des evenements de prospection : UTD, workshops, salons, conferences</p>
+      {/* ── Content ───────────────────────────────────────────────────────── */}
+      <div className="mx-auto max-w-[1500px] px-4 py-6 pb-12 space-y-5">
+
+        {/* ── Header ────────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
+              <CalendarDays className="h-5 w-5" />
             </div>
-            <div className="flex items-center gap-3">
-              <button onClick={loadAll} disabled={loading}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/20 text-white/70 hover:bg-white/10 hover:text-white transition-colors disabled:opacity-40">
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              </button>
-              <button onClick={openCreate}
-                className="flex h-9 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-500 transition-colors">
-                <Plus className="h-4 w-4" /> Nouvel evenement
-              </button>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Evenements</h1>
+              <p className="text-sm text-slate-500 mt-0.5">Suivi des evenements · {filtered.length} événement(s)</p>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button onClick={loadAll} disabled={loading}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors disabled:opacity-40">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button onClick={openCreate}
+              className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 transition-colors">
+              <Plus className="h-4 w-4" /> Nouvel evenement
+            </button>
+          </div>
         </div>
-      </div>
-
-      {/* ── Content ───────────────────────────────────────────────────────── */}
-      <div className="mx-auto max-w-[1500px] px-4 -mt-4 pb-12 space-y-5">
 
         {/* Error banner */}
         {err && (
@@ -491,7 +489,7 @@ export default function EventsPage() {
         )}
 
         {/* ── KPI Cards ─────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6 mb-6">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
           {([
             { key: 'all' as const, label: 'Total evenements', value: kpis.total, icon: CalendarDays, iconColor: 'text-slate-600', iconBg: 'bg-slate-100' },
             { key: 'planifie' as const, label: 'A venir', value: kpis.upcoming, icon: Clock, iconColor: 'text-blue-600', iconBg: 'bg-blue-50' },
@@ -538,30 +536,32 @@ export default function EventsPage() {
         </div>
 
         {/* ── Filters ───────────────────────────────────────────────────── */}
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Rechercher un evenement..."
-              className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 placeholder:text-slate-400" />
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[200px] max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Rechercher un evenement..."
+                className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 placeholder:text-slate-400" />
+            </div>
+            <div className="relative">
+              <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as EventType | 'Tous')}
+                className="h-10 rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-sm text-slate-700 outline-none transition focus:border-blue-400 appearance-none">
+                <option value="Tous">Tous types</option>
+                {EVENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
+            <div className="relative">
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as EventStatus | 'Tous')}
+                className="h-10 rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-sm text-slate-700 outline-none transition focus:border-blue-400 appearance-none">
+                <option value="Tous">Tous statuts</option>
+                {Object.entries(STATUS_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            </div>
+            <div className="text-xs text-slate-500">{filtered.length} evenement{filtered.length !== 1 ? 's' : ''}</div>
           </div>
-          <div className="relative">
-            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value as EventType | 'Tous')}
-              className="h-10 rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-sm text-slate-700 outline-none transition focus:border-blue-400 appearance-none">
-              <option value="Tous">Tous types</option>
-              {EVENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
-          <div className="relative">
-            <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as EventStatus | 'Tous')}
-              className="h-10 rounded-xl border border-slate-200 bg-white pl-3 pr-8 text-sm text-slate-700 outline-none transition focus:border-blue-400 appearance-none">
-              <option value="Tous">Tous statuts</option>
-              {Object.entries(STATUS_CFG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          </div>
-          <div className="text-xs text-slate-500">{filtered.length} evenement{filtered.length !== 1 ? 's' : ''}</div>
         </div>
 
         {/* ── Table ─────────────────────────────────────────────────────── */}

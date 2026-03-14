@@ -254,17 +254,17 @@ export default function MarketingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
         {/* ── Header ── */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-pink-600 to-rose-500 text-white shadow-lg">
-              <Megaphone className="h-6 w-6" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
+              <Megaphone className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-900">Marketing</h1>
-              <p className="text-xs text-slate-500">Stratégie, campagnes & contenu — Compucom Maroc</p>
+              <h1 className="text-2xl font-bold text-slate-900">Marketing</h1>
+              <p className="text-sm text-slate-500 mt-0.5">Stratégie, campagnes & contenu — Compucom Maroc</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -278,14 +278,15 @@ export default function MarketingPage() {
         </div>
 
         {/* ── Tabs ── */}
-        <div className="flex gap-1 mb-6 bg-white rounded-xl p-1 ring-1 ring-slate-200 w-fit">
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === t.id ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}>
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
+        <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+          <div className="flex gap-1 bg-slate-50 rounded-xl p-1 w-fit mb-4">
+            {tabs.map(t => (
+              <button key={t.id} onClick={() => setActiveTab(t.id)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${activeTab === t.id ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-white'}`}>
+                {t.icon} {t.label}
+              </button>
+            ))}
+          </div>
 
         {loading ? (
           <div className="flex items-center justify-center py-20">
@@ -527,6 +528,7 @@ export default function MarketingPage() {
             )}
           </>
         )}
+        </div>
       </div>
 
       {/* ── Modals ── */}
@@ -749,7 +751,7 @@ function NewContentModal({ onClose, onSave }: { onClose: () => void; onSave: (d:
 
 function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
           <span className="text-sm font-black text-slate-900">{title}</span>

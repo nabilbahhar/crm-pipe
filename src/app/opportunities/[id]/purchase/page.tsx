@@ -1677,7 +1677,7 @@ export default function PurchasePage() {
 
       {/* ── Modal nouveau fournisseur ── */}
       {showFournModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/40 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') setShowFournModal(false) }}>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') setShowFournModal(false) }}>
           <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl" role="dialog" aria-modal="true" aria-label="Nouveau fournisseur">
             <div className="flex items-center justify-between border-b border-slate-100 px-6 py-5">
               <h2 className="text-base font-bold text-slate-900">🏭 Nouveau fournisseur</h2>

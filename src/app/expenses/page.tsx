@@ -13,7 +13,7 @@ import { buildExpenseEmail } from '@/lib/emailTemplates'
 import {
   RefreshCw, Plus, Download, Search, Pencil, Eye, X,
   Check, Copy, ExternalLink, Trash2, Upload, FileText,
-  Receipt, ChevronDown, Paperclip,
+  Receipt, ChevronDown, Paperclip, Wallet,
 } from 'lucide-react'
 import Toast from '@/components/Toast'
 
@@ -588,12 +588,12 @@ export default function ExpensesPage() {
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
-              <Receipt className="h-5 w-5" />
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
+              <Wallet className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-xl font-black text-slate-900 tracking-tight">Notes de frais</h1>
-              <p className="text-xs text-slate-500">
+              <h1 className="text-2xl font-bold text-slate-900">Notes de Frais</h1>
+              <p className="text-sm text-slate-500 mt-0.5">
                 Suivi depenses &middot; {reports.length} note{reports.length !== 1 ? 's' : ''}
               </p>
             </div>
@@ -627,14 +627,23 @@ export default function ExpensesPage() {
         {err && <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{err}</div>}
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          {kpis.map((k, i) => (
-            <div key={i} className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{k.label}</div>
-              <div className={`mt-1 text-2xl font-black ${k.color}`}>{k.value}</div>
-              <div className="mt-0.5 text-[10px] text-slate-400">{k.sub}</div>
-            </div>
-          ))}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Total Notes</div>
+            <div className="text-xl font-black text-slate-900 mt-1">{reports.length}</div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Soumises</div>
+            <div className="text-xl font-black text-blue-600 mt-1">{notesSoumises}</div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Remboursees</div>
+            <div className="text-xl font-black text-emerald-600 mt-1">{remboursees}</div>
+          </div>
+          <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Montant Total</div>
+            <div className="text-xl font-black text-slate-900 mt-1">{madFull(totalAnnuel)}</div>
+          </div>
         </div>
 
         {/* ═══════════════════ FORM VIEW ═══════════════════ */}
@@ -811,15 +820,17 @@ export default function ExpensesPage() {
         {mode === 'list' && (
           <>
             {/* Search bar */}
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex h-9 items-center gap-2 rounded-xl border bg-white px-3 shadow-sm">
-                <Search className="h-3.5 w-3.5 text-slate-400" />
-                <input value={search} onChange={e => setSearch(e.target.value)}
-                  placeholder="Rechercher par periode, statut..."
-                  className="w-52 bg-transparent text-sm outline-none placeholder:text-slate-400" />
-              </div>
-              <div className="ml-auto text-xs text-slate-400">
-                {filtered.length} note{filtered.length !== 1 ? 's' : ''}
+            <div className="rounded-2xl bg-white ring-1 ring-slate-200 shadow-sm p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3">
+                  <Search className="h-3.5 w-3.5 text-slate-400" />
+                  <input value={search} onChange={e => setSearch(e.target.value)}
+                    placeholder="Rechercher par periode, statut..."
+                    className="w-52 bg-transparent text-sm outline-none placeholder:text-slate-400" />
+                </div>
+                <div className="ml-auto text-xs text-slate-400">
+                  {filtered.length} note{filtered.length !== 1 ? 's' : ''}
+                </div>
               </div>
             </div>
 

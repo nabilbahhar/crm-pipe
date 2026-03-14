@@ -51,13 +51,28 @@ export async function GET(req: NextRequest) {
       piMap[pi.opportunity_id] = pi
     }
 
-    // 5. Merge purchase_info into each order's opportunities object
+    // 4b. Load invoices with linked lines for these opportunities
+    const { data: invoiceData } = await supabaseServer
+      .from('invoices')
+      .select('id, opportunity_id, invoice_number, amount, status, issue_date, due_date, invoice_lines(purchase_line_id)')
+      .in('opportunity_id', oppIds)
+      .order('created_at', { ascending: false })
+
+    // Build map: opportunity_id → invoices[]
+    const invMap: Record<string, any[]> = {}
+    for (const inv of invoiceData || []) {
+      if (!invMap[inv.opportunity_id]) invMap[inv.opportunity_id] = []
+      invMap[inv.opportunity_id].push(inv)
+    }
+
+    // 5. Merge purchase_info + invoices into each order's opportunities object
     const merged = validOrders.map((o: any) => {
       const opp = o.opportunities
       if (opp) {
         const pi = piMap[opp.id]
         opp.purchase_info = pi ? [pi] : []
       }
+      o.invoices = invMap[o.opportunity_id] || []
       return o
     })
 
