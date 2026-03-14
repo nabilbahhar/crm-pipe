@@ -1019,16 +1019,19 @@ export default function PurchasePage() {
           {viewMode === 'devis' && (<>
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
             {/* Devis header */}
-            <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-6 py-4 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-5 flex items-center justify-between">
               <div>
-                <h3 className="text-white font-bold text-sm">Devis Interne — Fiche Achat</h3>
+                <h3 className="text-white font-bold text-base tracking-tight">Fiche Achat</h3>
                 <p className="text-slate-400 text-xs mt-0.5">{deal?.accounts?.name} · {deal?.title}</p>
               </div>
-              <span className="text-white text-lg font-black">{mad(dealAmount)}</span>
+              <div className="text-right">
+                <span className="text-white text-xl font-black tracking-tight">{mad(dealAmount)}</span>
+                <p className="text-slate-500 text-[10px] mt-0.5">{lines.filter(l=>l.designation.trim()).length} article{lines.filter(l=>l.designation.trim()).length>1?'s':''}</p>
+              </div>
             </div>
             {/* Column header */}
-            <div className="grid grid-cols-[50px_1fr_75px_110px_120px] bg-slate-50 border-b border-slate-200 px-5 py-2 text-[9px] font-bold uppercase tracking-wider text-slate-400">
-              <span>#</span><span>Désignation</span><span className="text-right">Qté</span><span className="text-right">PU HT</span><span className="text-right">PT HT</span>
+            <div className="grid grid-cols-[44px_1fr_70px_105px_115px] bg-slate-50/80 border-b border-slate-200 px-5 py-2.5 text-[9px] font-extrabold uppercase tracking-widest text-slate-400">
+              <span>N°</span><span>Désignation</span><span className="text-right">Qté</span><span className="text-right">PU HT</span><span className="text-right">PT HT</span>
             </div>
             {/* Lines */}
             <div className="divide-y divide-slate-100">
@@ -1042,112 +1045,132 @@ export default function PurchasePage() {
                 return (
                   <div key={i}>
                     {isOpen ? (
-                      /* ═══ EDIT MODE — replaces the read line entirely ═══ */
-                      <div className="bg-blue-50/30 border-l-4 border-blue-500">
-                        {/* Edit header bar */}
-                        <div className="flex items-center justify-between px-5 py-3 bg-blue-50 border-b border-blue-100">
+                      /* ═══ EDIT MODE ═══ */
+                      <div className="border-l-[3px] border-slate-800 bg-gradient-to-b from-slate-50 to-white">
+                        {/* Edit header */}
+                        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
                           <div className="flex items-center gap-3">
-                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white">{i+1}</span>
-                            <span className="text-sm font-semibold text-blue-800">Édition ligne {i+1}</span>
-                            {l.ref && <span className="text-xs font-mono text-blue-400 bg-blue-100 rounded px-2 py-0.5">{l.ref}</span>}
+                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800 text-[11px] font-bold text-white">{i+1}</span>
+                            <span className="text-[13px] font-bold text-slate-700">Ligne {i+1}</span>
+                            {l.ref && <span className="text-[11px] font-mono text-slate-400 bg-slate-100 rounded px-2 py-0.5">{l.ref}</span>}
                           </div>
-                          <div className="flex items-center gap-3">
-                            {ptVente > 0 && <span className="text-sm font-bold text-blue-800">{mad(ptVente)}</span>}
+                          <div className="flex items-center gap-2.5">
+                            {ptVente > 0 && <span className="text-[13px] font-bold text-slate-700">{numFmt(ptVente)} MAD</span>}
                             {l.pu_achat > 0 && ptVente > 0 && (
                               <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
                             )}
                             <button onClick={() => setEditingIdx(null)}
-                              className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700 transition">
-                              <X className="h-3 w-3" /> Fermer
+                              className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3.5 py-1.5 text-[11px] font-semibold text-white hover:bg-slate-700 transition shadow-sm">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> OK
                             </button>
                           </div>
                         </div>
+
                         {/* Edit body */}
-                        <div className="px-5 py-4 space-y-4">
-                          {/* Désignation + Réf */}
-                          <div>
-                            <div className="flex items-center gap-3 mb-1.5">
-                              <label className="text-[10px] font-bold uppercase text-slate-400">Désignation</label>
+                        <div className="px-5 py-5 space-y-5">
+                          {/* ── Produit ── */}
+                          <div className="rounded-lg border border-slate-200 bg-white p-4">
+                            <div className="flex items-center gap-3 mb-3">
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Produit</span>
+                              <div className="flex-1 h-px bg-slate-100" />
                               <div className="flex items-center gap-1.5">
-                                <label className="text-[10px] font-bold uppercase text-slate-400">Réf:</label>
+                                <span className="text-[10px] text-slate-400">Réf:</span>
                                 <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)} spellCheck={false}
-                                  placeholder="Réf…" className="h-6 w-[120px] rounded border border-slate-200 bg-white px-2 text-[11px] font-mono outline-none focus:border-blue-400" />
+                                  placeholder="—" className="h-7 w-[130px] rounded border border-slate-200 bg-slate-50 px-2.5 text-[11px] font-mono text-slate-600 outline-none focus:border-slate-400 focus:bg-white" />
                               </div>
                             </div>
                             <textarea value={l.designation} spellCheck={false}
                               autoFocus
                               onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
                               onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
-                              rows={3}
-                              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-[13px] leading-relaxed outline-none resize-none overflow-hidden focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
+                              rows={3} placeholder="Description du produit ou service…"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-[13px] leading-[1.7] text-slate-700 outline-none resize-none overflow-hidden focus:border-slate-400 focus:ring-2 focus:ring-slate-100 placeholder:text-slate-300"
                               style={{ minHeight: 80 }} />
                           </div>
 
-                          {/* Vente + Achat on same row */}
-                          <div className="grid grid-cols-6 gap-3">
-                            <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Qté</label>
-                              <input type="number" min={1} value={Number(l.qty)||1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
-                                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-right font-semibold outline-none focus:border-blue-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                          {/* ── Vente ── */}
+                          <div className="rounded-lg border border-slate-200 bg-white p-4">
+                            <div className="flex items-center gap-3 mb-3">
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Vente</span>
+                              <div className="flex-1 h-px bg-slate-100" />
                             </div>
-                            <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">PU Vente</label>
-                              <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
-                                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-right outline-none focus:border-blue-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">PT Vente</label>
-                              <div className="flex h-9 items-center justify-end rounded-lg bg-slate-100 px-2 text-sm font-bold text-slate-800">{ptVente > 0 ? numFmt(ptVente) : '—'}</div>
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase text-amber-600">PU Achat ★</label>
-                              <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
-                                className="h-9 w-full rounded-lg border border-amber-300 bg-amber-50 px-2 text-sm text-right font-bold outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase text-amber-600">PT Achat</label>
-                              <div className="flex h-9 items-center justify-end rounded-lg bg-amber-100/60 px-2 text-sm font-bold text-slate-700">{ptAchat > 0 ? numFmt(ptAchat) : '—'}</div>
-                            </div>
-                            <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Marge</label>
-                              <div className="flex h-9 items-center justify-center">
-                                {l.pu_achat > 0 && ptVente > 0 ? (
-                                  <span className={`rounded-full px-3 py-1 text-xs font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
-                                ) : <span className="text-slate-300 text-xs">—</span>}
+                            <div className="grid grid-cols-3 gap-4">
+                              <div>
+                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Quantité</label>
+                                <input type="number" min={1} value={Number(l.qty)||1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
+                                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-right font-semibold text-slate-800 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Prix Unitaire</label>
+                                <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
+                                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-right text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Prix Total</label>
+                                <div className="flex h-10 items-center justify-end rounded-lg bg-slate-50 border border-slate-100 px-3 text-sm font-bold text-slate-800">{ptVente > 0 ? numFmt(ptVente) : '—'}</div>
                               </div>
                             </div>
                           </div>
 
-                          {/* Fournisseur + Garantie + Licence + Supprimer */}
-                          <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 items-end">
-                            <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fournisseur</label>
-                              <div className="flex gap-1.5">
-                                <select value={l.fournisseur_id||''} onChange={e => {
-                                  const fid = e.target.value || null
-                                  setLines(prev => prev.map((ln, idx) => idx !== i ? ln : { ...ln, fournisseur_id: fid, selected_contact_ids: [], contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '' }))
-                                }}
-                                  className={`h-9 flex-1 rounded-lg border px-2 text-xs outline-none ${l.fournisseur_id?'border-slate-300 bg-white font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
-                                  <option value="">Choisir…</option>
-                                  {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                </select>
-                                <button onClick={() => setShowFournModal(true)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:text-slate-600 transition"><Plus className="h-3.5 w-3.5" /></button>
+                          {/* ── Achat ── */}
+                          <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+                            <div className="flex items-center gap-3 mb-3">
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-600">★ Achat</span>
+                              <div className="flex-1 h-px bg-amber-200/60" />
+                            </div>
+                            <div className="grid grid-cols-3 gap-4">
+                              <div>
+                                <label className="mb-1.5 block text-[11px] font-semibold text-amber-600">Prix Unitaire</label>
+                                <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
+                                  className="h-10 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm text-right font-bold text-slate-800 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-[11px] font-semibold text-amber-600">Prix Total</label>
+                                <div className="flex h-10 items-center justify-end rounded-lg bg-amber-100/50 border border-amber-200 px-3 text-sm font-bold text-slate-700">{ptAchat > 0 ? numFmt(ptAchat) : '—'}</div>
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Marge</label>
+                                <div className="flex h-10 items-center justify-center rounded-lg border border-slate-100 bg-white">
+                                  {l.pu_achat > 0 && ptVente > 0 ? (
+                                    <span className={`rounded-full px-4 py-1 text-xs font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
+                                  ) : <span className="text-slate-300 text-xs">—</span>}
+                                </div>
                               </div>
                             </div>
-                            <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fin garantie</label>
-                              <input type="month" value={l.warranty_expiry||''} onChange={e => updateLine(i,'warranty_expiry',e.target.value)}
-                                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400" />
+                          </div>
+
+                          {/* ── Fournisseur & Détails ── */}
+                          <div className="rounded-lg border border-slate-200 bg-white p-4">
+                            <div className="flex items-center gap-3 mb-3">
+                              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Fournisseur & Détails</span>
+                              <div className="flex-1 h-px bg-slate-100" />
                             </div>
-                            <div>
-                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fin licence</label>
-                              <input type="month" value={l.license_expiry||''} onChange={e => updateLine(i,'license_expiry',e.target.value)}
-                                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400" />
+                            <div className="grid grid-cols-3 gap-4">
+                              <div>
+                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Fournisseur</label>
+                                <div className="flex gap-1.5">
+                                  <select value={l.fournisseur_id||''} onChange={e => {
+                                    const fid = e.target.value || null
+                                    setLines(prev => prev.map((ln, idx) => idx !== i ? ln : { ...ln, fournisseur_id: fid, selected_contact_ids: [], contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '' }))
+                                  }}
+                                    className={`h-10 flex-1 rounded-lg border px-3 text-xs outline-none focus:ring-2 focus:ring-slate-100 ${l.fournisseur_id?'border-slate-300 bg-white font-medium text-slate-700':'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                                    <option value="">Sélectionner…</option>
+                                    {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                  </select>
+                                  <button onClick={() => setShowFournModal(true)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:text-slate-600 hover:border-slate-400 transition"><Plus className="h-4 w-4" /></button>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Fin garantie</label>
+                                <input type="month" value={l.warranty_expiry||''} onChange={e => updateLine(i,'warranty_expiry',e.target.value)}
+                                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100" />
+                              </div>
+                              <div>
+                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Fin licence</label>
+                                <input type="month" value={l.license_expiry||''} onChange={e => updateLine(i,'license_expiry',e.target.value)}
+                                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100" />
+                              </div>
                             </div>
-                            <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
-                              className="flex h-9 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 text-[11px] font-semibold text-red-500 hover:bg-red-100 transition">
-                              <Trash2 className="h-3 w-3" />
-                            </button>
                           </div>
 
                           {/* Contacts fournisseur */}
@@ -1171,23 +1194,23 @@ export default function PurchasePage() {
                               }))
                             }
                             return (
-                              <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 space-y-2">
-                                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                                  <span>👤</span> Contacts {selectedIds.length > 0 && <span className="ml-1 rounded-full bg-blue-500 text-white px-1.5 text-[9px]">{selectedIds.length}</span>}
+                              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2">
+                                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                                  👤 Contacts fournisseur {selectedIds.length > 0 && <span className="rounded-full bg-slate-700 text-white px-1.5 py-px text-[9px]">{selectedIds.length}</span>}
                                 </div>
                                 {options.length >= 1 ? (
-                                  <div className="flex flex-wrap gap-1.5">
+                                  <div className="flex flex-wrap gap-2">
                                     {options.map(opt => {
                                       const checked = selectedIds.includes(opt.id)
                                       return (
                                         <label key={opt.id}
-                                          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 cursor-pointer transition text-xs
-                                            ${checked ? 'bg-blue-100 border border-blue-300 shadow-sm' : 'bg-white border border-blue-100 hover:bg-blue-50'}`}>
+                                          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 cursor-pointer transition text-xs
+                                            ${checked ? 'bg-slate-800 text-white shadow-sm border border-slate-700' : 'bg-white border border-slate-200 hover:border-slate-300 text-slate-600'}`}>
                                           <input type="checkbox" checked={checked} onChange={() => toggleContact(opt.id)}
-                                            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 accent-blue-600" />
+                                            className="h-3.5 w-3.5 rounded border-slate-300 accent-slate-800" />
                                           <div className="min-w-0">
-                                            <div className="font-semibold text-slate-700">{opt.label}</div>
-                                            {(opt.email || opt.tel) && <div className="text-[10px] text-slate-400 truncate">{opt.email}{opt.email && opt.tel ? ' · ' : ''}{opt.tel}</div>}
+                                            <div className={`font-semibold ${checked ? 'text-white' : 'text-slate-700'}`}>{opt.label}</div>
+                                            {(opt.email || opt.tel) && <div className={`text-[10px] truncate ${checked ? 'text-slate-300' : 'text-slate-400'}`}>{opt.email}{opt.email && opt.tel ? ' · ' : ''}{opt.tel}</div>}
                                           </div>
                                         </label>
                                       )
@@ -1195,33 +1218,44 @@ export default function PurchasePage() {
                                   </div>
                                 ) : (
                                   <input value={l.contact_fournisseur||''} onChange={e => updateLine(i,'contact_fournisseur',e.target.value)}
-                                    placeholder="Nom du contact…" className="h-8 w-full rounded-lg border border-blue-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                    placeholder="Nom du contact…" className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-slate-400" />
                                 )}
                               </div>
                             )
                           })()}
+
+                          {/* Footer actions */}
+                          <div className="flex items-center justify-between pt-2">
+                            <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
+                              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-medium text-red-400 hover:text-red-600 hover:bg-red-50 transition">
+                              <Trash2 className="h-3.5 w-3.5" /> Supprimer cette ligne
+                            </button>
+                            <button onClick={() => setEditingIdx(null)}
+                              className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-5 py-2 text-[11px] font-semibold text-white hover:bg-slate-700 transition shadow-sm">
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Terminé
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ) : (
-                      /* ═══ READ MODE — clean devis line ═══ */
+                      /* ═══ READ MODE ═══ */
                       <div onClick={() => setEditingIdx(i)}
-                        className="grid grid-cols-[50px_1fr_75px_110px_120px] items-start px-5 py-3.5 cursor-pointer hover:bg-slate-50/70 transition group">
+                        className={`grid grid-cols-[44px_1fr_70px_105px_115px] items-start px-5 py-3.5 cursor-pointer hover:bg-slate-50 transition group ${i%2===1?'bg-slate-50/40':''}`}>
                         {/* # */}
                         <div className="pt-0.5">
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-slate-200 text-[10px] font-bold text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition">{i+1}</span>
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-500 group-hover:bg-slate-800 group-hover:text-white transition">{i+1}</span>
                           {l.ref && <p className="mt-1 text-[10px] font-mono text-slate-400">{l.ref}</p>}
                         </div>
-                        {/* Designation — full text, formatted */}
+                        {/* Designation */}
                         <div className="pr-4 min-w-0">
                           {l.designation.trim() ? (
-                            <div className="text-[12.5px] text-slate-700 leading-[1.6]" dangerouslySetInnerHTML={{ __html: renderDesignation(l.designation) }} />
+                            <div className="text-[12.5px] text-slate-700 leading-[1.65]" dangerouslySetInnerHTML={{ __html: renderDesignation(l.designation) }} />
                           ) : (
                             <span className="text-xs text-red-300 italic">Cliquer pour saisir la désignation…</span>
                           )}
-                          {/* Fournisseur + marge badges inline */}
                           {(fournName || (l.pu_achat > 0 && ptVente > 0)) && (
-                            <div className="flex items-center gap-2 mt-1.5">
-                              {fournName && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">{fournName}</span>}
+                            <div className="flex items-center gap-2 mt-2">
+                              {fournName && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">{fournName}</span>}
                               {l.pu_achat > 0 && ptVente > 0 && (
                                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${margePc>=20?'bg-emerald-50 text-emerald-600':margePc>=10?'bg-amber-50 text-amber-600':'bg-red-50 text-red-600'}`}>Marge {pct(margePc)}</span>
                               )}
@@ -1229,30 +1263,30 @@ export default function PurchasePage() {
                           )}
                         </div>
                         {/* Qté */}
-                        <span className="text-right text-sm font-semibold text-slate-700 pt-0.5">{l.qty}</span>
+                        <span className="text-right text-[13px] font-semibold text-slate-700 pt-0.5">{l.qty}</span>
                         {/* PU */}
-                        <span className="text-right text-sm text-slate-600 pt-0.5">{l.pu_vente ? numFmt(l.pu_vente) : '—'}</span>
+                        <span className="text-right text-[13px] text-slate-600 pt-0.5">{l.pu_vente ? numFmt(l.pu_vente) : '—'}</span>
                         {/* PT */}
-                        <span className="text-right text-sm font-bold text-slate-800 pt-0.5">{ptVente > 0 ? numFmt(ptVente) : '—'}</span>
+                        <span className="text-right text-[13px] font-bold text-slate-800 pt-0.5">{ptVente > 0 ? numFmt(ptVente) : '—'}</span>
                       </div>
                     )}
                   </div>
                 )
               })}
             </div>
-            {/* Devis footer - totals */}
-            <div className="border-t-2 border-slate-300 bg-slate-50">
-              <div className="grid grid-cols-[50px_1fr_75px_110px_120px] px-5 py-3">
+            {/* Devis footer */}
+            <div className="border-t-2 border-slate-800 bg-slate-900">
+              <div className="grid grid-cols-[44px_1fr_70px_105px_115px] px-5 py-3.5 items-center">
                 <span></span>
-                <span className="text-sm font-bold text-slate-500">Total HT</span>
+                <span className="text-sm font-bold text-slate-400 uppercase tracking-wide">Total HT</span>
+                <span className="text-right text-xs text-slate-500">{lines.filter(l=>l.designation.trim()).length} art.</span>
                 <span></span>
-                <span></span>
-                <span className="text-right text-sm font-black text-slate-800">{numFmt(totalVente)}</span>
+                <span className="text-right text-base font-black text-white">{numFmt(totalVente)}</span>
               </div>
               {totalAchat > 0 && (
-                <div className="px-5 pb-3 flex justify-end gap-6">
-                  <span className="text-xs text-slate-400">Achat: <strong className="text-slate-600">{numFmt(totalAchat)}</strong></span>
-                  <span className={`text-xs font-bold ${margePctBrute>=10?'text-emerald-600':'text-red-600'}`}>Marge: {mad(margeBrute)} ({pct(margePctBrute)})</span>
+                <div className="px-5 pb-3.5 flex justify-end gap-6 items-center">
+                  <span className="text-xs text-slate-500">Achat: <strong className="text-slate-400">{numFmt(totalAchat)}</strong></span>
+                  <span className={`rounded-full px-3 py-0.5 text-xs font-bold ${margePctBrute>=20?'bg-emerald-500/20 text-emerald-400':margePctBrute>=10?'bg-amber-500/20 text-amber-400':'bg-red-500/20 text-red-400'}`}>Marge {pct(margePctBrute)}</span>
                 </div>
               )}
             </div>
