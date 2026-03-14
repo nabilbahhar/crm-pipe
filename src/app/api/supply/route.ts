@@ -5,29 +5,64 @@ import { requireAuth } from '@/lib/apiAuth'
 export const runtime = 'nodejs'
 
 // GET: Load all supply_orders with full joins (bypasses RLS)
+// NOTE: purchase_info has no FK to opportunities in Supabase schema,
+// so we do two queries and merge manually.
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req)
   if (auth instanceof NextResponse) return auth
 
   try {
-    const { data, error } = await supabaseServer
+    // 1. Load supply_orders with opportunity + account info
+    const { data: orders, error: ordErr } = await supabaseServer
       .from('supply_orders')
       .select(`
         *,
         opportunities (
           id, title, amount, po_number, po_date, bu, vendor,
-          accounts(name),
-          purchase_info(id, frais_engagement, payment_terms, notes, purchase_lines(*))
+          accounts(name)
         )
       `)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (ordErr) throw ordErr
 
     // Filter out any lingering a_commander orders
-    const validOrders = (data || []).filter((o: any) => o.status !== 'a_commander')
+    const validOrders = (orders || []).filter((o: any) => o.status !== 'a_commander')
 
-    return NextResponse.json({ orders: validOrders })
+    if (validOrders.length === 0) {
+      return NextResponse.json({ orders: [] })
+    }
+
+    // 2. Get all opportunity_ids from these orders
+    const oppIds = validOrders
+      .map((o: any) => o.opportunity_id)
+      .filter(Boolean)
+
+    // 3. Load purchase_info + purchase_lines for those opportunities
+    const { data: purchaseData, error: piErr } = await supabaseServer
+      .from('purchase_info')
+      .select('*, purchase_lines(*)')
+      .in('opportunity_id', oppIds)
+
+    if (piErr) throw piErr
+
+    // 4. Build a map: opportunity_id → purchase_info (with lines)
+    const piMap: Record<string, any> = {}
+    for (const pi of purchaseData || []) {
+      piMap[pi.opportunity_id] = pi
+    }
+
+    // 5. Merge purchase_info into each order's opportunities object
+    const merged = validOrders.map((o: any) => {
+      const opp = o.opportunities
+      if (opp) {
+        const pi = piMap[opp.id]
+        opp.purchase_info = pi ? [pi] : []
+      }
+      return o
+    })
+
+    return NextResponse.json({ orders: merged })
   } catch (e: any) {
     console.error('[supply GET]', e)
     return NextResponse.json({ error: e?.message || 'Erreur lecture' }, { status: 500 })
