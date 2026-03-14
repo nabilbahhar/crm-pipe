@@ -10,11 +10,12 @@ import {
   PRESCRIPTION_STATUS_CFG, type PrescriptionStatus,
   PROJECT_SERVICE_STATUS_CFG, type ProjectServiceStatus,
   LINE_STATUS_CFG,
-  ownerName, COMPUCOM_EMAILS,
+  ownerName, COMPUCOM_EMAILS, getDeploySbuEmails,
   hasPrestation,
+  DEPLOY_STATUS_CFG, type DeployStatus, computeDeployStatus,
 } from '@/lib/utils'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
-import { buildKaderEmail } from '@/lib/emailTemplates'
+import { buildKaderEmail, buildDeployEmail } from '@/lib/emailTemplates'
 import {
   RefreshCw, Search, Download, ChevronDown, ChevronUp,
   Plus, Trash2, Mail, X, Copy, Check, ExternalLink,
@@ -187,8 +188,12 @@ export default function ProjectsPage() {
   const [addingService, setAddingService] = useState<string | null>(null)
   const [svcForm, setSvcForm] = useState({ title: '', assigned_to: '', start_date: '', end_date: '', notes: '' })
 
+  // Slide panel for deployment details
+  const [slidePanel, setSlidePanel] = useState<string | null>(null) // opp.id
+  const [slidePanelTab, setSlidePanelTab] = useState<'materiel' | 'prestations'>('materiel')
+
   // Email modal
-  const [emailModal, setEmailModal] = useState<{ html: string; to: string; subject: string } | null>(null)
+  const [emailModal, setEmailModal] = useState<{ html: string; to: string; cc: string; subject: string } | null>(null)
   const [copied, setCopied] = useState(false)
 
   // ─── Load data ───────────────────────────────────────────────
@@ -450,40 +455,77 @@ export default function ProjectsPage() {
     setEmailModal({
       html,
       to: COMPUCOM_EMAILS.kader,
+      cc: '',
       subject: `Prescription - ${opp.title} (${opp.accounts?.name || ''})`,
     })
   }
 
   function openDeploymentEmail(opp: Opportunity) {
     const bus = getBUs(opp)
-    const services = (opp.project_services || [])
-      .filter(s => s.title !== 'Prescription')
-      .map(s => ({
-        title: s.title,
-        assignedTo: s.assigned_to || '--',
-        status: PROJECT_SERVICE_STATUS_CFG[s.status]?.label || s.status,
+    const senderName = userEmail ? ownerName(userEmail) : 'Compucom'
+    const accountName = opp.accounts?.name || opp.title
+
+    // Get PRESTA lines from purchase_info
+    const allLines = opp.purchase_info?.[0]?.purchase_lines || []
+    const prestaLines = allLines.filter(l => (l.ref || '').toUpperCase().includes('PRESTA'))
+
+    // If there are PRESTA lines, use the deploy email template
+    // Otherwise, fall back to Kader deployment email
+    if (prestaLines.length > 0) {
+      const html = buildDeployEmail({
+        dealTitle: opp.title,
+        accountName,
+        amount: opp.amount,
+        poNumber: opp.po_number || '',
+        bus,
+        prestaLines: prestaLines.map(l => ({ ref: l.ref, designation: l.designation, qty: l.qty })),
+        notes: opp.notes || '',
+        senderName,
+      })
+      const nabilEmail = 'n.bahhar@compucom.ma'
+      const salimEmail = 's.chitachny@compucom.ma'
+      const crossCC = userEmail === nabilEmail ? salimEmail : nabilEmail
+      const sbuEmails = getDeploySbuEmails(bus)
+      const deployTo = [COMPUCOM_EMAILS.belabar, COMPUCOM_EMAILS.si_infras].join(', ')
+      const deployCC = [crossCC, ...sbuEmails].join(', ')
+
+      setEmailModal({
+        html,
+        to: deployTo,
+        cc: deployCC,
+        subject: `Suivi projet déploiement — ${opp.title} (${accountName})`,
+      })
+    } else {
+      // Fallback to original Kader email
+      const services = (opp.project_services || [])
+        .filter(s => s.title !== 'Prescription')
+        .map(s => ({
+          title: s.title,
+          assignedTo: s.assigned_to || '--',
+          status: PROJECT_SERVICE_STATUS_CFG[s.status]?.label || s.status,
+        }))
+      const deliveryLines = allLines.map(l => ({
+        designation: l.designation,
+        status: (LINE_STATUS_CFG as any)[l.line_status || 'pending']?.label || l.line_status || 'En attente',
+        eta: l.eta || undefined,
       }))
-    const lines = opp.purchase_info?.[0]?.purchase_lines || []
-    const deliveryLines = lines.map(l => ({
-      designation: l.designation,
-      status: (LINE_STATUS_CFG as any)[l.line_status || 'pending']?.label || l.line_status || 'En attente',
-      eta: l.eta || undefined,
-    }))
-    const html = buildKaderEmail({
-      type: 'deployment',
-      dealTitle: opp.title,
-      accountName: opp.accounts?.name || opp.title,
-      amount: opp.amount,
-      bus,
-      services,
-      deliveryLines,
-      senderName: userEmail ? ownerName(userEmail) : 'Compucom',
-    })
-    setEmailModal({
-      html,
-      to: COMPUCOM_EMAILS.kader,
-      subject: `Suivi projet - ${opp.title} (${opp.accounts?.name || ''})`,
-    })
+      const html = buildKaderEmail({
+        type: 'deployment',
+        dealTitle: opp.title,
+        accountName,
+        amount: opp.amount,
+        bus,
+        services,
+        deliveryLines,
+        senderName,
+      })
+      setEmailModal({
+        html,
+        to: COMPUCOM_EMAILS.kader,
+        cc: '',
+        subject: `Suivi projet - ${opp.title} (${accountName})`,
+      })
+    }
   }
 
   function copyEmailHtml() {
@@ -884,7 +926,7 @@ export default function ProjectsPage() {
               <div className="space-y-5">
 
                 {/* KPI cards */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
                   <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
                     <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
                       <Wrench className="mb-1 inline h-3.5 w-3.5" /> Projets en cours
@@ -893,7 +935,7 @@ export default function ProjectsPage() {
                   </div>
                   <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
                     <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                      <Check className="mb-1 inline h-3.5 w-3.5" /> Projets termines (annee)
+                      <Check className="mb-1 inline h-3.5 w-3.5" /> Termines
                     </div>
                     <div className="mt-1 text-2xl font-black text-emerald-700">{deployKpis.completedCount}</div>
                   </div>
@@ -904,9 +946,19 @@ export default function ProjectsPage() {
                     <div className="mt-1 text-2xl font-black text-slate-900">{fmt(deployKpis.activeAmt)} MAD</div>
                     <div className="mt-0.5 text-[10px] text-slate-400">{mad(deployKpis.activeAmt)}</div>
                   </div>
+                  <div className="rounded-2xl border border-slate-100 bg-white p-4 shadow-sm">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      <Clock className="mb-1 inline h-3.5 w-3.5" /> Taux completion moyen
+                    </div>
+                    <div className="mt-1 text-2xl font-black text-slate-900">
+                      {deploymentDeals.length > 0
+                        ? `${Math.round(deploymentDeals.reduce((s, d) => s + getDeploymentProgress(d), 0) / deploymentDeals.length)}%`
+                        : '0%'}
+                    </div>
+                  </div>
                 </div>
 
-                {/* Project cards */}
+                {/* Deployment table (supply-style) */}
                 {deploymentDeals.length === 0 ? (
                   <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white py-16 text-center">
                     <Wrench className="mb-3 h-10 w-10 text-slate-300" />
@@ -914,258 +966,344 @@ export default function ProjectsPage() {
                     <div className="mt-1 text-xs text-slate-400">Les deals Won avec BU Service apparaissent ici.</div>
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    {deploymentDeals.map(opp => {
-                      const isExpanded = expanded.has(opp.id)
-                      const progress = getDeploymentProgress(opp)
-                      const complete = isProjectComplete(opp)
-                      const bus = getBUs(opp)
-                      const lines = opp.purchase_info?.[0]?.purchase_lines || []
-                      const services = (opp.project_services || []).filter(s => s.title !== 'Prescription')
+                  <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[900px] text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold text-slate-400">
+                            <th className="px-4 py-2.5 text-left w-[25%]">Compte / Deal</th>
+                            <th className="px-4 py-2.5 text-center w-[8%]">BU</th>
+                            <th className="px-4 py-2.5 text-right w-[12%]">Montant</th>
+                            <th className="px-4 py-2.5 text-center w-[20%]">Progression</th>
+                            <th className="px-4 py-2.5 text-center w-[10%]">Statut</th>
+                            <th className="px-4 py-2.5 text-center w-[10%]">Lignes</th>
+                            <th className="px-4 py-2.5 text-center w-[15%]">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {deploymentDeals.map(opp => {
+                            const progress = getDeploymentProgress(opp)
+                            const complete = isProjectComplete(opp)
+                            const bus = getBUs(opp)
+                            const lines = opp.purchase_info?.[0]?.purchase_lines || []
+                            const services = (opp.project_services || []).filter(s => s.title !== 'Prescription')
+                            const deployStatus = computeDeployStatus(services)
+                            const dCfg = DEPLOY_STATUS_CFG[deployStatus]
 
-                      return (
-                        <div key={opp.id} className={`rounded-2xl border bg-white overflow-hidden shadow-sm transition-all
-                          ${complete ? 'border-emerald-200' : 'border-slate-100'}`}>
-
-                          {/* ── Card Header ── */}
-                          <button onClick={() => toggleExpand(opp.id)}
-                            className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-slate-50/50 transition-colors">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Link href={`/opportunities/${opp.id}`}
-                                  onClick={e => e.stopPropagation()}
-                                  className="font-bold text-slate-900 hover:text-blue-600 transition-colors truncate">
-                                  {opp.title}
-                                </Link>
-                                <span className="text-xs text-slate-400">|</span>
-                                <span className="text-xs text-slate-500 truncate">{opp.accounts?.name || '--'}</span>
-                                <span className="text-xs text-slate-400">|</span>
-                                <span className="text-xs font-bold text-slate-700 tabular-nums">{mad(opp.amount)}</span>
-                              </div>
-                              <div className="mt-2 flex items-center gap-3 flex-wrap">
-                                <BUBadges bus={bus} />
-                                {/* Progress bar */}
-                                <div className="flex items-center gap-2">
-                                  <div className="h-1.5 w-24 rounded-full bg-slate-100 overflow-hidden">
-                                    <div className={`h-full rounded-full transition-all duration-500
-                                      ${complete ? 'bg-emerald-500' : progress >= 50 ? 'bg-blue-500' : 'bg-amber-400'}`}
-                                      style={{ width: `${progress}%` }} />
-                                  </div>
-                                  <span className={`text-[10px] font-bold tabular-nums
-                                    ${complete ? 'text-emerald-600' : 'text-slate-500'}`}>
-                                    {progress}%
-                                  </span>
-                                </div>
-                                {complete && (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                                    <Check className="h-2.5 w-2.5" /> Termine
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                            {isExpanded
-                              ? <ChevronUp className="h-5 w-5 text-slate-400 shrink-0" />
-                              : <ChevronDown className="h-5 w-5 text-slate-400 shrink-0" />
-                            }
-                          </button>
-
-                          {/* ── Card Body ── */}
-                          {isExpanded && (
-                            <div className="border-t border-slate-100 px-5 py-4 space-y-5">
-
-                              {/* Section 1: Lignes materiel */}
-                              <div>
-                                <div className="flex items-center gap-2 mb-3">
-                                  <Package className="h-4 w-4 text-slate-500" />
-                                  <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                                    Lignes materiel ({lines.length})
-                                  </span>
-                                </div>
-                                {lines.length === 0 ? (
-                                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center text-xs text-slate-400">
-                                    Aucune ligne materiel (fiche achat vide)
-                                  </div>
-                                ) : (
-                                  <div className="overflow-x-auto rounded-xl border border-slate-100">
-                                    <table className="w-full min-w-[600px] text-xs">
-                                      <thead>
-                                        <tr className="bg-slate-50/80 text-[10px] font-semibold text-slate-400 uppercase">
-                                          <th className="px-3 py-2 text-left">Designation</th>
-                                          <th className="px-3 py-2 text-left">Fournisseur</th>
-                                          <th className="px-3 py-2 text-center">Statut</th>
-                                          <th className="px-3 py-2 text-center">ETA</th>
-                                          <th className="px-3 py-2 text-center">Garantie</th>
-                                          <th className="px-3 py-2 text-center">Licence</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-slate-50">
-                                        {lines.map(l => {
-                                          const statusKey = (l.line_status || 'pending') as keyof typeof LINE_STATUS_CFG
-                                          const lineCfg = LINE_STATUS_CFG[statusKey] || LINE_STATUS_CFG.pending
-                                          return (
-                                            <tr key={l.id} className="hover:bg-slate-50/50">
-                                              <td className="px-3 py-2 text-slate-700">{l.designation || '--'}</td>
-                                              <td className="px-3 py-2 text-slate-500">{l.fournisseur || '--'}</td>
-                                              <td className="px-3 py-2 text-center">
-                                                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${lineCfg.bg} ${lineCfg.color}`}>
-                                                  {lineCfg.icon} {lineCfg.label}
-                                                </span>
-                                              </td>
-                                              <td className="px-3 py-2 text-center text-slate-500">
-                                                {l.eta ? fmtDate(l.eta) : '--'}
-                                              </td>
-                                              <td className="px-3 py-2 text-center text-slate-500">
-                                                {l.warranty_months ? `${l.warranty_months} mois` : '--'}
-                                              </td>
-                                              <td className="px-3 py-2 text-center text-slate-500">
-                                                {l.license_months ? `${l.license_months} mois` : '--'}
-                                              </td>
-                                            </tr>
-                                          )
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Section 2: Prestations */}
-                              <div>
-                                <div className="flex items-center justify-between mb-3">
+                            return (
+                              <tr key={opp.id}
+                                onClick={() => { setSlidePanel(opp.id); setSlidePanelTab('materiel') }}
+                                className={`hover:bg-slate-50/60 transition-colors cursor-pointer
+                                  ${complete ? 'bg-emerald-50/30' : ''}`}>
+                                {/* Compte / Deal */}
+                                <td className="px-4 py-3">
+                                  <div className="font-bold text-slate-900 truncate">{opp.title}</div>
+                                  <div className="text-[11px] text-slate-400 truncate">{opp.accounts?.name || '--'}</div>
+                                </td>
+                                {/* BU */}
+                                <td className="px-4 py-3 text-center">
+                                  <BUBadges bus={bus} />
+                                </td>
+                                {/* Montant */}
+                                <td className="px-4 py-3 text-right font-semibold text-slate-900 tabular-nums">
+                                  {mad(opp.amount)}
+                                </td>
+                                {/* Progression */}
+                                <td className="px-4 py-3">
                                   <div className="flex items-center gap-2">
-                                    <Wrench className="h-4 w-4 text-slate-500" />
-                                    <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                                      Prestations ({services.length})
+                                    <div className="h-1.5 flex-1 rounded-full bg-slate-100 overflow-hidden">
+                                      <div className={`h-full rounded-full transition-all duration-500
+                                        ${complete ? 'bg-emerald-500' : progress >= 50 ? 'bg-blue-500' : 'bg-amber-400'}`}
+                                        style={{ width: `${progress}%` }} />
+                                    </div>
+                                    <span className={`text-[10px] font-bold tabular-nums w-8 text-right
+                                      ${complete ? 'text-emerald-600' : 'text-slate-500'}`}>
+                                      {progress}%
                                     </span>
                                   </div>
-                                  <button onClick={() => {
-                                    setAddingService(addingService === opp.id ? null : opp.id)
-                                    setSvcForm({ title: '', assigned_to: '', start_date: '', end_date: '', notes: '' })
-                                  }}
-                                    className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-colors">
-                                    <Plus className="h-3 w-3" /> Ajouter
-                                  </button>
-                                </div>
-
-                                {/* Add service form */}
-                                {addingService === opp.id && (
-                                  <div className="mb-3 rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-2">
-                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                                      <input value={svcForm.title}
-                                        onChange={e => setSvcForm({ ...svcForm, title: e.target.value })}
-                                        placeholder="Titre *"
-                                        className="col-span-2 h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
-                                      <input value={svcForm.assigned_to}
-                                        onChange={e => setSvcForm({ ...svcForm, assigned_to: e.target.value })}
-                                        placeholder="Ingenieur"
-                                        className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
-                                      <div />
-                                      <input type="date" value={svcForm.start_date}
-                                        onChange={e => setSvcForm({ ...svcForm, start_date: e.target.value })}
-                                        className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
-                                      <input type="date" value={svcForm.end_date}
-                                        onChange={e => setSvcForm({ ...svcForm, end_date: e.target.value })}
-                                        className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
-                                      <input value={svcForm.notes}
-                                        onChange={e => setSvcForm({ ...svcForm, notes: e.target.value })}
-                                        placeholder="Notes..."
-                                        className="col-span-2 h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
-                                    </div>
-                                    <div className="flex gap-2">
-                                      <button onClick={() => addService(opp.id)}
-                                        disabled={!svcForm.title.trim()}
-                                        className="h-7 rounded-lg bg-slate-900 px-3 text-[10px] font-bold text-white disabled:opacity-40 hover:bg-slate-800 transition-colors">
-                                        Enregistrer
-                                      </button>
-                                      <button onClick={() => setAddingService(null)}
-                                        className="h-7 rounded-lg border border-slate-200 px-3 text-[10px] text-slate-500 hover:bg-slate-50 transition-colors">
-                                        Annuler
-                                      </button>
-                                    </div>
+                                </td>
+                                {/* Statut */}
+                                <td className="px-4 py-3 text-center">
+                                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${dCfg.bg} ${dCfg.color}`}>
+                                    {dCfg.icon} {dCfg.label}
+                                  </span>
+                                </td>
+                                {/* Lignes */}
+                                <td className="px-4 py-3 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <span className="text-[10px] text-slate-500" title="Materiel">
+                                      <Package className="inline h-3 w-3 mr-0.5" />{lines.length}
+                                    </span>
+                                    <span className="text-slate-200">|</span>
+                                    <span className="text-[10px] text-slate-500" title="Prestations">
+                                      <Wrench className="inline h-3 w-3 mr-0.5" />{services.length}
+                                    </span>
                                   </div>
-                                )}
-
-                                {services.length === 0 && addingService !== opp.id ? (
-                                  <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center text-xs text-slate-400">
-                                    Aucune prestation. Cliquez sur &quot;Ajouter&quot; pour en creer une.
+                                </td>
+                                {/* Actions */}
+                                <td className="px-4 py-3 text-center" onClick={e => e.stopPropagation()}>
+                                  <div className="flex items-center justify-center gap-1">
+                                    <button onClick={() => openDeploymentEmail(opp)}
+                                      title="Email Deploy"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-colors">
+                                      <Mail className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button onClick={() => exportExcel(opp)} disabled={exporting}
+                                      title="Excel"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-emerald-600 hover:border-emerald-200 hover:bg-emerald-50 transition-colors disabled:opacity-40">
+                                      <Download className="h-3.5 w-3.5" />
+                                    </button>
+                                    <Link href={`/opportunities/${opp.id}`}
+                                      title="Voir le deal"
+                                      className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-blue-600 hover:border-blue-200 hover:bg-blue-50 transition-colors">
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                    </Link>
                                   </div>
-                                ) : services.length > 0 && (
-                                  <div className="overflow-x-auto rounded-xl border border-slate-100">
-                                    <table className="w-full min-w-[600px] text-xs">
-                                      <thead>
-                                        <tr className="bg-slate-50/80 text-[10px] font-semibold text-slate-400 uppercase">
-                                          <th className="px-3 py-2 text-left">Titre</th>
-                                          <th className="px-3 py-2 text-left">Ingenieur</th>
-                                          <th className="px-3 py-2 text-center">Statut</th>
-                                          <th className="px-3 py-2 text-center">Debut</th>
-                                          <th className="px-3 py-2 text-center">Fin</th>
-                                          <th className="px-3 py-2 text-left">Notes</th>
-                                          <th className="px-3 py-2 text-center w-10"></th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="divide-y divide-slate-50">
-                                        {services.map(svc => {
-                                          const sCfg = PROJECT_SERVICE_STATUS_CFG[svc.status] || PROJECT_SERVICE_STATUS_CFG.planifie
-                                          return (
-                                            <tr key={svc.id} className="hover:bg-slate-50/50">
-                                              <td className="px-3 py-2 font-semibold text-slate-700">{svc.title}</td>
-                                              <td className="px-3 py-2 text-slate-500">{svc.assigned_to || '--'}</td>
-                                              <td className="px-3 py-2 text-center">
-                                                <select
-                                                  value={svc.status}
-                                                  onChange={e => updateServiceStatus(svc.id, e.target.value as ProjectServiceStatus, opp.id)}
-                                                  className={`rounded-full px-2 py-0.5 text-[10px] font-bold border-0 outline-none cursor-pointer ${sCfg.bg} ${sCfg.color}`}>
-                                                  {SERVICE_STATUS_ORDER.map(s => (
-                                                    <option key={s} value={s}>{PROJECT_SERVICE_STATUS_CFG[s].label}</option>
-                                                  ))}
-                                                </select>
-                                              </td>
-                                              <td className="px-3 py-2 text-center text-slate-500">
-                                                {svc.start_date ? fmtDate(svc.start_date) : '--'}
-                                              </td>
-                                              <td className="px-3 py-2 text-center text-slate-500">
-                                                {svc.end_date ? fmtDate(svc.end_date) : '--'}
-                                              </td>
-                                              <td className="px-3 py-2 text-slate-400 max-w-[150px] truncate">
-                                                {svc.notes || '--'}
-                                              </td>
-                                              <td className="px-3 py-2 text-center">
-                                                <button onClick={() => deleteService(svc.id, opp.id)}
-                                                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
-                                                  <Trash2 className="h-3 w-3" />
-                                                </button>
-                                              </td>
-                                            </tr>
-                                          )
-                                        })}
-                                      </tbody>
-                                    </table>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Actions bar */}
-                              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                                <button onClick={() => openDeploymentEmail(opp)}
-                                  className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-violet-50 hover:text-violet-700 hover:border-violet-200 transition-colors">
-                                  <Mail className="h-3.5 w-3.5" /> Email Kader
-                                </button>
-                                <button onClick={() => exportExcel(opp)} disabled={exporting}
-                                  className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40">
-                                  <Download className="h-3.5 w-3.5" /> Excel
-                                </button>
-                                <Link href={`/opportunities/${opp.id}`}
-                                  className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors">
-                                  <ExternalLink className="h-3.5 w-3.5" /> Voir le deal
-                                </Link>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
+
+                {/* ── Slide Panel (deploy detail) ── */}
+                {slidePanel && (() => {
+                  const opp = deploymentDeals.find(d => d.id === slidePanel)
+                  if (!opp) return null
+                  const lines = opp.purchase_info?.[0]?.purchase_lines || []
+                  const services = (opp.project_services || []).filter(s => s.title !== 'Prescription')
+                  const progress = getDeploymentProgress(opp)
+                  const complete = isProjectComplete(opp)
+                  const deployStatus = computeDeployStatus(services)
+                  const dCfg = DEPLOY_STATUS_CFG[deployStatus]
+
+                  return (
+                    <div className="fixed inset-0 z-[200] flex justify-end" role="presentation">
+                      {/* Backdrop */}
+                      <div className="absolute inset-0 bg-black/30" onClick={() => setSlidePanel(null)} />
+                      {/* Panel */}
+                      <div className="relative w-full max-w-[680px] bg-white shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
+                        {/* Panel header */}
+                        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <h2 className="text-base font-bold text-slate-900 truncate">{opp.title}</h2>
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${dCfg.bg} ${dCfg.color}`}>
+                                {dCfg.icon} {dCfg.label}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              {opp.accounts?.name || '--'} · {mad(opp.amount)} · {progress}% complete
+                            </p>
+                          </div>
+                          <button onClick={() => setSlidePanel(null)}
+                            className="h-8 w-8 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-colors">
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        {/* Progress bar */}
+                        <div className="px-6 pt-3 pb-2">
+                          <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
+                            <div className={`h-full rounded-full transition-all duration-700
+                              ${complete ? 'bg-emerald-500' : progress >= 50 ? 'bg-blue-500' : 'bg-amber-400'}`}
+                              style={{ width: `${progress}%` }} />
+                          </div>
+                        </div>
+
+                        {/* Tabs */}
+                        <div className="flex border-b border-slate-100 px-6">
+                          {([
+                            { key: 'materiel' as const, label: `Materiel (${lines.length})`, icon: <Package className="h-3.5 w-3.5" /> },
+                            { key: 'prestations' as const, label: `Prestations (${services.length})`, icon: <Wrench className="h-3.5 w-3.5" /> },
+                          ]).map(t => (
+                            <button key={t.key} onClick={() => setSlidePanelTab(t.key)}
+                              className={`relative flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-colors
+                                ${slidePanelTab === t.key ? 'text-slate-900' : 'text-slate-400 hover:text-slate-600'}`}>
+                              {t.icon} {t.label}
+                              {slidePanelTab === t.key && (
+                                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-900 rounded-t" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Panel body */}
+                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                          {/* Materiel tab */}
+                          {slidePanelTab === 'materiel' && (
+                            <>
+                              {lines.length === 0 ? (
+                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs text-slate-400">
+                                  Aucune ligne materiel
+                                </div>
+                              ) : (
+                                <div className="overflow-x-auto rounded-xl border border-slate-100">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="bg-slate-50/80 text-[10px] font-semibold text-slate-400 uppercase">
+                                        <th className="px-3 py-2 text-left">Designation</th>
+                                        <th className="px-3 py-2 text-left">Fournisseur</th>
+                                        <th className="px-3 py-2 text-center">Statut</th>
+                                        <th className="px-3 py-2 text-center">ETA</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                      {lines.map(l => {
+                                        const statusKey = (l.line_status || 'pending') as keyof typeof LINE_STATUS_CFG
+                                        const lineCfg = LINE_STATUS_CFG[statusKey] || LINE_STATUS_CFG.pending
+                                        return (
+                                          <tr key={l.id} className="hover:bg-slate-50/50">
+                                            <td className="px-3 py-2 text-slate-700 max-w-[200px] truncate">{l.designation || '--'}</td>
+                                            <td className="px-3 py-2 text-slate-500">{l.fournisseur || '--'}</td>
+                                            <td className="px-3 py-2 text-center">
+                                              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${lineCfg.bg} ${lineCfg.color}`}>
+                                                {lineCfg.icon} {lineCfg.label}
+                                              </span>
+                                            </td>
+                                            <td className="px-3 py-2 text-center text-slate-500">
+                                              {l.eta ? fmtDate(l.eta) : '--'}
+                                            </td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {/* Prestations tab */}
+                          {slidePanelTab === 'prestations' && (
+                            <>
+                              {/* Add service button */}
+                              <div className="flex justify-end">
+                                <button onClick={() => {
+                                  setAddingService(addingService === opp.id ? null : opp.id)
+                                  setSvcForm({ title: '', assigned_to: '', start_date: '', end_date: '', notes: '' })
+                                }}
+                                  className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-[10px] font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                                  <Plus className="h-3 w-3" /> Ajouter prestation
+                                </button>
+                              </div>
+
+                              {/* Add service form */}
+                              {addingService === opp.id && (
+                                <div className="rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-2">
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <input value={svcForm.title}
+                                      onChange={e => setSvcForm({ ...svcForm, title: e.target.value })}
+                                      placeholder="Titre *"
+                                      className="col-span-2 h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                    <input value={svcForm.assigned_to}
+                                      onChange={e => setSvcForm({ ...svcForm, assigned_to: e.target.value })}
+                                      placeholder="Ingenieur"
+                                      className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                    <input value={svcForm.notes}
+                                      onChange={e => setSvcForm({ ...svcForm, notes: e.target.value })}
+                                      placeholder="Notes..."
+                                      className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                    <input type="date" value={svcForm.start_date}
+                                      onChange={e => setSvcForm({ ...svcForm, start_date: e.target.value })}
+                                      className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                    <input type="date" value={svcForm.end_date}
+                                      onChange={e => setSvcForm({ ...svcForm, end_date: e.target.value })}
+                                      className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                  </div>
+                                  <div className="flex gap-2">
+                                    <button onClick={() => addService(opp.id)}
+                                      disabled={!svcForm.title.trim()}
+                                      className="h-7 rounded-lg bg-slate-900 px-3 text-[10px] font-bold text-white disabled:opacity-40 hover:bg-slate-800 transition-colors">
+                                      Enregistrer
+                                    </button>
+                                    <button onClick={() => setAddingService(null)}
+                                      className="h-7 rounded-lg border border-slate-200 px-3 text-[10px] text-slate-500 hover:bg-slate-50 transition-colors">
+                                      Annuler
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {services.length === 0 && addingService !== opp.id ? (
+                                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center text-xs text-slate-400">
+                                  Aucune prestation. Cliquez sur &quot;Ajouter&quot; pour en creer une.
+                                </div>
+                              ) : services.length > 0 && (
+                                <div className="overflow-x-auto rounded-xl border border-slate-100">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="bg-slate-50/80 text-[10px] font-semibold text-slate-400 uppercase">
+                                        <th className="px-3 py-2 text-left">Titre</th>
+                                        <th className="px-3 py-2 text-left">Ingenieur</th>
+                                        <th className="px-3 py-2 text-center">Statut</th>
+                                        <th className="px-3 py-2 text-center">Debut</th>
+                                        <th className="px-3 py-2 text-center">Fin</th>
+                                        <th className="px-3 py-2 text-center w-10"></th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                      {services.map(svc => {
+                                        const sCfg = PROJECT_SERVICE_STATUS_CFG[svc.status] || PROJECT_SERVICE_STATUS_CFG.planifie
+                                        return (
+                                          <tr key={svc.id} className="hover:bg-slate-50/50">
+                                            <td className="px-3 py-2 font-semibold text-slate-700">{svc.title}</td>
+                                            <td className="px-3 py-2 text-slate-500">{svc.assigned_to || '--'}</td>
+                                            <td className="px-3 py-2 text-center">
+                                              <select
+                                                value={svc.status}
+                                                onChange={e => updateServiceStatus(svc.id, e.target.value as ProjectServiceStatus, opp.id)}
+                                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold border-0 outline-none cursor-pointer ${sCfg.bg} ${sCfg.color}`}>
+                                                {SERVICE_STATUS_ORDER.map(s => (
+                                                  <option key={s} value={s}>{PROJECT_SERVICE_STATUS_CFG[s].label}</option>
+                                                ))}
+                                              </select>
+                                            </td>
+                                            <td className="px-3 py-2 text-center text-slate-500">
+                                              {svc.start_date ? fmtDate(svc.start_date) : '--'}
+                                            </td>
+                                            <td className="px-3 py-2 text-center text-slate-500">
+                                              {svc.end_date ? fmtDate(svc.end_date) : '--'}
+                                            </td>
+                                            <td className="px-3 py-2 text-center">
+                                              <button onClick={() => deleteService(svc.id, opp.id)}
+                                                className="inline-flex h-6 w-6 items-center justify-center rounded-md text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors">
+                                                <Trash2 className="h-3 w-3" />
+                                              </button>
+                                            </td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {/* Panel footer */}
+                        <div className="flex items-center gap-2 border-t border-slate-100 px-6 py-3">
+                          <button onClick={() => openDeploymentEmail(opp)}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors">
+                            <Mail className="h-3.5 w-3.5" /> Email Deploy
+                          </button>
+                          <button onClick={() => exportExcel(opp)} disabled={exporting}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40">
+                            <Download className="h-3.5 w-3.5" /> Excel
+                          </button>
+                          <Link href={`/opportunities/${opp.id}`}
+                            className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors">
+                            <ExternalLink className="h-3.5 w-3.5" /> Voir le deal
+                          </Link>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )}
           </>
@@ -1193,7 +1331,7 @@ export default function ProjectsPage() {
                   {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
                   {copied ? 'Copie !' : 'Copier HTML'}
                 </button>
-                <a href={`mailto:${emailModal.to}?subject=${encodeURIComponent(emailModal.subject)}`}
+                <a href={`mailto:${emailModal.to}?${emailModal.cc ? `cc=${encodeURIComponent(emailModal.cc)}&` : ''}subject=${encodeURIComponent(emailModal.subject)}`}
                   className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-slate-900 px-3 text-xs font-bold text-white hover:bg-slate-800 transition-colors">
                   <Mail className="h-3.5 w-3.5" /> Ouvrir mail
                 </a>

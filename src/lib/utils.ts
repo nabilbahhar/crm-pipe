@@ -303,6 +303,29 @@ export const PROJECT_SERVICE_STATUS_CFG: Record<ProjectServiceStatus, {
   bloque:   { label: 'Bloqué',    icon: '🚫', color: 'text-red-600',     bg: 'bg-red-50',     dot: 'bg-red-500'     },
 }
 
+// ─── Deploy project status (global per deal) ────────────────────────────────
+
+export type DeployStatus = 'planifie' | 'en_cours' | 'deploye' | 'pv_signe'
+
+export const DEPLOY_STATUS_CFG: Record<DeployStatus, {
+  label: string; icon: string; color: string; bg: string; dot: string
+}> = {
+  planifie:  { label: 'Planifié',   icon: '📅', color: 'text-slate-600',   bg: 'bg-slate-50',   dot: 'bg-slate-400'   },
+  en_cours:  { label: 'En cours',   icon: '🔧', color: 'text-blue-700',    bg: 'bg-blue-50',    dot: 'bg-blue-500'    },
+  deploye:   { label: 'Déployé',    icon: '🚀', color: 'text-emerald-700', bg: 'bg-emerald-50', dot: 'bg-emerald-500' },
+  pv_signe:  { label: 'PV signé',   icon: '✅', color: 'text-green-700',   bg: 'bg-green-50',   dot: 'bg-green-600'   },
+}
+
+/** Compute global deploy status from services */
+export function computeDeployStatus(services: Array<{ status: string }>): DeployStatus {
+  if (services.length === 0) return 'planifie'
+  const allDone = services.every(s => s.status === 'termine')
+  const anyInProgress = services.some(s => s.status === 'en_cours')
+  if (allDone) return 'deploye'
+  if (anyInProgress) return 'en_cours'
+  return 'planifie'
+}
+
 // ─── Support / Ticket status ────────────────────────────────────────────────
 
 export type TicketStatus = 'ouvert' | 'en_cours' | 'resolu' | 'ferme'
@@ -397,7 +420,26 @@ export const COMPUCOM_EMAILS = {
   achraf: 'a.lahkim@compucom.ma',
   mernassi: 'a.marnassi@compucom.ma',
   samira: 's.samrani@compucom.ma',
+  belabar: 'A.Belabar@compucom.ma',
+  si_infras: 'si-infras@compucom.ma',
+  sbu_storage: 'SBU-STORAGE@compucom.ma',
+  sbu_hci: 'SBU-HCI@compucom.ma',
+  sbu_network: 'SBU-SYS-NETWORK@compucom.ma',
+  cyber: 'Cyber@compucom.ma',
 } as const
+
+/** Resolve SBU deploy emails based on deal BUs */
+export function getDeploySbuEmails(bus: string[]): string[] {
+  const emails: string[] = []
+  for (const bu of bus) {
+    const u = bu.toUpperCase()
+    if (u.includes('STORAGE')) emails.push(COMPUCOM_EMAILS.sbu_storage)
+    else if (u.includes('HCI')) emails.push(COMPUCOM_EMAILS.sbu_hci)
+    else if (u.includes('NETWORK') || u.includes('SYS')) emails.push(COMPUCOM_EMAILS.sbu_network)
+    else if (u.includes('CYBER')) emails.push(COMPUCOM_EMAILS.cyber)
+  }
+  return [...new Set(emails)]
+}
 
 // ─── AE check (not Inside) ─────────────────────────────────────────────────
 

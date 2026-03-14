@@ -7,8 +7,11 @@ import { logActivity } from '@/lib/logActivity'
 import {
   ArrowLeft, Upload, Loader2, Plus, Trash2, Save, Download,
   FileText, AlertCircle, CheckCircle2, AlertTriangle,
-  ShieldCheck, X, RefreshCw, Package,
+  ShieldCheck, X, RefreshCw, Package, Mail, ExternalLink,
 } from 'lucide-react'
+import { COMPUCOM_EMAILS, getDeploySbuEmails, ownerName } from '@/lib/utils'
+import { buildSupplyEmail } from '@/lib/emailTemplates'
+import { buildDeployEmail } from '@/lib/emailTemplates'
 
 // ─── Types ────────────────────────────────────────────────────
 type Deal = {
@@ -170,6 +173,12 @@ export default function PurchasePage() {
   const [newFourn, setNewFourn] = useState({ name:'', contact:'', email:'', tel:'' })
   const [addingFourn, setAddingFourn] = useState(false)
   const [fournErr, setFournErr] = useState<string | null>(null)
+
+  // Email modals after placing order
+  type EmailModalData = { html: string; to: string; cc: string; subject: string }
+  const [supplyEmailModal, setSupplyEmailModal] = useState<EmailModalData | null>(null)
+  const [deployEmailModal, setDeployEmailModal] = useState<EmailModalData | null>(null)
+  const [showEmailScreen, setShowEmailScreen] = useState(false)
 
   const bcRef    = useRef<HTMLInputElement>(null!)
   const devisRef = useRef<HTMLInputElement>(null!)
@@ -465,6 +474,86 @@ export default function PurchasePage() {
           : `Fiche achat · ${validLines.length} ligne(s) · Marge ${margePctNette.toFixed(1)}% · Commande placée`,
       })
       clearDraft(id)
+
+      // ── After placing order: generate email(s) ──
+      if (!partial && deal) {
+        const senderName = userEmail ? ownerName(userEmail) : 'Compucom'
+        const accountName = deal.accounts?.name || deal.title
+
+        // Detect PRESTA lines
+        const prestaLines = validLines.filter(l => l.ref.toUpperCase().includes('PRESTA'))
+        const hasPresta = prestaLines.length > 0
+
+        // 1. Supply email (always)
+        const supplyHtml = buildSupplyEmail({
+          dealTitle: deal.title,
+          accountName,
+          poNumber: deal.po_number || '',
+          amount: deal.amount,
+          paymentTerms: paymentTemplate ? PAYMENT_TEMPLATES[paymentTemplate]?.label : null,
+          lines: validLines.map(l => ({
+            ref: l.ref, designation: l.designation, qty: l.qty,
+            pu_achat: l.pu_achat,
+            fournisseur: l.fournisseur || fourns.find(f => f.id === l.fournisseur_id)?.name || '',
+            contact: l.contact_fournisseur || '', email: l.email_fournisseur || '', tel: l.tel_fournisseur || '',
+          })),
+          frais, notes, senderName,
+        })
+
+        // Cross CC: if sender is Nabil → CC Salim, and vice versa
+        const nabilEmail = 'n.bahhar@compucom.ma'
+        const salimEmail = 's.chitachny@compucom.ma'
+        const crossCC = userEmail === nabilEmail ? salimEmail : nabilEmail
+
+        setSupplyEmailModal({
+          html: supplyHtml,
+          to: COMPUCOM_EMAILS.supply,
+          cc: crossCC,
+          subject: `Demande de commande — ${deal.title} (${accountName})`,
+        })
+
+        // 2. Deploy email (only if PRESTA lines exist)
+        if (hasPresta) {
+          const bus = deal.bu ? [deal.bu] : []
+          const sbuEmails = getDeploySbuEmails(bus)
+          const deployTo = [COMPUCOM_EMAILS.belabar, COMPUCOM_EMAILS.si_infras].join(', ')
+          const deployCC = [crossCC, ...sbuEmails].join(', ')
+
+          const deployHtml = buildDeployEmail({
+            dealTitle: deal.title,
+            accountName,
+            amount: deal.amount,
+            poNumber: deal.po_number || '',
+            bus,
+            prestaLines: prestaLines.map(l => ({ ref: l.ref, designation: l.designation, qty: l.qty })),
+            notes, senderName,
+          })
+
+          setDeployEmailModal({
+            html: deployHtml,
+            to: deployTo,
+            cc: deployCC,
+            subject: `Nouveau projet déploiement — ${deal.title} (${accountName})`,
+          })
+
+          // Auto-create project_services for PRESTA lines
+          try {
+            for (let i = 0; i < prestaLines.length; i++) {
+              await supabase.from('project_services').insert({
+                opportunity_id: id,
+                title: prestaLines[i].designation || `Prestation ${i + 1}`,
+                status: 'planifie',
+                sort_order: i,
+              })
+            }
+          } catch { /* silent — services are optional */ }
+        }
+
+        setShowEmailScreen(true)
+        setSuccess(true)
+        return
+      }
+
       setSuccess(true)
       setTimeout(() => router.push(`/opportunities/${id}`), 1300)
     } catch (e: any) { setErr(e?.message || 'Erreur sauvegarde')
@@ -1614,6 +1703,81 @@ export default function PurchasePage() {
               <button onClick={addFournisseur} disabled={addingFourn || !newFourn.name.trim() || !newFourn.contact.trim() || !newFourn.email.trim() || !newFourn.tel.trim()}
                 className="flex-1 h-10 rounded-xl bg-slate-900 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-60 transition">
                 {addingFourn ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : 'Créer le fournisseur'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Email screen after placing order ── */}
+      {showEmailScreen && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/50 p-4 overflow-y-auto">
+          <div className="w-full max-w-3xl space-y-5 py-8">
+            {/* Header */}
+            <div className="text-center">
+              <div className="inline-flex items-center gap-2 rounded-full bg-emerald-100 px-4 py-2 text-sm font-bold text-emerald-800">
+                <CheckCircle2 className="h-5 w-5" /> Commande placée avec succès
+              </div>
+              <p className="mt-2 text-sm text-white/80">
+                {deployEmailModal ? '2 emails à envoyer — Supply Chain + Équipe Déploiement' : '1 email à envoyer — Supply Chain'}
+              </p>
+            </div>
+
+            {/* Supply email card */}
+            {supplyEmailModal && (
+              <div className="rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">📦 Email Supply Chain</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      À : {supplyEmailModal.to} · CC : {supplyEmailModal.cc}
+                    </p>
+                  </div>
+                  <a
+                    href={`mailto:${supplyEmailModal.to}?cc=${encodeURIComponent(supplyEmailModal.cc)}&subject=${encodeURIComponent(supplyEmailModal.subject)}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-xs font-bold text-white hover:bg-slate-800 transition"
+                  >
+                    <Mail className="h-3.5 w-3.5" /> Ouvrir dans Outlook
+                  </a>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto">
+                  <iframe srcDoc={supplyEmailModal.html} className="w-full h-[280px] border-0" title="Supply email preview" />
+                </div>
+              </div>
+            )}
+
+            {/* Deploy email card (only if PRESTA) */}
+            {deployEmailModal && (
+              <div className="rounded-2xl border border-blue-200 bg-white shadow-xl overflow-hidden">
+                <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-6 py-4">
+                  <div>
+                    <h3 className="text-sm font-bold text-blue-900">🚀 Email Équipe Déploiement</h3>
+                    <p className="text-xs text-blue-600 mt-0.5">
+                      À : {deployEmailModal.to} · CC : {deployEmailModal.cc}
+                    </p>
+                  </div>
+                  <a
+                    href={`mailto:${deployEmailModal.to}?cc=${encodeURIComponent(deployEmailModal.cc)}&subject=${encodeURIComponent(deployEmailModal.subject)}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg bg-blue-700 px-4 py-2 text-xs font-bold text-white hover:bg-blue-800 transition"
+                  >
+                    <Mail className="h-3.5 w-3.5" /> Ouvrir dans Outlook
+                  </a>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto">
+                  <iframe srcDoc={deployEmailModal.html} className="w-full h-[280px] border-0" title="Deploy email preview" />
+                </div>
+              </div>
+            )}
+
+            {/* Back to deal button */}
+            <div className="text-center">
+              <button
+                onClick={() => router.push(`/opportunities/${id}`)}
+                className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-3 text-sm font-bold text-slate-700 shadow-lg hover:bg-slate-50 transition"
+              >
+                <ExternalLink className="h-4 w-4" /> Retour au deal
               </button>
             </div>
           </div>

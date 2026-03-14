@@ -173,6 +173,49 @@ export function buildKaderEmail(data: KaderEmailData): string {
   </body></html>`
 }
 
+// ─── Deploy project email (for deploy team) ─────────────────────────────────
+
+type DeployEmailData = {
+  dealTitle: string
+  accountName: string
+  amount: number
+  poNumber: string
+  bus: string[]
+  prestaLines: Array<{ ref: string; designation: string; qty: number }>
+  notes: string
+  senderName: string
+}
+
+export function buildDeployEmail(data: DeployEmailData): string {
+  const numFmt = (n: number) => n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseStyle}</head><body>
+    <div class="header">
+      <h2>🚀 Nouveau projet déploiement — ${esc(data.dealTitle)}</h2>
+      <div class="sub">Client : ${esc(data.accountName)} · BC : ${esc(data.poNumber)} · ${new Date().toLocaleDateString('fr-MA')}</div>
+    </div>
+    <div class="body">
+      <p>Une commande a été placée avec des <strong>lignes PRESTA</strong>. Un projet de déploiement doit être initié :</p>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
+        <div><span style="color:#64748b;font-size:11px">MONTANT DEAL</span><br><strong>${numFmt(data.amount)} MAD</strong></div>
+        <div><span style="color:#64748b;font-size:11px">BC CLIENT</span><br><strong>${esc(data.poNumber)}</strong></div>
+        <div><span style="color:#64748b;font-size:11px">BU CONCERNÉES</span><br>${data.bus.map(b => `<span class="badge badge-blue">${esc(b)}</span>`).join(' ')}</div>
+      </div>
+      <div class="section-title">🔧 Prestations à déployer</div>
+      <table>
+        <tr><th>Réf</th><th>Désignation</th><th style="text-align:center">Qté</th></tr>
+        ${data.prestaLines.map(l => `<tr>
+          <td>${esc(l.ref)}</td>
+          <td>${esc(l.designation)}</td>
+          <td style="text-align:center">${l.qty}</td>
+        </tr>`).join('')}
+      </table>
+      ${data.notes ? `<div style="margin-top:12px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">📝 ${esc(data.notes)}</div>` : ''}
+      <div class="footer">Envoyé depuis CRM-PIPE par ${esc(data.senderName)}</div>
+    </div>
+  </body></html>`
+}
+
 // ─── Invoice reminder email ──────────────────────────────────────────────────
 
 type InvoiceEmailData = {
