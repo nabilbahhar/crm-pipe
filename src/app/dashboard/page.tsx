@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import {
   RefreshCw, TrendingUp, Target, Award, Zap, AlertTriangle,
   ChevronDown, BarChart2, Activity, ArrowUp, ArrowDown,
@@ -314,19 +315,18 @@ export default function Dashboard() {
     loadingRef.current = true
     setLoading(true); setErr(null)
     try {
-      const [{ data: opps, error: e1 }, { data: accs, error: e2 }, { data: pLines, error: e3 }, { data: sOrders, error: e4 }, { data: prosp, error: e5 }] = await Promise.all([
+      const [{ data: opps, error: e1 }, { data: accs, error: e2 }, { data: pLines, error: e3 }, supplyRes, { data: prosp, error: e5 }] = await Promise.all([
         supabase.from('opportunities').select('*, accounts(name,sector,segment,region)').order('created_at',{ascending:false}).limit(5000),
         supabase.from('accounts').select('id,name,sector,segment,region'),
         supabase.from('purchase_lines').select('*, purchase_info(opportunity_id)'),
-        supabase.from('supply_orders').select('id, opportunity_id, status, placed_at, updated_at'),
+        authFetch('/api/supply').then(r => r.ok ? r.json() : { orders: [] }).catch(() => ({ orders: [] })),
         supabase.from('prospects').select('id,status,heat,converted_at,converted_to_account_id,created_at'),
       ])
       if (e1) throw e1; if (e2) throw e2
       if (e3) console.warn('purchase_lines error:', e3.message)
-      if (e4) console.warn('supply_orders error:', e4.message)
       if (e5) console.warn('prospects error:', e5.message)
       setRows(opps||[]); setAccounts(accs||[])
-      setPurchaseLines(pLines||[]); setSupplyOrders(sOrders||[])
+      setPurchaseLines(pLines||[]); setSupplyOrders(supplyRes?.orders || [])
       setProspects(prosp||[])
       // Load invoices and deal registrations (may not exist yet)
       try {

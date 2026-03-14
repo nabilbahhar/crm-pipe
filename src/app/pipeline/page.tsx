@@ -164,12 +164,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
     }).eq('id', deal.id)
     if (error) { setErr(error.message); return }
 
-    // ── Auto-création supply_order quand Won ──────────────────────────────────
-    if (next === 'Won') {
-      // Vérifie qu'il n'en existe pas déjà un
-      // Supply order is created when user clicks "Placer la commande" on the purchase form
-    }
-
+    // Supply order is created when user clicks "Placer la commande" on the purchase form
     await logActivity({
       action_type: next === 'Won' ? 'won' : 'stage',
       entity_type: 'deal',
@@ -233,11 +228,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       stage: targetStage, status: newStatus, prob: STAGE_PROB[targetStage] ?? deal.prob
     }).eq('id', deal.id)
     if (error) { setErr(error.message); setDragId(null); return }
-    // Auto supply_order when Won
-    if (targetStage === 'Won') {
-      const { data: existing } = await supabase.from('supply_orders').select('id').eq('opportunity_id', deal.id).maybeSingle()
-      // Supply order is created when user clicks "Placer la commande" on the purchase form
-    }
+    // Supply order is created when user clicks "Placer la commande" on the purchase form
     await logActivity({
       action_type: targetStage === 'Won' ? 'won' : 'stage',
       entity_type: 'deal', entity_id: deal.id, entity_name: deal.title,

@@ -61,32 +61,17 @@ function getFicheStatus(d: Deal): 'complete' | 'en_cours' | 'a_faire' | null {
 }
 
 function SupplyBadge({ d }: { d: Deal }) {
+  if (normStatus(d) !== 'Won') return null
   const st = getSupplyStatus(d)
-  if (!st) return null
+  if (!st) return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-400 whitespace-nowrap">
+      — Pas de commande
+    </span>
+  )
   const cfg = SUPPLY_CFG[st]
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${cfg.bg} ${cfg.color}`}>
       {cfg.icon} {cfg.label}
-    </span>
-  )
-}
-
-function FicheBadge({ d }: { d: Deal }) {
-  const st = getFicheStatus(d)
-  if (!st) return null
-  if (st === 'complete') return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 whitespace-nowrap">
-      ✓ Fiche OK
-    </span>
-  )
-  if (st === 'en_cours') return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-600 whitespace-nowrap">
-      ⏳ En cours
-    </span>
-  )
-  return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600 whitespace-nowrap">
-      ⚠ À faire
     </span>
   )
 }
@@ -254,20 +239,18 @@ function DealsPageInner() {
       if (error) throw error
       const deals = (data || []) as Deal[]
 
-      // ── 2. Supply orders (séparé, plus fiable) ──────────────────────────────
+      // ── 2. Supply orders via API (bypasses RLS) + purchase_info ────────────
       const wonIds = deals.filter(d => d.status === 'Won').map(d => d.id)
       if (wonIds.length > 0) {
-        const [{ data: supplyData }, { data: infoData }] = await Promise.all([
-          supabase.from('supply_orders')
-            .select('opportunity_id, status')
-            .in('opportunity_id', wonIds),
+        const [supplyRes, { data: infoData }] = await Promise.all([
+          authFetch('/api/supply').then(r => r.json()).catch(() => ({ orders: [] })),
           supabase.from('purchase_info')
             .select('opportunity_id, purchase_lines(pu_achat, fournisseur)')
             .in('opportunity_id', wonIds),
         ])
-        // Build maps
+        // Build supply map from API response
         const supplyMap = new Map<string, SupplyStatus>()
-        ;(supplyData || []).forEach((o: any) => {
+        ;((supplyRes?.orders || []) as any[]).forEach((o: any) => {
           if (o.opportunity_id) supplyMap.set(o.opportunity_id, o.status)
         })
         const ficheMap = new Map<string, { pu_achat: number|null; fournisseur: string|null }[]>()
@@ -695,12 +678,7 @@ function DealsPageInner() {
                           ) : <span className="text-slate-300">—</span>}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          {status === 'Won' ? (
-                            <div className="flex flex-col gap-0.5">
-                              <SupplyBadge d={d} />
-                              <FicheBadge d={d} />
-                            </div>
-                          ) : <span className="text-slate-200 text-[10px]">—</span>}
+                          <SupplyBadge d={d} />
                         </td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-1">

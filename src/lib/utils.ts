@@ -348,10 +348,34 @@ export const PAYMENT_TERMS = [
   { value: 'autre', label: 'Autre' },
 ] as const
 
+// Template labels for advanced payment terms (JSON stored in DB)
+const PAYMENT_TEMPLATE_LABELS: Record<string, string> = {
+  '100_commande': '100% à la commande',
+  '100_livraison': '100% à la livraison',
+  '100_30j': '100% à 30 jours',
+  '100_60j': '100% à 60 jours',
+  '100_90j': '100% à 90 jours',
+  '30_70': '30% commande · 70% livraison',
+  '50_50': '50% commande · 50% livraison',
+  '30_30_30_10': '30/30/30/10 — Projet avec retenue',
+  '40_40_20': '40/40/20 — Projet standard',
+}
+
 export function paymentTermLabel(value: string | null | undefined): string {
   if (!value) return '—'
+  // Try JSON parse (new format: { template, milestones })
+  try {
+    const parsed = JSON.parse(value)
+    if (parsed.template) {
+      return PAYMENT_TEMPLATE_LABELS[parsed.template] || parsed.template
+    }
+  } catch { /* not JSON — legacy string value */ }
+  // Legacy simple values
   const found = PAYMENT_TERMS.find(t => t.value === value)
-  return found ? found.label : value
+  if (found) return found.label
+  // Template key passed directly
+  if (PAYMENT_TEMPLATE_LABELS[value]) return PAYMENT_TEMPLATE_LABELS[value]
+  return value
 }
 
 // ─── Team name mapping ────────────────────────────────────────────────────────

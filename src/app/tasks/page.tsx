@@ -579,12 +579,10 @@ export default function TasksPage() {
       // Get supply orders for delivery dates
       const oppIds = infos.map((i: any) => i.opportunity_id)
       if (oppIds.length === 0) return []
-      const { data: orders } = await supabase
-        .from('supply_orders')
-        .select('opportunity_id, status, placed_at, delivered_at')
-        .in('opportunity_id', oppIds)
+      const supplyRes = await authFetch('/api/supply').then(r => r.ok ? r.json() : { orders: [] }).catch(() => ({ orders: [] }))
+      const allOrders = (supplyRes?.orders || []) as any[]
       const orderMap = new Map<string, any>()
-      for (const o of (orders || [])) orderMap.set(o.opportunity_id, o)
+      for (const o of allOrders) if (oppIds.includes(o.opportunity_id)) orderMap.set(o.opportunity_id, o)
 
       // Get account contacts for emails
       const accountIds = [...new Set(infos.map((i: any) => i.opportunities?.accounts?.id).filter(Boolean))]

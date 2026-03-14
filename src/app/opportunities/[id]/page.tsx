@@ -315,8 +315,7 @@ export default function OpportunityDetailPage() {
       supabase.from('deal_files')
         .select('id,file_type,file_name,file_url')
         .eq('opportunity_id', id),
-      supabase.from('supply_orders')
-        .select('*').eq('opportunity_id', id).maybeSingle(),
+      authFetch('/api/supply').then(r => r.ok ? r.json() : { orders: [] }).catch(() => ({ orders: [] })),
       supabase.from('activity_log')
         .select('id,action_type,entity_type,entity_name,detail,created_at,user_email')
         .eq('entity_id', id)
@@ -336,7 +335,9 @@ export default function OpportunityDetailPage() {
     const urls = await getSignedUrls('deal-files', f)
     setFileUrls(urls)
 
-    if (supplyRes.data) setSupply(supplyRes.data)
+    // supplyRes is { orders: [...] } — find this deal's order
+    const mySupply = (supplyRes?.orders || []).find((o: any) => o.opportunity_id === id)
+    if (mySupply) setSupply(mySupply)
     setActivities(actRes.data || [])
 
     // Load Deal Registrations
