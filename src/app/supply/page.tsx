@@ -1122,14 +1122,14 @@ export default function SupplyPage() {
                       <table className="w-full min-w-[900px] text-sm">
                         <thead>
                           <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold text-slate-400">
-                            <th className="px-4 py-2.5 text-left w-[22%]">Compte / Deal</th>
-                            <th className="px-4 py-2.5 text-center w-[8%]">BU</th>
-                            <th className="px-4 py-2.5 text-right w-[13%]">Montant</th>
-                            <th className="px-4 py-2.5 text-left w-[10%]">PO</th>
-                            <th className="px-4 py-2.5 text-left w-[17%]">Paiement</th>
-                            <th className="px-4 py-2.5 text-center w-[10%]">Lignes</th>
+                            <th className="px-4 py-2.5 text-left w-[20%]">Compte / Deal</th>
+                            <th className="px-4 py-2.5 text-center w-[7%]">BU</th>
+                            <th className="px-4 py-2.5 text-right w-[11%]">Montant</th>
+                            <th className="px-4 py-2.5 text-left w-[9%]">PO</th>
+                            <th className="px-4 py-2.5 text-left w-[15%]">Paiement</th>
+                            <th className="px-4 py-2.5 text-center w-[8%]">Lignes</th>
                             <th className="px-4 py-2.5 text-center w-[12%]">Statut</th>
-                            <th className="px-4 py-2.5 text-center w-[8%]">Actions</th>
+                            <th className="px-4 py-2.5 text-center w-[18%]">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -1246,7 +1246,7 @@ export default function SupplyPage() {
                                     )}
                                     <button onClick={() => setSelectedOrder(order)}
                                       title="Voir détail lignes"
-                                      className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-500 hover:bg-slate-50 transition-colors">
+                                      className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors whitespace-nowrap">
                                       <Eye className="h-3.5 w-3.5" /> {lines.length} ligne{lines.length !== 1 ? 's' : ''}
                                     </button>
                                   </div>
