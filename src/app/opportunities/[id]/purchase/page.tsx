@@ -384,15 +384,19 @@ export default function PurchasePage() {
       }
       if (!hasBcClient) { setErr('BC Client est obligatoire pour finaliser.'); return }
       if (!hasDevis)    { setErr('Devis Compucom est obligatoire pour finaliser.'); return }
+      if (!paymentTemplate) { setErr('Modalités de paiement obligatoires. Sélectionne un schéma de paiement.'); return }
       if (!totalMatch)  { setErr(`Total (${mad(totalVente)}) ≠ montant deal (${mad(dealAmount)}). Écart : ${mad(Math.abs(totalDiff))}`); return }
-      // Validate each line: designation, qty, pu_vente, supplier are mandatory
+      // Validate each line: designation, qty, pu_vente, pu_achat, supplier, contact are mandatory
       const lineErrors: string[] = []
       validLines.forEach((l, idx) => {
         const n = idx + 1
         if (!l.designation.trim()) lineErrors.push(`Ligne ${n} : désignation manquante`)
         if (!l.qty || l.qty <= 0) lineErrors.push(`Ligne ${n} : quantité invalide`)
         if (!l.pu_vente || l.pu_vente <= 0) lineErrors.push(`Ligne ${n} : PU vente manquant`)
+        if (!l.pu_achat || l.pu_achat <= 0) lineErrors.push(`Ligne ${n} : PU achat manquant`)
         if (!l.fournisseur_id) lineErrors.push(`Ligne ${n} : fournisseur non sélectionné`)
+        const isStock = l.fournisseur_id === '__stock__'
+        if (!isStock && !l.contact_fournisseur) lineErrors.push(`Ligne ${n} : contact fournisseur manquant`)
       })
       if (lineErrors.length > 0) {
         setErr(`Champs obligatoires manquants :\n${lineErrors.join(' · ')}`)
