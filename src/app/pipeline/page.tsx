@@ -197,6 +197,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
         supabase.from('project_services').delete().eq('opportunity_id', deal.id),
         supabase.from('deal_registrations').delete().eq('opportunity_id', deal.id),
         supabase.from('invoices').delete().eq('opportunity_id', deal.id),
+        supabase.from('support_tickets').delete().eq('opportunity_id', deal.id),
         ...(piIds.length ? [supabase.from('purchase_lines').delete().in('purchase_info_id', piIds)] : []),
       ])
       if (piIds.length) await supabase.from('purchase_info').delete().eq('opportunity_id', deal.id)

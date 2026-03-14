@@ -269,6 +269,12 @@ export default function AccountsPage() {
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false })); setErr(null); setLoading(true)
         try {
+          // Cascade: clean up related records before deleting account
+          await Promise.all([
+            supabase.from('account_contacts').delete().eq('account_id', row.id),
+            supabase.from('account_files').delete().eq('account_id', row.id),
+            supabase.from('account_meetings').delete().eq('account_id', row.id),
+          ])
           const { error } = await supabase.from('accounts').delete().eq('id', row.id)
           if (error) {
             const m = (error.message || '').toLowerCase()

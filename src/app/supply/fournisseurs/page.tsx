@@ -541,6 +541,7 @@ export default function SuppliersPage() {
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Supprimer le fournisseur "${name}" ?`)) return
     setDeleting(id)
+    await supabase.from('supplier_contacts').delete().eq('supplier_id', id)
     await supabase.from('suppliers').delete().eq('id', id)
     if (selectedId === id) setSelectedId(null)
     setDeleting(null)

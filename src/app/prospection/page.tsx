@@ -839,6 +839,7 @@ export default function ProspectionPage() {
     undoCancelled.current = false
     const timer = setTimeout(async () => {
       if (undoCancelled.current) return
+      await supabase.from('prospect_contacts').delete().eq('prospect_id', p.id)
       await supabase.from('prospects').delete().eq('id', p.id)
       setUndoToast(null)
     }, 8000)
