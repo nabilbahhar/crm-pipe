@@ -110,8 +110,40 @@ export default function PurchasePage() {
   const [notes, setNotes]   = useState('')
   const [justifReason, setJustifReason] = useState(REASONS[0])
   const [justifText, setJustifText]     = useState('')
-  const [paymentTerms, setPaymentTerms] = useState('')
-  const [paymentTermsCustom, setPaymentTermsCustom] = useState('')
+  const [paymentTemplate, setPaymentTemplate] = useState('')
+  type PaymentMilestone = { pct: number; trigger: string; label: string }
+  const [paymentMilestones, setPaymentMilestones] = useState<PaymentMilestone[]>([])
+
+  const PAYMENT_TEMPLATES: Record<string, { label: string; milestones: PaymentMilestone[] }> = {
+    '100_commande': { label: '100% à la commande', milestones: [{ pct: 100, trigger: 'commande', label: 'Paiement intégral' }] },
+    '100_livraison': { label: '100% à la livraison', milestones: [{ pct: 100, trigger: 'livraison', label: 'Paiement intégral' }] },
+    '100_30j': { label: '100% à 30 jours', milestones: [{ pct: 100, trigger: '30j', label: 'Paiement à 30 jours' }] },
+    '100_60j': { label: '100% à 60 jours', milestones: [{ pct: 100, trigger: '60j', label: 'Paiement à 60 jours' }] },
+    '100_90j': { label: '100% à 90 jours', milestones: [{ pct: 100, trigger: '90j', label: 'Paiement à 90 jours' }] },
+    '30_70': { label: '30% commande · 70% livraison', milestones: [
+      { pct: 30, trigger: 'commande', label: 'Acompte commande' },
+      { pct: 70, trigger: 'livraison', label: 'Solde livraison' },
+    ]},
+    '50_50': { label: '50% commande · 50% livraison', milestones: [
+      { pct: 50, trigger: 'commande', label: 'Acompte commande' },
+      { pct: 50, trigger: 'livraison', label: 'Solde livraison' },
+    ]},
+    '30_30_30_10': { label: '30/30/30/10 — Projet avec retenue', milestones: [
+      { pct: 30, trigger: 'commande', label: 'Acompte commande' },
+      { pct: 30, trigger: 'livraison', label: 'Paiement livraison' },
+      { pct: 30, trigger: 'pv_final', label: 'Paiement PV final' },
+      { pct: 10, trigger: 'fin_garantie', label: 'Retenue de garantie' },
+    ]},
+    '40_40_20': { label: '40/40/20 — Projet standard', milestones: [
+      { pct: 40, trigger: 'commande', label: 'Acompte commande' },
+      { pct: 40, trigger: 'livraison', label: 'Paiement livraison' },
+      { pct: 20, trigger: 'pv_final', label: 'Paiement PV final' },
+    ]},
+  }
+  const TRIGGER_LABELS: Record<string, string> = {
+    commande: 'À la commande', livraison: 'À la livraison', pv_final: 'Après PV final',
+    fin_garantie: 'Fin de garantie', '30j': 'À 30 jours', '60j': 'À 60 jours', '90j': 'À 90 jours',
+  }
   const [saving, setSaving]   = useState(false)
   const [err, setErr]         = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -201,9 +233,18 @@ export default function PurchasePage() {
       setFrais(info.frais_engagement || 0)
       setNotes(info.notes || '')
       if (info.payment_terms) {
-        const known = ['a_la_livraison','30j','60j','90j']
-        if (known.includes(info.payment_terms)) { setPaymentTerms(info.payment_terms) }
-        else { setPaymentTerms('autre'); setPaymentTermsCustom(info.payment_terms) }
+        try {
+          const parsed = JSON.parse(info.payment_terms)
+          if (parsed.template) { setPaymentTemplate(parsed.template); setPaymentMilestones(parsed.milestones || []) }
+          else { /* legacy */ setPaymentTemplate(''); setPaymentMilestones([]) }
+        } catch {
+          /* Legacy string value — migrate */
+          const legacyMap: Record<string, string> = { 'a_la_livraison': '100_livraison', '30j': '100_30j', '60j': '100_60j', '90j': '100_90j' }
+          const mapped = legacyMap[info.payment_terms]
+          if (mapped && PAYMENT_TEMPLATES[mapped]) {
+            setPaymentTemplate(mapped); setPaymentMilestones(PAYMENT_TEMPLATES[mapped].milestones)
+          }
+        }
       }
       if (info.justif_reason) setJustifReason(info.justif_reason)
       if (info.justif_text)   setJustifText(info.justif_text)
@@ -361,11 +402,11 @@ export default function PurchasePage() {
     setSaving(true)
     try {
       let infoId = existingInfo?.id
-      const ptValue = paymentTerms === 'autre' ? paymentTermsCustom : paymentTerms
+      const ptValue = paymentTemplate ? JSON.stringify({ template: paymentTemplate, milestones: paymentMilestones }) : null
       const payload: any = {
         opportunity_id: id, frais_engagement: frais, notes,
         filled_by: userEmail, updated_at: new Date().toISOString(),
-        payment_terms: ptValue || null,
+        payment_terms: ptValue,
         ...(margeFaible
           ? { justif_reason: justifReason, justif_text: justifText, approved_by: null }
           : { justif_reason: null, justif_text: null }),
@@ -777,7 +818,7 @@ export default function PurchasePage() {
                     </div>
                     <div>
                       <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">PU Vente</label>
-                      <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
+                      <input type="number" min={0} value={l.pu_vente != null && l.pu_vente !== 0 ? l.pu_vente : ''} onChange={e => updateLine(i,'pu_vente',e.target.value === '' ? 0 : Number(e.target.value))}
                         className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-right outline-none focus:border-slate-400 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                     </div>
                     <div>
@@ -788,7 +829,7 @@ export default function PurchasePage() {
                     </div>
                     <div>
                       <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-amber-500">PU Achat ★</label>
-                      <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
+                      <input type="number" min={0} value={l.pu_achat != null && l.pu_achat !== 0 ? l.pu_achat : ''} onChange={e => updateLine(i,'pu_achat',e.target.value === '' ? 0 : Number(e.target.value))}
                         className="h-9 w-full rounded-lg border border-amber-200 bg-amber-50 px-2.5 text-sm text-right font-bold outline-none focus:border-amber-400 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                     </div>
                     <div>
@@ -976,12 +1017,12 @@ export default function PurchasePage() {
                         </div>
                         <div>
                           <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">PU Vente</label>
-                          <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
+                          <input type="number" min={0} value={l.pu_vente != null && l.pu_vente !== 0 ? l.pu_vente : ''} onChange={e => updateLine(i,'pu_vente',e.target.value === '' ? 0 : Number(e.target.value))}
                             className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-right outline-none focus:border-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                         </div>
                         <div>
                           <label className="mb-1 block text-[10px] font-bold uppercase text-amber-500">PU Achat ★</label>
-                          <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
+                          <input type="number" min={0} value={l.pu_achat != null && l.pu_achat !== 0 ? l.pu_achat : ''} onChange={e => updateLine(i,'pu_achat',e.target.value === '' ? 0 : Number(e.target.value))}
                             className="h-8 w-full rounded-lg border border-amber-200 bg-amber-50 px-2 text-sm text-right font-bold outline-none focus:border-amber-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                         </div>
                         <div>
@@ -1107,8 +1148,8 @@ export default function PurchasePage() {
                             </div>
                             <div>
                               <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">PU Vente</label>
-                              <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
-                                className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-[12px] text-right text-slate-700 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              <input type="number" min={0} step="any" value={l.pu_vente != null && l.pu_vente !== 0 ? l.pu_vente : ''} onChange={e => updateLine(i,'pu_vente',e.target.value === '' ? 0 : Number(e.target.value))}
+                                placeholder="0,00" className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-[12px] text-right text-slate-700 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-200 placeholder:text-slate-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
                             <div>
                               <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">PT Vente</label>
@@ -1116,8 +1157,8 @@ export default function PurchasePage() {
                             </div>
                             <div>
                               <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-500">PU Achat</label>
-                              <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
-                                className="h-7 w-full rounded-md border border-slate-300 bg-slate-50 px-2 text-[12px] text-right font-bold text-slate-800 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              <input type="number" min={0} step="any" value={l.pu_achat != null && l.pu_achat !== 0 ? l.pu_achat : ''} onChange={e => updateLine(i,'pu_achat',e.target.value === '' ? 0 : Number(e.target.value))}
+                                placeholder="0,00" className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-[12px] text-right font-bold text-slate-800 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-200 placeholder:text-slate-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
                             <div>
                               <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-500">PT Achat</label>
@@ -1346,24 +1387,58 @@ export default function PurchasePage() {
                 placeholder="0" className={`${inp} max-w-[180px]`} />
               <span className="text-sm text-slate-500">MAD — Frais d'engagement</span>
             </div>
-            {/* Payment Terms */}
+            {/* Payment Terms — échéancier structuré */}
             <div className="mb-4">
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Modalités de paiement</label>
-              <div className="flex items-center gap-2">
-                <select value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)}
-                  className={`${inp} max-w-[200px] appearance-none`}>
-                  <option value="">— Choisir —</option>
-                  <option value="a_la_livraison">À la livraison</option>
-                  <option value="30j">30 jours</option>
-                  <option value="60j">60 jours</option>
-                  <option value="90j">90 jours</option>
-                  <option value="autre">Autre</option>
-                </select>
-                {paymentTerms === 'autre' && (
-                  <input value={paymentTermsCustom} onChange={e => setPaymentTermsCustom(e.target.value)}
-                    placeholder="Préciser…" className={`${inp} max-w-[200px]`} />
-                )}
-              </div>
+              <select value={paymentTemplate} onChange={e => {
+                const tpl = e.target.value
+                setPaymentTemplate(tpl)
+                if (tpl && PAYMENT_TEMPLATES[tpl]) setPaymentMilestones([...PAYMENT_TEMPLATES[tpl].milestones])
+                else setPaymentMilestones([])
+              }}
+                className={`${inp} max-w-[320px] mb-2`}>
+                <option value="">— Choisir un schéma —</option>
+                <optgroup label="Paiement unique">
+                  <option value="100_commande">100% à la commande</option>
+                  <option value="100_livraison">100% à la livraison</option>
+                  <option value="100_30j">100% à 30 jours</option>
+                  <option value="100_60j">100% à 60 jours</option>
+                  <option value="100_90j">100% à 90 jours</option>
+                </optgroup>
+                <optgroup label="Paiement fractionné">
+                  <option value="30_70">30% commande · 70% livraison</option>
+                  <option value="50_50">50% commande · 50% livraison</option>
+                  <option value="40_40_20">40/40/20 — Projet standard</option>
+                  <option value="30_30_30_10">30/30/30/10 — Projet avec retenue</option>
+                </optgroup>
+              </select>
+              {/* Échéancier visuel */}
+              {paymentMilestones.length > 0 && (
+                <div className="rounded-lg border border-slate-200 bg-slate-50/50 overflow-hidden">
+                  <div className="grid grid-cols-[40px_1fr_1fr_90px] gap-px bg-slate-200 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                    <span className="bg-slate-100 px-2 py-1.5">%</span>
+                    <span className="bg-slate-100 px-2 py-1.5">Échéance</span>
+                    <span className="bg-slate-100 px-2 py-1.5">Déclencheur</span>
+                    <span className="bg-slate-100 px-2 py-1.5 text-right">Montant</span>
+                  </div>
+                  {paymentMilestones.map((m, mi) => (
+                    <div key={mi} className="grid grid-cols-[40px_1fr_1fr_90px] gap-px bg-slate-200">
+                      <span className="bg-white px-2 py-1.5 text-[11px] font-bold text-slate-700">{m.pct}%</span>
+                      <span className="bg-white px-2 py-1.5 text-[11px] text-slate-600">{m.label}</span>
+                      <span className="bg-white px-2 py-1.5 text-[10px] text-slate-500">{TRIGGER_LABELS[m.trigger] || m.trigger}</span>
+                      <span className="bg-white px-2 py-1.5 text-[11px] font-semibold text-slate-700 text-right">{numFmt(totalVente * m.pct / 100)} MAD</span>
+                    </div>
+                  ))}
+                  {/* Total check */}
+                  <div className="grid grid-cols-[40px_1fr_1fr_90px] gap-px bg-slate-200">
+                    <span className={`px-2 py-1 text-[10px] font-bold ${paymentMilestones.reduce((s, m) => s + m.pct, 0) === 100 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                      {paymentMilestones.reduce((s, m) => s + m.pct, 0)}%
+                    </span>
+                    <span className="bg-slate-50 px-2 py-1 text-[10px] text-slate-400 col-span-2">Total</span>
+                    <span className="bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-600 text-right">{numFmt(totalVente)} MAD</span>
+                  </div>
+                </div>
+              )}
             </div>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} spellCheck={false}
               placeholder="Notes internes, contexte, remarques…"
