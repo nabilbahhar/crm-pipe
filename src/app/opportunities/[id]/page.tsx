@@ -129,31 +129,33 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
         return `<span style="display:inline-block;background:rgba(255,255,255,.15);border-radius:4px;padding:2px 8px;font-size:11px;color:#fff;margin-right:4px">
           ${esc(c)}${first.email_fournisseur ? ` · ${esc(first.email_fournisseur)}` : ''}${first.tel_fournisseur ? ` · ${esc(first.tel_fournisseur)}` : ''}</span>`
       }).join('')
-    const rows  = lines.map((l,i) => `
-      <tr style="background:${i%2?'#f8fafc':'#fff'}">
-        <td style="padding:10px 16px;font-size:13px;color:#374151;border-bottom:1px solid #f1f5f9">
+    const rows  = lines.map((l,i) => {
+      const rowBg = i%2 ? '#f8fafc' : '#ffffff'
+      return `
+      <tr>
+        <td style="padding:10px 16px;font-size:13px;color:#374151;border-bottom:1px solid #f1f5f9;background-color:${rowBg}">
           ${l.ref?`<span style="color:#94a3b8;font-size:11px;margin-right:6px">[${esc(l.ref)}]</span>`:''}${esc(l.designation)}
         </td>
-        <td style="padding:10px 16px;font-size:13px;text-align:center;font-weight:600;border-bottom:1px solid #f1f5f9">${l.qty}</td>
-        <td style="padding:10px 16px;font-size:13px;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(l.pu_achat)}</td>
-        <td style="padding:10px 16px;font-size:13px;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(l.qty*l.pu_achat)}</td>
-      </tr>`).join('')
+        <td style="padding:10px 16px;font-size:13px;color:#374151;text-align:center;font-weight:600;border-bottom:1px solid #f1f5f9;background-color:${rowBg}">${l.qty}</td>
+        <td style="padding:10px 16px;font-size:13px;color:#374151;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9;background-color:${rowBg}">${mad(l.pu_achat)}</td>
+        <td style="padding:10px 16px;font-size:13px;color:#374151;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9;background-color:${rowBg}">${mad(l.qty*l.pu_achat)}</td>
+      </tr>`}).join('')
     return `<div style="margin-bottom:16px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
-      <div style="background:${col};padding:14px 20px">
+      <div style="background-color:${col};padding:14px 20px">
         <table width="100%"><tr>
           <td>
             <div style="color:#fff;font-size:15px;font-weight:800;margin-bottom:4px">${esc(name)}</div>
-            <div style="margin-top:4px">${contactBadges || '<span style="color:rgba(255,255,255,.5);font-size:11px">Aucun contact</span>'}</div>
+            <div style="margin-top:4px">${contactBadges || '<span style="color:#cbd5e1;font-size:11px">Aucun contact</span>'}</div>
           </td>
-          <td align="right" style="vertical-align:top"><span style="background:rgba(255,255,255,.2);border-radius:8px;padding:5px 14px;color:#fff;font-size:13px;font-weight:800">${mad(subT)}</span></td>
+          <td align="right" style="vertical-align:top"><span style="background-color:rgba(255,255,255,.2);border-radius:8px;padding:5px 14px;color:#fff;font-size:13px;font-weight:800">${mad(subT)}</span></td>
         </tr></table>
       </div>
-      <table width="100%" style="border-collapse:collapse">
-        <thead><tr style="background:#f8fafc">
-          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:left;border-bottom:2px solid #e2e8f0">Désignation</th>
-          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:center;border-bottom:2px solid #e2e8f0">Qté</th>
-          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:right;border-bottom:2px solid #e2e8f0">PU Achat</th>
-          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:right;border-bottom:2px solid #e2e8f0">Total HT</th>
+      <table width="100%" style="border-collapse:collapse;background-color:#ffffff">
+        <thead><tr>
+          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:left;border-bottom:2px solid #e2e8f0;background-color:#f8fafc">Désignation</th>
+          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:center;border-bottom:2px solid #e2e8f0;background-color:#f8fafc">Qté</th>
+          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:right;border-bottom:2px solid #e2e8f0;background-color:#f8fafc">PU Achat</th>
+          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:right;border-bottom:2px solid #e2e8f0;background-color:#f8fafc">Total HT</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -161,11 +163,15 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
   }).join('')
   const mcB = margeBrutePct >= 20 ? '#16a34a' : margeBrutePct >= 10 ? '#d97706' : '#dc2626'
   const mcN = margeNettePct >= 20 ? '#16a34a' : margeNettePct >= 10 ? '#d97706' : '#dc2626'
-  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 16px"><tr><td align="center">
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<meta name="color-scheme" content="light only">
+<meta name="supported-color-schemes" content="light only">
+<style>:root{color-scheme:light only}body,table,td,div,p,span{color:#1e293b}[data-ogsc] body,[data-ogsb] body{background-color:#ffffff!important;color:#1e293b!important}</style>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9;color:#1e293b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 16px;background-color:#f1f5f9"><tr><td align="center">
 <table width="660" style="max-width:660px;width:100%">
-  <tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#0f172a 100%);border-radius:16px 16px 0 0;padding:28px 32px">
+  <tr><td style="background-color:#0f172a;border-radius:16px 16px 0 0;padding:28px 32px">
     <table width="100%"><tr>
       <td>
         <div style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">Commande · ${today}</div>
@@ -180,37 +186,50 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
       </td>
     </tr></table>
   </td></tr>
-  <tr><td style="background:#fff;padding:28px 32px">
-    <p style="margin:0 0 24px;color:#475569;font-size:14px;line-height:1.7">Bonjour,<br><br>Merci de traiter la commande ci-dessous pour le client <strong>${esc(client)}</strong>.<br>Merci de confirmer la prise en charge et le délai prévisionnel.</p>
+  <tr><td style="background-color:#ffffff;padding:28px 32px;color:#1e293b">
+    <p style="margin:0 0 24px;color:#475569;font-size:14px;line-height:1.7">Bonjour,<br><br>Merci de traiter la commande ci-dessous pour le client <strong style="color:#1e293b">${esc(client)}</strong>.<br>Merci de confirmer la prise en charge et le délai prévisionnel.</p>
     ${blocks}
     <div style="border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-top:8px">
-      <div style="background:#f8fafc;padding:12px 20px;border-bottom:1px solid #e2e8f0">
+      <div style="background-color:#f8fafc;padding:12px 20px;border-bottom:1px solid #e2e8f0">
         <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px">Récapitulatif financier</span>
       </div>
-      <table width="100%" style="border-collapse:collapse">
-        <tr><td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9">Total vente HT</td>
-          <td style="padding:12px 20px;font-size:14px;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(totalVente)}</td></tr>
-        <tr style="background:#fafafa"><td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9">Total achat HT</td>
-          <td style="padding:12px 20px;font-size:14px;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(totalAchat)}</td></tr>
-        ${info.frais_engagement>0?`<tr><td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9">Frais engagement</td>
-          <td style="padding:12px 20px;font-size:14px;font-weight:700;color:#d97706;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">− ${mad(info.frais_engagement)}</td></tr>`:''}
-        <tr style="background:#f0fdf4"><td style="padding:12px 20px;font-size:13px;font-weight:700;color:#166534">Marge brute</td>
-          <td style="padding:12px 20px;text-align:right">
+      <table width="100%" style="border-collapse:collapse;background-color:#ffffff">
+        <tr><td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9;background-color:#ffffff">Total vente HT</td>
+          <td style="padding:12px 20px;font-size:14px;font-weight:700;color:#1e293b;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9;background-color:#ffffff">${mad(totalVente)}</td></tr>
+        <tr><td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9;background-color:#fafafa">Total achat HT</td>
+          <td style="padding:12px 20px;font-size:14px;font-weight:700;color:#1e293b;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9;background-color:#fafafa">${mad(totalAchat)}</td></tr>
+        ${info.frais_engagement>0?`<tr><td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9;background-color:#ffffff">Frais engagement</td>
+          <td style="padding:12px 20px;font-size:14px;font-weight:700;color:#d97706;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9;background-color:#ffffff">− ${mad(info.frais_engagement)}</td></tr>`:''}
+        <tr><td style="padding:12px 20px;font-size:13px;font-weight:700;color:#166534;background-color:#f0fdf4">Marge brute</td>
+          <td style="padding:12px 20px;text-align:right;background-color:#f0fdf4">
             <span style="font-size:15px;font-weight:800;color:${mcB};font-family:monospace">${mad(margeBrute)}</span>
-            <span style="margin-left:6px;background:${mcB};color:#fff;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700">${pct(margeBrutePct)}</span>
+            <span style="margin-left:6px;background-color:${mcB};color:#fff;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700">${pct(margeBrutePct)}</span>
           </td></tr>
-        ${info.frais_engagement > 0 ? `<tr style="background:#ecfdf5"><td style="padding:14px 20px;font-size:14px;font-weight:800;color:#065f46">Marge nette</td>
-          <td style="padding:14px 20px;text-align:right">
+        ${info.frais_engagement > 0 ? `<tr><td style="padding:14px 20px;font-size:14px;font-weight:800;color:#065f46;background-color:#ecfdf5">Marge nette</td>
+          <td style="padding:14px 20px;text-align:right;background-color:#ecfdf5">
             <span style="font-size:17px;font-weight:900;color:${mcN};font-family:monospace">${mad(margeNette)}</span>
-            <span style="margin-left:6px;background:${mcN};color:#fff;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700">${pct(margeNettePct)}</span>
+            <span style="margin-left:6px;background-color:${mcN};color:#fff;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700">${pct(margeNettePct)}</span>
           </td></tr>` : ''}
       </table>
     </div>
-    ${info.payment_terms ? `<div style="margin-top:14px;border-radius:10px;border:1px solid #dbeafe;background:#eff6ff;padding:14px 20px">
+    ${info.payment_terms ? (() => {
+      let ptLabel = paymentTermLabel(info.payment_terms)
+      // If stored as JSON, parse and extract template + milestones
+      try {
+        const parsed = JSON.parse(info.payment_terms)
+        if (parsed.template) {
+          ptLabel = paymentTermLabel(parsed.template)
+          if (Array.isArray(parsed.milestones) && parsed.milestones.length > 0) {
+            ptLabel += '<br>' + parsed.milestones.map((m: any) => `${m.pct}% — ${esc(m.label)}`).join('<br>')
+          }
+        }
+      } catch {}
+      return `<div style="margin-top:14px;border-radius:10px;border:1px solid #dbeafe;background-color:#eff6ff;padding:14px 20px">
       <div style="font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;margin-bottom:4px">Modalités de paiement</div>
-      <div style="font-size:13px;color:#1e40af;font-weight:600">${esc(paymentTermLabel(info.payment_terms))}</div>
-    </div>` : ''}
-    ${margeBrutePct < 10 && totalAchat > 0 ? `<div style="margin-top:14px;border-radius:10px;border:2px solid #fbbf24;background:#fffbeb;padding:16px 20px">
+      <div style="font-size:13px;color:#1e40af;font-weight:600;line-height:1.6">${ptLabel}</div>
+    </div>`
+    })() : ''}
+    ${margeBrutePct < 10 && totalAchat > 0 ? `<div style="margin-top:14px;border-radius:10px;border:2px solid #fbbf24;background-color:#fffbeb;padding:16px 20px">
       <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">⚠️ Validation requise — Marge brute &lt; 10%</div>
       <div style="font-size:13px;color:#78350f;line-height:1.6">
         <strong>@Achraf Lahkim</strong> — Merci de valider cette commande (marge brute : <strong style="color:${mcB}">${pct(margeBrutePct)}</strong>).
@@ -218,19 +237,18 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
         ${info.justif_text ? `<br>Détail : ${esc(info.justif_text)}` : ''}
       </div>
     </div>` : ''}
-    ${info.notes?`<div style="margin-top:14px;border-radius:10px;border:1px solid #fde68a;background:#fffbeb;padding:14px 20px">
+    ${info.notes?`<div style="margin-top:14px;border-radius:10px;border:1px solid #fde68a;background-color:#fffbeb;padding:14px 20px">
       <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:4px">Notes</div>
       <div style="font-size:13px;color:#78350f;line-height:1.5">${esc(info.notes)}</div>
     </div>`:''}
   </td></tr>
-  <tr><td style="background:linear-gradient(135deg,#f8fafc,#f1f5f9);border-top:1px solid #e2e8f0;border-radius:0 0 16px 16px;padding:20px 32px">
+  <tr><td style="background-color:#f8fafc;border-top:1px solid #e2e8f0;border-radius:0 0 16px 16px;padding:20px 32px">
     <table width="100%"><tr>
       <td style="font-size:12px;color:#94a3b8;line-height:1.5">Merci de <strong style="color:#64748b">confirmer la réception</strong><br>et d'indiquer le délai estimé.</td>
       <td align="right">
-        <div style="display:inline-block;background:#0f172a;border-radius:10px;padding:10px 18px;text-align:center">
-          <div style="color:#94a3b8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px">Compucom Maroc</div>
-          <div style="color:#fff;font-size:13px;font-weight:800;margin-top:2px">${esc(sender)}</div>
-          ${senderTitle ? `<div style="color:#94a3b8;font-size:10px;margin-top:1px">${esc(senderTitle)}</div>` : ''}
+        <div style="display:inline-block;background-color:#0f172a;border-radius:10px;padding:10px 18px;text-align:center">
+          <div style="color:#fff;font-size:13px;font-weight:800">${esc(sender)}</div>
+          ${senderTitle ? `<div style="color:#94a3b8;font-size:10px;margin-top:2px">${esc(senderTitle)}</div>` : ''}
         </div>
       </td>
     </tr></table>
@@ -355,7 +373,7 @@ export default function OpportunityDetailPage() {
   const canEmail      = ficheComplete && isWon
   const supIdx        = supply ? STATUS_ORDER.indexOf(supply.status as SupplyStatus) : -1
   const supCfg        = supply ? STATUS_CFG[supply.status as SupplyStatus] : null
-  const commandePlacee = supIdx >= 1 // status is 'place' or beyond
+  const commandePlacee = supIdx >= 2 // status is 'commande' or beyond — fiche locked once supplier confirmed
   const cDate         = closingDate(opp)
   const stageCfg      = STAGE_CFG[opp.stage] || { bg: 'bg-slate-100', text: 'text-slate-600' }
 
@@ -765,7 +783,12 @@ export default function OpportunityDetailPage() {
                     )}
                     {info.payment_terms && (
                       <div className="border-t border-slate-200 pt-2">
-                        <RRow label="Modalités paiement" value={paymentTermLabel(info.payment_terms)} />
+                        <RRow label="Modalités paiement" value={(() => {
+                          try {
+                            const parsed = JSON.parse(info.payment_terms!)
+                            return parsed.template ? paymentTermLabel(parsed.template) : paymentTermLabel(info.payment_terms!)
+                          } catch { return paymentTermLabel(info.payment_terms!) }
+                        })()} />
                       </div>
                     )}
                     {info.notes && <p className="border-t border-slate-200 pt-2 text-xs text-slate-500 italic">{info.notes}</p>}
