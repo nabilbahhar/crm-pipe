@@ -12,7 +12,7 @@ import {
   Shield, Key, BookOpen, Receipt, Crosshair, Mail, Banknote,
 } from 'lucide-react'
 
-type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard' | 'eta_retard' | 'deal_relance' | 'compte_incomplet' | 'echeance_paiement'
+type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard' | 'eta_manquante' | 'relance_fournisseur' | 'deal_relance' | 'compte_incomplet' | 'echeance_paiement'
 
 // ── Types for new sections ──
 type WarrantyItem = {
@@ -99,7 +99,8 @@ const TYPE_LABELS: Record<TaskType, string> = {
   relance_semaine: 'Relance semaine',
   achat_manquant: 'Fiche achat',
   closing_retard: 'Closing retard',
-  eta_retard: 'ETA retard',
+  eta_manquante: 'ETA manquante',
+  relance_fournisseur: 'Relance fournisseur',
   deal_relance: 'Suivi deal',
   compte_incomplet: 'Fiche compte',
   echeance_paiement: 'Échéance paiement',
@@ -157,13 +158,13 @@ export default function TasksPage() {
     setLoading(true); setErr(null)
     try {
       const year = new Date().getFullYear()
-      const [a, b, c, d, e, f, g, wonRes, openRes, warr, lic, drItems, invItems, payReminders] = await Promise.all([
-        loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(), loadEtaRetards(), loadDealRelances(), loadComptesIncomplets(),
+      const [a, b, c, d, e, e2, f, g, wonRes, openRes, warr, lic, drItems, invItems, payReminders] = await Promise.all([
+        loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(), loadEtaManquante(), loadRelanceFournisseur(), loadDealRelances(), loadComptesIncomplets(),
         supabase.from('opportunities').select('amount').eq('status', 'Won').gte('booking_month', `${year}-01`),
         supabase.from('opportunities').select('amount').eq('status', 'Open'),
         loadWarranties(), loadLicenses(), loadDRs(), loadOverdueInvoices(), loadPaymentReminders(),
       ])
-      setTasks([...a, ...b, ...c, ...d, ...e, ...f, ...g])
+      setTasks([...a, ...b, ...c, ...d, ...e, ...e2, ...f, ...g])
       if (wonRes.error) console.warn('tasks wonRes error:', wonRes.error.message)
       if (openRes.error) console.warn('tasks openRes error:', openRes.error.message)
       setWonYTD((wonRes.data || []).reduce((s: number, d: any) => s + (Number(d.amount) || 0), 0))
@@ -313,35 +314,64 @@ export default function TasksPage() {
     })
   }
 
-  // ── ETA retards (lignes avec ETA dépassé) ────────────
-  async function loadEtaRetards(): Promise<Task[]> {
+  // ── ETA manquante (lignes commandées sans ETA) ────────────
+  async function loadEtaManquante(): Promise<Task[]> {
     try {
-      const todayStr = new Date().toISOString().split('T')[0]
       const { data: lines, error } = await supabase
         .from('purchase_lines')
-        .select('id, designation, ref, qty, fournisseur, contact_fournisseur, eta, line_status, status_note, purchase_info_id, purchase_info!inner(opportunity_id, opportunities!inner(id, title, amount, accounts(name)))')
-        .lt('eta', todayStr)
-        .not('line_status', 'eq', 'livre')
+        .select('id, designation, qty, fournisseur, contact_fournisseur, eta, line_status, purchase_info!inner(opportunity_id, opportunities!inner(id, title, amount, accounts(name)))')
+        .in('line_status', ['commande', 'sous_douane'])
+        .is('eta', null)
       if (error || !lines) return []
       return lines.map((l: any) => {
         const opp = l.purchase_info?.opportunities
-        const daysLate = Math.floor((Date.now() - new Date(l.eta).getTime()) / 86400000)
         return {
-          id: `eta_${l.id}`, type: 'eta_retard' as TaskType,
-          priority: (daysLate > 7 ? 'high' : 'medium') as Priority,
-          title: opp?.accounts?.name || opp?.title || l.designation,
-          subtitle: l.designation,
-          detail: `📦 ${l.fournisseur || '—'} · ${l.contact_fournisseur || ''} · ETA: ${l.eta}${l.status_note ? ` · ${l.status_note}` : ''}`,
-          amount: opp?.amount || 0, daysLate,
-          ficheStatus: 'en_cours' as FicheStatus,
+          id: `eta_missing_${l.id}`, type: 'eta_manquante' as TaskType,
+          priority: 'high' as Priority,
+          title: opp?.accounts?.name || opp?.title || '—',
+          subtitle: (l.designation || '—').slice(0, 60),
+          detail: `📦 ${l.fournisseur || '—'} · ${l.contact_fournisseur || ''} · ETA non définie`,
+          amount: opp?.amount || 0, daysLate: 0,
+          ficheStatus: 'a_faire' as FicheStatus,
           ficheProgress: 0, linesTotal: 1, linesComplete: 0,
           entity_id: opp?.id || '', entity: opp,
         } as Task
       })
-    } catch {
-      // Table may not have eta column yet
-      return []
-    }
+    } catch { return [] }
+  }
+
+  // ── Relance fournisseur (ETA ≤ 5 jours ou dépassée) ────────────
+  async function loadRelanceFournisseur(): Promise<Task[]> {
+    try {
+      const today = new Date()
+      const fiveDaysOut = new Date(today)
+      fiveDaysOut.setDate(today.getDate() + 5)
+      const fiveDaysStr = fiveDaysOut.toISOString().split('T')[0]
+      const { data: lines, error } = await supabase
+        .from('purchase_lines')
+        .select('id, designation, qty, fournisseur, contact_fournisseur, email_fournisseur, tel_fournisseur, eta, line_status, status_note, purchase_info!inner(opportunity_id, opportunities!inner(id, title, amount, accounts(name)))')
+        .in('line_status', ['commande', 'sous_douane'])
+        .not('eta', 'is', null)
+        .lte('eta', fiveDaysStr)
+      if (error || !lines) return []
+      return lines.map((l: any) => {
+        const opp = l.purchase_info?.opportunities
+        const daysUntil = Math.floor((new Date(l.eta).getTime() - Date.now()) / 86400000)
+        const daysLate = daysUntil < 0 ? Math.abs(daysUntil) : 0
+        const urgency = daysUntil < 0 ? `${daysLate}j en retard` : daysUntil === 0 ? "aujourd'hui" : `dans ${daysUntil}j`
+        return {
+          id: `relance_f_${l.id}`, type: 'relance_fournisseur' as TaskType,
+          priority: (daysUntil < 0 ? 'high' : 'medium') as Priority,
+          title: opp?.accounts?.name || opp?.title || '—',
+          subtitle: (l.designation || '—').slice(0, 60),
+          detail: `📦 ${l.fournisseur || '—'} · ${l.contact_fournisseur || ''} · ETA: ${l.eta} · ${urgency}${l.status_note ? ` · ${l.status_note}` : ''}`,
+          amount: opp?.amount || 0, daysLate,
+          ficheStatus: 'en_cours' as FicheStatus,
+          ficheProgress: 0, linesTotal: 1, linesComplete: 0,
+          entity_id: opp?.id || '', entity: { ...opp, email_fournisseur: l.email_fournisseur, tel_fournisseur: l.tel_fournisseur, fournisseur: l.fournisseur },
+        } as Task
+      })
+    } catch { return [] }
   }
 
   // ── Deal relances (next_step_date) ────────────────────────
@@ -694,7 +724,8 @@ export default function TasksPage() {
   const relancesSemaine = useMemo(() => visible.filter(t => t.type === 'relance_semaine'), [visible])
   const achats          = useMemo(() => visible.filter(t => t.type === 'achat_manquant'), [visible])
   const closingRetards  = useMemo(() => visible.filter(t => t.type === 'closing_retard'), [visible])
-  const etaRetards      = useMemo(() => visible.filter(t => t.type === 'eta_retard'), [visible])
+  const etaManquantes       = useMemo(() => visible.filter(t => t.type === 'eta_manquante'), [visible])
+  const relanceFournisseur  = useMemo(() => visible.filter(t => t.type === 'relance_fournisseur'), [visible])
   const dealRelances    = useMemo(() => visible.filter(t => t.type === 'deal_relance'), [visible])
   const comptesIncomplets = useMemo(() => visible.filter(t => t.type === 'compte_incomplet'), [visible])
 
@@ -704,7 +735,9 @@ export default function TasksPage() {
   const allClosing  = useMemo(() => tasks.filter(t => t.type === 'closing_retard'), [tasks])
   const allSemaine  = useMemo(() => tasks.filter(t => t.type === 'relance_semaine'), [tasks])
   const allDealRel  = useMemo(() => tasks.filter(t => t.type === 'deal_relance'), [tasks])
-  const allComptes  = useMemo(() => tasks.filter(t => t.type === 'compte_incomplet'), [tasks])
+  const allComptes    = useMemo(() => tasks.filter(t => t.type === 'compte_incomplet'), [tasks])
+  const allEtaManq    = useMemo(() => tasks.filter(t => t.type === 'eta_manquante'), [tasks])
+  const allRelanceF   = useMemo(() => tasks.filter(t => t.type === 'relance_fournisseur'), [tasks])
   const totalAchatAmt = allAchats.reduce((s, t) => s + t.amount, 0)
   const closingAmt    = allClosing.reduce((s, t) => s + t.amount, 0)
 
@@ -868,6 +901,24 @@ export default function TasksPage() {
             color="violet"
             active={typeFilter === 'compte_incomplet'}
             onClick={() => setTypeFilter(typeFilter === 'compte_incomplet' ? 'Tous' : 'compte_incomplet')}
+          />
+          <KPICard
+            icon={<Package className="h-4 w-4" />}
+            label="ETA manquante"
+            value={String(allEtaManq.length)}
+            sub="à renseigner"
+            color="orange"
+            active={typeFilter === 'eta_manquante'}
+            onClick={() => setTypeFilter(typeFilter === 'eta_manquante' ? 'Tous' : 'eta_manquante')}
+          />
+          <KPICard
+            icon={<Phone className="h-4 w-4" />}
+            label="Relance fourn."
+            value={String(allRelanceF.length)}
+            sub={allRelanceF.filter(t => t.daysLate > 0).length + ' en retard'}
+            color="amber"
+            active={typeFilter === 'relance_fournisseur'}
+            onClick={() => setTypeFilter(typeFilter === 'relance_fournisseur' ? 'Tous' : 'relance_fournisseur')}
           />
         </div>
 
@@ -1394,30 +1445,80 @@ export default function TasksPage() {
               </TaskSection>
             )}
 
-            {/* ── ETA en retard ── */}
-            {etaRetards.length > 0 && (typeFilter === 'Tous' || typeFilter === 'eta_retard') && (
+            {/* ── ETA manquante ── */}
+            {etaManquantes.length > 0 && (typeFilter === 'Tous' || typeFilter === 'eta_manquante') && (
               <TaskSection
                 icon={<Package className="h-4 w-4" />}
-                title="ETA en retard"
-                count={etaRetards.length}
+                title="ETA manquante — à renseigner"
+                count={etaManquantes.length}
+                colorScheme="orange"
+                amount={etaManquantes.reduce((s,t)=>s+t.amount,0)}>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/70">
+                      <TH col="title" label="Compte" />
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Ligne · Fournisseur</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Statut</th>
+                      <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {etaManquantes.map(t => (
+                      <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2 w-2 rounded-full shrink-0 bg-orange-500" />
+                            <span className="font-bold text-slate-900 text-xs">{t.title}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 max-w-[260px]">
+                          <span className="text-xs text-slate-700 truncate block">{t.subtitle}</span>
+                          <span className="text-[10px] text-slate-400">{t.detail}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="text-[10px] font-bold rounded-full px-2 py-0.5 bg-orange-100 text-orange-700">ETA manquante</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-center">
+                            {t.entity_id && (
+                              <button onClick={() => router.push(`/opportunities/${t.entity_id}`)}
+                                className="inline-flex h-8 items-center gap-1 rounded-xl border border-orange-200 bg-orange-50 px-3 text-xs font-semibold text-orange-700 hover:bg-orange-100 transition-colors">
+                                Ajouter ETA <ChevronRight className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </TaskSection>
+            )}
+
+            {/* ── Relance fournisseur ── */}
+            {relanceFournisseur.length > 0 && (typeFilter === 'Tous' || typeFilter === 'relance_fournisseur') && (
+              <TaskSection
+                icon={<Phone className="h-4 w-4" />}
+                title="Relance fournisseur"
+                count={relanceFournisseur.length}
                 colorScheme="amber"
-                amount={etaRetards.reduce((s,t)=>s+t.amount,0)}>
+                amount={relanceFournisseur.reduce((s,t)=>s+t.amount,0)}>
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/70">
                       <TH col="title" label="Compte" />
                       <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Ligne · Fournisseur</th>
                       <TH col="amount" label="Montant" right />
-                      <TH col="daysLate" label="Retard" right />
+                      <TH col="daysLate" label="Délai" right />
                       <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
-                    {etaRetards.map(t => (
+                    {relanceFournisseur.map(t => (
                       <tr key={t.id} className="hover:bg-slate-50/60 transition-colors">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <span className={`h-2 w-2 rounded-full shrink-0 ${t.priority === 'high' ? 'bg-red-500' : 'bg-amber-400'}`} />
+                            <span className={`h-2 w-2 rounded-full shrink-0 ${t.daysLate > 0 ? 'bg-red-500' : 'bg-amber-400'}`} />
                             <span className="font-bold text-slate-900 text-xs">{t.title}</span>
                           </div>
                         </td>
@@ -1430,12 +1531,26 @@ export default function TasksPage() {
                         </td>
                         <td className="px-4 py-3 text-right">
                           <span className={`text-xs font-bold px-2.5 py-1 rounded-full
-                            ${t.daysLate > 7 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {t.daysLate}j
+                            ${t.daysLate > 0 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'}`}>
+                            {t.daysLate > 0 ? `${t.daysLate}j retard` : t.detail?.match(/dans \d+j/)?.[0] || 'bientôt'}
                           </span>
                         </td>
                         <td className="px-4 py-3">
-                          <div className="flex justify-center">
+                          <div className="flex justify-center gap-1">
+                            {t.entity?.tel_fournisseur && (
+                              <a href={`tel:${t.entity.tel_fournisseur}`}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+                                title={`Appeler ${t.entity.fournisseur}`}>
+                                <Phone className="h-3.5 w-3.5" />
+                              </a>
+                            )}
+                            {t.entity?.email_fournisseur && (
+                              <a href={`mailto:${t.entity.email_fournisseur}`}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                title={`Email ${t.entity.fournisseur}`}>
+                                <Mail className="h-3.5 w-3.5" />
+                              </a>
+                            )}
                             {t.entity_id && (
                               <button onClick={() => router.push(`/opportunities/${t.entity_id}`)}
                                 className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">

@@ -359,111 +359,88 @@ function LineCard({
   const isLivre = ls === 'livre' || ls === 'facture'
   const [editNote, setEditNote] = useState(false)
   const [noteVal, setNoteVal] = useState(line.status_note || '')
+  const desig = line.designation || '—'
+  const shortDesig = desig.length > 60 ? desig.slice(0, 60) + '…' : desig
 
   return (
-    <div className={`rounded-xl border overflow-hidden transition-all
-      ${isFactured ? 'border-slate-200 bg-slate-50/50 opacity-70' :
+    <div className={`rounded-lg border overflow-hidden transition-all
+      ${isFactured ? 'border-slate-200 bg-slate-50/50 opacity-60' :
         isLivre ? 'border-emerald-200 bg-emerald-50/30' :
-        'border-slate-200 bg-white shadow-sm hover:shadow-md'}`}>
-      <div className="flex items-start gap-3 px-4 py-3">
-        {/* Status indicator */}
-        <div className={`flex-shrink-0 mt-0.5 h-8 w-8 rounded-lg flex items-center justify-center text-sm
+        'border-slate-200 bg-white hover:shadow-sm'}`}>
+      {/* Row 1: designation + qty + fournisseur + status dropdown */}
+      <div className="flex items-center gap-2 px-3 py-2">
+        <div className={`flex-shrink-0 h-6 w-6 rounded-md flex items-center justify-center text-xs
           ${lsCfg.bg} ${lsCfg.border} border`}>
           {lsCfg.icon}
         </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-slate-900 leading-tight">
-                {line.designation || '—'}
-              </div>
-              <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500 flex-wrap">
-                {line.ref && <span className="font-mono bg-slate-100 rounded px-1 py-0.5">Réf: {line.ref}</span>}
-                <span>Qté <strong>{line.qty}</strong></span>
-                {line.fournisseur && (
-                  <span className="rounded-full bg-violet-50 border border-violet-200 px-1.5 py-0.5 font-semibold text-violet-700">
-                    {line.fournisseur}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Status dropdown */}
-            <select
-              value={ls}
-              disabled={busy || isFactured}
-              onChange={e => onUpdateStatus(line.id, e.target.value as LineStatus)}
-              className={`h-7 rounded-lg border px-1.5 text-[10px] font-bold outline-none cursor-pointer flex-shrink-0
-                ${lsCfg.bg} ${lsCfg.border} ${lsCfg.color}
-                disabled:opacity-40 disabled:cursor-not-allowed`}>
-              {LINE_STATUS_ORDER.map(s => (
-                <option key={s} value={s}>{LINE_STATUS_CFG[s].icon} {LINE_STATUS_CFG[s].label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* ETA + Warranty/License row */}
-          {!isFactured && (
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <div className="flex items-center gap-1">
-                <CalendarDays className="h-3 w-3 text-slate-400" />
-                <input
-                  type="date"
-                  value={line.eta ? line.eta.slice(0, 10) : ''}
-                  disabled={busy}
-                  onChange={e => onUpdateEta(line.id, e.target.value)}
-                  className="h-6 rounded-md border border-slate-200 px-1.5 text-[10px] outline-none focus:border-blue-300 disabled:opacity-40"
-                />
-                {line.eta_updated_at && (
-                  <span className="text-[9px] text-slate-400">
-                    maj {fmtDate(line.eta_updated_at)}
-                  </span>
-                )}
-              </div>
-              {line.warranty_months ? (
-                <span className="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700">
-                  <ShieldCheck className="h-2.5 w-2.5" /> {line.warranty_months}m garantie
-                </span>
-              ) : null}
-              {line.license_months ? (
-                <span className="inline-flex items-center gap-0.5 rounded-md bg-blue-50 border border-blue-200 px-1.5 py-0.5 text-[9px] font-semibold text-blue-700">
-                  {line.license_months}m licence
-                </span>
-              ) : null}
-            </div>
+        <div className="flex-1 min-w-0 flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-slate-800 truncate" title={desig}>
+            {shortDesig}
+          </span>
+          <span className="flex-shrink-0 text-[9px] text-slate-400 font-medium">×{line.qty}</span>
+          {line.fournisseur && (
+            <span className="flex-shrink-0 rounded-full bg-violet-50 border border-violet-200 px-1.5 py-0.5 text-[9px] font-semibold text-violet-700 truncate max-w-[100px]">
+              {line.fournisseur}
+            </span>
           )}
-
-          {/* Note */}
-          <div className="mt-2">
-            {editNote ? (
-              <div className="flex items-center gap-1">
-                <input value={noteVal} onChange={e => setNoteVal(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') { onUpdateNote(line.id, noteVal); setEditNote(false) }
-                    if (e.key === 'Escape') setEditNote(false)
-                  }}
-                  autoFocus placeholder="Note de suivi…"
-                  className="h-6 flex-1 rounded-md border border-slate-200 px-2 text-[10px] outline-none focus:border-blue-300" />
-                <button onClick={() => { onUpdateNote(line.id, noteVal); setEditNote(false) }}
-                  className="h-6 rounded-md bg-slate-900 px-2 text-[9px] font-bold text-white">OK</button>
-                <button onClick={() => setEditNote(false)}
-                  className="h-6 rounded-md border border-slate-200 px-1.5 text-[9px] text-slate-500">✕</button>
-              </div>
-            ) : (
-              <button onClick={() => { setNoteVal(line.status_note || ''); setEditNote(true) }}
-                className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-700 transition-colors">
-                <MessageSquare className="h-3 w-3" />
-                {line.status_note ? (
-                  <span className="text-slate-600 font-medium">{line.status_note}</span>
-                ) : (
-                  <span>Ajouter une note…</span>
-                )}
-              </button>
-            )}
-          </div>
         </div>
+        <select
+          value={ls}
+          disabled={busy || isFactured}
+          onChange={e => onUpdateStatus(line.id, e.target.value as LineStatus)}
+          className={`h-6 rounded-md border px-1 text-[9px] font-bold outline-none cursor-pointer flex-shrink-0
+            ${lsCfg.bg} ${lsCfg.border} ${lsCfg.color}
+            disabled:opacity-40 disabled:cursor-not-allowed`}>
+          {LINE_STATUS_ORDER.map(s => (
+            <option key={s} value={s}>{LINE_STATUS_CFG[s].icon} {LINE_STATUS_CFG[s].label}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Row 2: ETA + note (compact) */}
+      <div className="flex items-center gap-2 px-3 pb-2 -mt-0.5">
+        {!isFactured && (
+          <div className="flex items-center gap-1">
+            <CalendarDays className="h-3 w-3 text-slate-400" />
+            <input
+              type="date"
+              value={line.eta ? line.eta.slice(0, 10) : ''}
+              disabled={busy}
+              onChange={e => onUpdateEta(line.id, e.target.value)}
+              className="h-5 rounded border border-slate-200 px-1 text-[9px] outline-none focus:border-blue-300 disabled:opacity-40"
+            />
+            {line.eta && (() => {
+              const days = Math.floor((new Date(line.eta).getTime() - Date.now()) / 86400000)
+              if (days < 0) return <span className="text-[9px] font-bold text-red-600">{Math.abs(days)}j retard</span>
+              if (days <= 5) return <span className="text-[9px] font-bold text-amber-600">dans {days}j</span>
+              return null
+            })()}
+          </div>
+        )}
+        <div className="flex-1" />
+        {editNote ? (
+          <div className="flex items-center gap-1 flex-1 max-w-[250px]">
+            <input value={noteVal} onChange={e => setNoteVal(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { onUpdateNote(line.id, noteVal); setEditNote(false) }
+                if (e.key === 'Escape') setEditNote(false)
+              }}
+              autoFocus placeholder="Note…"
+              className="h-5 flex-1 rounded border border-slate-200 px-1.5 text-[9px] outline-none focus:border-blue-300" />
+            <button onClick={() => { onUpdateNote(line.id, noteVal); setEditNote(false) }}
+              className="h-5 rounded bg-slate-900 px-1.5 text-[8px] font-bold text-white">OK</button>
+            <button onClick={() => setEditNote(false)}
+              className="h-5 rounded border border-slate-200 px-1 text-[8px] text-slate-500">✕</button>
+          </div>
+        ) : (
+          <button onClick={() => { setNoteVal(line.status_note || ''); setEditNote(true) }}
+            className="flex items-center gap-1 text-[9px] text-slate-400 hover:text-slate-600 transition-colors relative flex-shrink-0"
+            title={line.status_note || 'Ajouter une note'}>
+            <MessageSquare className="h-3 w-3" />
+            {line.status_note && <span className="absolute -top-0.5 -right-0.5 h-1.5 w-1.5 rounded-full bg-blue-500" />}
+            {line.status_note && <span className="text-slate-500 font-medium truncate max-w-[120px]">{line.status_note}</span>}
+          </button>
+        )}
       </div>
     </div>
   )
