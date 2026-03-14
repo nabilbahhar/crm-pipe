@@ -1341,7 +1341,7 @@ export default function TasksPage() {
                         <td className="px-4 py-3 text-xs text-slate-500">{t.detail}</td>
                         <td className="px-4 py-3">
                           <div className="flex justify-center">
-                            <button onClick={() => router.push('/accounts')}
+                            <button onClick={() => router.push(`/accounts/${t.entity_id}`)}
                               className="inline-flex h-8 items-center gap-1 rounded-xl bg-violet-600 px-3 text-xs font-bold text-white hover:bg-violet-700 transition-colors shadow-sm">
                               Compléter <ChevronRight className="h-3.5 w-3.5" />
                             </button>

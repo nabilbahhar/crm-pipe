@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { getSignedUrls } from '@/lib/getSignedUrls'
 import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName, paymentTermLabel } from '@/lib/utils'
 
 // HTML escape helper — prevents XSS in email template
@@ -393,11 +394,7 @@ export default function OpportunityDetailPage() {
 
     const f = filesRes.data || []
     setFiles(f)
-    const urls: Record<string, string> = {}
-    await Promise.all(f.map(async (fi: DealFile) => {
-      const { data } = await supabase.storage.from('deal-files').createSignedUrl(fi.file_url, 3600)
-      if (data?.signedUrl) urls[fi.id] = data.signedUrl
-    }))
+    const urls = await getSignedUrls('deal-files', f)
     setFileUrls(urls)
 
     if (supplyRes.data) setSupply(supplyRes.data)

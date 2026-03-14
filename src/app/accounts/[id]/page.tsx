@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
+import { getSignedUrls } from '@/lib/getSignedUrls'
 import { mad, fmt, fmtDate, fmtDateTime, STAGE_CFG, ownerName } from '@/lib/utils'
 import {
   ArrowLeft, Building2, ChevronRight, Plus, X, Pencil, Trash2,
@@ -169,12 +170,8 @@ export default function AccountDetailPage() {
       setProspectActivities([])
     }
 
-    // Generate signed URLs for files
-    const urls: Record<string, string> = {}
-    await Promise.all(f.map(async (fi) => {
-      const { data } = await supabase.storage.from('account-files').createSignedUrl(fi.file_url, 3600)
-      if (data?.signedUrl) urls[fi.id] = data.signedUrl
-    }))
+    // Generate signed URLs for files (via server route — service role key)
+    const urls = await getSignedUrls('account-files', f)
     setFileUrls(urls)
     setLoading(false)
   }
