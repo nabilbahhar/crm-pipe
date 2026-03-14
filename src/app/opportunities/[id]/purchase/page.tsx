@@ -1026,7 +1026,11 @@ export default function PurchasePage() {
               </div>
               <span className="text-white text-lg font-black">{mad(dealAmount)}</span>
             </div>
-            {/* Lines as devis */}
+            {/* Column header */}
+            <div className="grid grid-cols-[50px_1fr_75px_110px_120px] bg-slate-50 border-b border-slate-200 px-5 py-2 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+              <span>#</span><span>Désignation</span><span className="text-right">Qté</span><span className="text-right">PU HT</span><span className="text-right">PT HT</span>
+            </div>
+            {/* Lines */}
             <div className="divide-y divide-slate-100">
               {lines.map((l, i) => {
                 const ptVente = Number(l.pt_vente) || Number(l.qty)*Number(l.pu_vente)
@@ -1034,204 +1038,202 @@ export default function PurchasePage() {
                 const marge = ptVente - ptAchat
                 const margePc = ptVente > 0 ? (marge/ptVente)*100 : 0
                 const isOpen = editingIdx === i
+                const fournName = l.fournisseur_id ? fourns.find(f=>f.id===l.fournisseur_id)?.name : null
                 return (
-                  <div key={i} className={`transition-colors ${isOpen ? 'bg-slate-50/60' : 'hover:bg-slate-50/40'}`}>
-                    {/* ── Read-only devis line (always visible) ── */}
-                    <div onClick={() => setEditingIdx(isOpen ? null : i)}
-                      className="flex gap-4 px-6 py-4 cursor-pointer select-none group">
-                      {/* Left: # + Réf */}
-                      <div className="w-[80px] shrink-0">
-                        <span className={`inline-flex h-6 w-6 items-center justify-center rounded text-[10px] font-bold ${isOpen ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>{i+1}</span>
-                        {l.ref && <p className="mt-1 text-[11px] font-mono text-slate-400 truncate">{l.ref}</p>}
-                      </div>
-                      {/* Center: Designation (read-only) */}
-                      <div className="flex-1 min-w-0">
-                        {l.designation.trim() ? (
-                          <div className="text-[13px] text-slate-800 leading-relaxed" dangerouslySetInnerHTML={{ __html: renderDesignation(l.designation) }} />
-                        ) : (
-                          <span className="text-xs text-slate-300 italic">Cliquer pour saisir…</span>
-                        )}
-                      </div>
-                      {/* Right: Numbers (read-only) */}
-                      <div className="w-[240px] shrink-0">
-                        <div className="grid grid-cols-3 gap-2 text-right">
-                          <div>
-                            <span className="text-[9px] uppercase text-slate-400 block">Qté</span>
-                            <span className="text-sm font-semibold text-slate-700">{l.qty}</span>
+                  <div key={i}>
+                    {isOpen ? (
+                      /* ═══ EDIT MODE — replaces the read line entirely ═══ */
+                      <div className="bg-blue-50/30 border-l-4 border-blue-500">
+                        {/* Edit header bar */}
+                        <div className="flex items-center justify-between px-5 py-3 bg-blue-50 border-b border-blue-100">
+                          <div className="flex items-center gap-3">
+                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 text-[11px] font-bold text-white">{i+1}</span>
+                            <span className="text-sm font-semibold text-blue-800">Édition ligne {i+1}</span>
+                            {l.ref && <span className="text-xs font-mono text-blue-400 bg-blue-100 rounded px-2 py-0.5">{l.ref}</span>}
                           </div>
-                          <div>
-                            <span className="text-[9px] uppercase text-slate-400 block">PU/HT</span>
-                            <span className="text-sm text-slate-600">{l.pu_vente ? numFmt(l.pu_vente) : '—'}</span>
-                          </div>
-                          <div>
-                            <span className="text-[9px] uppercase text-slate-400 block">PT/HT</span>
-                            <span className="text-sm font-bold text-slate-800">{ptVente > 0 ? numFmt(ptVente) : '—'}</span>
+                          <div className="flex items-center gap-3">
+                            {ptVente > 0 && <span className="text-sm font-bold text-blue-800">{mad(ptVente)}</span>}
+                            {l.pu_achat > 0 && ptVente > 0 && (
+                              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
+                            )}
+                            <button onClick={() => setEditingIdx(null)}
+                              className="flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-blue-700 transition">
+                              <X className="h-3 w-3" /> Fermer
+                            </button>
                           </div>
                         </div>
-                      </div>
-                      {/* Chevron */}
-                      <div className="w-5 shrink-0 flex items-center justify-center">
-                        <span className={`text-slate-300 text-xs transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>▾</span>
-                      </div>
-                    </div>
-
-                    {/* ── Edit panel (opens below the line) ── */}
-                    {isOpen && (
-                      <div className="border-t border-slate-200 bg-white px-6 pb-5 pt-4 space-y-4">
-                        {/* Row 1: Réf + Désignation */}
-                        <div className="grid grid-cols-[120px_1fr] gap-3">
+                        {/* Edit body */}
+                        <div className="px-5 py-4 space-y-4">
+                          {/* Désignation + Réf */}
                           <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Réf</label>
-                            <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)} spellCheck={false}
-                              placeholder="Réf…" className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-mono outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50" />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Désignation</label>
+                            <div className="flex items-center gap-3 mb-1.5">
+                              <label className="text-[10px] font-bold uppercase text-slate-400">Désignation</label>
+                              <div className="flex items-center gap-1.5">
+                                <label className="text-[10px] font-bold uppercase text-slate-400">Réf:</label>
+                                <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)} spellCheck={false}
+                                  placeholder="Réf…" className="h-6 w-[120px] rounded border border-slate-200 bg-white px-2 text-[11px] font-mono outline-none focus:border-blue-400" />
+                              </div>
+                            </div>
                             <textarea value={l.designation} spellCheck={false}
+                              autoFocus
                               onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
                               onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
                               rows={3}
-                              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-[13px] leading-relaxed outline-none resize-none overflow-hidden focus:border-blue-400 focus:ring-2 focus:ring-blue-50"
+                              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-[13px] leading-relaxed outline-none resize-none overflow-hidden focus:border-blue-300 focus:ring-2 focus:ring-blue-50"
                               style={{ minHeight: 80 }} />
                           </div>
-                        </div>
 
-                        {/* Row 2: Vente numbers */}
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Qté</label>
-                            <input type="number" min={1} value={Number(l.qty)||1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
-                              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-right font-semibold outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">PU Vente</label>
-                            <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
-                              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-right outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">PT Vente</label>
-                            <div className="flex h-9 items-center justify-end rounded-lg bg-slate-100 px-2.5 text-sm font-bold text-slate-800">{ptVente > 0 ? numFmt(ptVente) : '—'}</div>
-                          </div>
-                        </div>
-
-                        {/* Row 3: Achat bar */}
-                        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
-                          <div className="grid grid-cols-4 gap-3 items-end">
+                          {/* Vente + Achat on same row */}
+                          <div className="grid grid-cols-6 gap-3">
                             <div>
-                              <label className="mb-1 block text-[9px] font-bold uppercase text-amber-600">PU Achat ★</label>
+                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Qté</label>
+                              <input type="number" min={1} value={Number(l.qty)||1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
+                                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-right font-semibold outline-none focus:border-blue-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">PU Vente</label>
+                              <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
+                                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-sm text-right outline-none focus:border-blue-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">PT Vente</label>
+                              <div className="flex h-9 items-center justify-end rounded-lg bg-slate-100 px-2 text-sm font-bold text-slate-800">{ptVente > 0 ? numFmt(ptVente) : '—'}</div>
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[10px] font-bold uppercase text-amber-600">PU Achat ★</label>
                               <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
-                                className="h-9 w-full rounded-lg border border-amber-300 bg-white px-2.5 text-sm text-right font-bold outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                className="h-9 w-full rounded-lg border border-amber-300 bg-amber-50 px-2 text-sm text-right font-bold outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
                             <div>
-                              <label className="mb-1 block text-[9px] font-bold uppercase text-amber-600">PT Achat</label>
-                              <div className="flex h-9 items-center justify-end rounded-lg bg-amber-100/60 px-2.5 text-sm font-bold text-slate-700">{ptAchat > 0 ? numFmt(ptAchat) : '—'}</div>
+                              <label className="mb-1 block text-[10px] font-bold uppercase text-amber-600">PT Achat</label>
+                              <div className="flex h-9 items-center justify-end rounded-lg bg-amber-100/60 px-2 text-sm font-bold text-slate-700">{ptAchat > 0 ? numFmt(ptAchat) : '—'}</div>
                             </div>
                             <div>
-                              <label className="mb-1 block text-[9px] font-bold uppercase text-amber-600">Marge</label>
+                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Marge</label>
                               <div className="flex h-9 items-center justify-center">
                                 {l.pu_achat > 0 && ptVente > 0 ? (
                                   <span className={`rounded-full px-3 py-1 text-xs font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
-                                ) : <span className="text-slate-400 text-xs">—</span>}
+                                ) : <span className="text-slate-300 text-xs">—</span>}
                               </div>
                             </div>
-                            <div className="flex justify-end">
-                              <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
-                                className="flex h-9 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 text-xs font-semibold text-red-500 hover:bg-red-100 transition">
-                                <Trash2 className="h-3 w-3" /> Supprimer
-                              </button>
-                            </div>
                           </div>
-                        </div>
 
-                        {/* Row 4: Fournisseur + Garantie + Licence */}
-                        <div className="grid grid-cols-3 gap-3">
-                          <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fournisseur</label>
-                            <div className="flex gap-1.5">
-                              <select value={l.fournisseur_id||''} onChange={e => {
-                                const fid = e.target.value || null
-                                setLines(prev => prev.map((ln, idx) => idx !== i ? ln : { ...ln, fournisseur_id: fid, selected_contact_ids: [], contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '' }))
-                              }}
-                                className={`h-9 flex-1 rounded-lg border px-2.5 text-xs outline-none focus:ring-2 focus:ring-slate-100 ${l.fournisseur_id?'border-slate-300 bg-white font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
-                                <option value="">Choisir…</option>
-                                {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                              </select>
-                              <button onClick={() => setShowFournModal(true)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:text-slate-600 hover:border-slate-400 transition"><Plus className="h-3.5 w-3.5" /></button>
-                            </div>
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fin garantie</label>
-                            <input type="month" value={l.warranty_expiry||''} onChange={e => updateLine(i,'warranty_expiry',e.target.value)}
-                              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-slate-400" />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fin licence</label>
-                            <input type="month" value={l.license_expiry||''} onChange={e => updateLine(i,'license_expiry',e.target.value)}
-                              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-slate-400" />
-                          </div>
-                        </div>
-
-                        {/* Contacts fournisseur */}
-                        {l.fournisseur_id && (() => {
-                          const contacts = supplierContacts.filter(c => c.supplier_id === l.fournisseur_id)
-                          const fourn = fourns.find(f => f.id === l.fournisseur_id)
-                          const options: { id: string; label: string; contact: string; email: string; tel: string }[] = []
-                          if (fourn?.contact) options.push({ id: `main_${fourn.id}`, label: `${fourn.contact} (principal)`, contact: fourn.contact, email: fourn.email || '', tel: fourn.tel || '' })
-                          contacts.forEach(c => options.push({ id: c.id, label: `${c.contact_name}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
-                          const selectedIds = l.selected_contact_ids || []
-                          const toggleContact = (optId: string) => {
-                            setLines(prev => prev.map((ln, idx) => {
-                              if (idx !== i) return ln
-                              const curIds = ln.selected_contact_ids || []
-                              const isSelected = curIds.includes(optId)
-                              const newIds = isSelected ? curIds.filter((sid: string) => sid !== optId) : [...curIds, optId]
-                              const contactNames = newIds.map(sid => options.find(o => o.id === sid)?.contact).filter(Boolean).join(', ')
-                              const emails = newIds.map(sid => options.find(o => o.id === sid)?.email).filter(Boolean).join(', ')
-                              const tels = newIds.map(sid => options.find(o => o.id === sid)?.tel).filter(Boolean).join(', ')
-                              return { ...ln, selected_contact_ids: newIds, contact_fournisseur: contactNames, email_fournisseur: emails, tel_fournisseur: tels }
-                            }))
-                          }
-                          return (
-                            <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 space-y-2">
-                              <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                                <span>👤</span> Contacts fournisseur {selectedIds.length > 0 && <span className="ml-1 rounded-full bg-blue-500 text-white px-1.5 text-[9px]">{selectedIds.length}</span>}
+                          {/* Fournisseur + Garantie + Licence + Supprimer */}
+                          <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 items-end">
+                            <div>
+                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fournisseur</label>
+                              <div className="flex gap-1.5">
+                                <select value={l.fournisseur_id||''} onChange={e => {
+                                  const fid = e.target.value || null
+                                  setLines(prev => prev.map((ln, idx) => idx !== i ? ln : { ...ln, fournisseur_id: fid, selected_contact_ids: [], contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '' }))
+                                }}
+                                  className={`h-9 flex-1 rounded-lg border px-2 text-xs outline-none ${l.fournisseur_id?'border-slate-300 bg-white font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                                  <option value="">Choisir…</option>
+                                  {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                </select>
+                                <button onClick={() => setShowFournModal(true)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:text-slate-600 transition"><Plus className="h-3.5 w-3.5" /></button>
                               </div>
-                              {options.length >= 1 ? (
-                                <div className="flex flex-wrap gap-1.5">
-                                  {options.map(opt => {
-                                    const checked = selectedIds.includes(opt.id)
-                                    return (
-                                      <label key={opt.id}
-                                        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 cursor-pointer transition text-xs
-                                          ${checked ? 'bg-blue-100 border border-blue-300 shadow-sm' : 'bg-white border border-blue-100 hover:bg-blue-50'}`}>
-                                        <input type="checkbox" checked={checked} onChange={() => toggleContact(opt.id)}
-                                          className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 accent-blue-600" />
-                                        <div className="min-w-0">
-                                          <div className="font-semibold text-slate-700">{opt.label}</div>
-                                          {(opt.email || opt.tel) && (
-                                            <div className="text-[10px] text-slate-400 truncate">{opt.email}{opt.email && opt.tel ? ' · ' : ''}{opt.tel}</div>
-                                          )}
-                                        </div>
-                                      </label>
-                                    )
-                                  })}
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fin garantie</label>
+                              <input type="month" value={l.warranty_expiry||''} onChange={e => updateLine(i,'warranty_expiry',e.target.value)}
+                                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400" />
+                            </div>
+                            <div>
+                              <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fin licence</label>
+                              <input type="month" value={l.license_expiry||''} onChange={e => updateLine(i,'license_expiry',e.target.value)}
+                                className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400" />
+                            </div>
+                            <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
+                              className="flex h-9 items-center gap-1 rounded-lg border border-red-200 bg-red-50 px-3 text-[11px] font-semibold text-red-500 hover:bg-red-100 transition">
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+
+                          {/* Contacts fournisseur */}
+                          {l.fournisseur_id && (() => {
+                            const contacts = supplierContacts.filter(c => c.supplier_id === l.fournisseur_id)
+                            const fourn = fourns.find(f => f.id === l.fournisseur_id)
+                            const options: { id: string; label: string; contact: string; email: string; tel: string }[] = []
+                            if (fourn?.contact) options.push({ id: `main_${fourn.id}`, label: `${fourn.contact} (principal)`, contact: fourn.contact, email: fourn.email || '', tel: fourn.tel || '' })
+                            contacts.forEach(c => options.push({ id: c.id, label: `${c.contact_name}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
+                            const selectedIds = l.selected_contact_ids || []
+                            const toggleContact = (optId: string) => {
+                              setLines(prev => prev.map((ln, idx) => {
+                                if (idx !== i) return ln
+                                const curIds = ln.selected_contact_ids || []
+                                const isSelected = curIds.includes(optId)
+                                const newIds = isSelected ? curIds.filter((sid: string) => sid !== optId) : [...curIds, optId]
+                                const contactNames = newIds.map(sid => options.find(o => o.id === sid)?.contact).filter(Boolean).join(', ')
+                                const emails = newIds.map(sid => options.find(o => o.id === sid)?.email).filter(Boolean).join(', ')
+                                const tels = newIds.map(sid => options.find(o => o.id === sid)?.tel).filter(Boolean).join(', ')
+                                return { ...ln, selected_contact_ids: newIds, contact_fournisseur: contactNames, email_fournisseur: emails, tel_fournisseur: tels }
+                              }))
+                            }
+                            return (
+                              <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-3 space-y-2">
+                                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-400">
+                                  <span>👤</span> Contacts {selectedIds.length > 0 && <span className="ml-1 rounded-full bg-blue-500 text-white px-1.5 text-[9px]">{selectedIds.length}</span>}
                                 </div>
-                              ) : (
-                                <input value={l.contact_fournisseur||''} onChange={e => updateLine(i,'contact_fournisseur',e.target.value)}
-                                  placeholder="Nom du contact…"
-                                  className="h-8 w-full rounded-lg border border-blue-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                {options.length >= 1 ? (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {options.map(opt => {
+                                      const checked = selectedIds.includes(opt.id)
+                                      return (
+                                        <label key={opt.id}
+                                          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 cursor-pointer transition text-xs
+                                            ${checked ? 'bg-blue-100 border border-blue-300 shadow-sm' : 'bg-white border border-blue-100 hover:bg-blue-50'}`}>
+                                          <input type="checkbox" checked={checked} onChange={() => toggleContact(opt.id)}
+                                            className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 accent-blue-600" />
+                                          <div className="min-w-0">
+                                            <div className="font-semibold text-slate-700">{opt.label}</div>
+                                            {(opt.email || opt.tel) && <div className="text-[10px] text-slate-400 truncate">{opt.email}{opt.email && opt.tel ? ' · ' : ''}{opt.tel}</div>}
+                                          </div>
+                                        </label>
+                                      )
+                                    })}
+                                  </div>
+                                ) : (
+                                  <input value={l.contact_fournisseur||''} onChange={e => updateLine(i,'contact_fournisseur',e.target.value)}
+                                    placeholder="Nom du contact…" className="h-8 w-full rounded-lg border border-blue-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                )}
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    ) : (
+                      /* ═══ READ MODE — clean devis line ═══ */
+                      <div onClick={() => setEditingIdx(i)}
+                        className="grid grid-cols-[50px_1fr_75px_110px_120px] items-start px-5 py-3.5 cursor-pointer hover:bg-slate-50/70 transition group">
+                        {/* # */}
+                        <div className="pt-0.5">
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded bg-slate-200 text-[10px] font-bold text-slate-500 group-hover:bg-blue-100 group-hover:text-blue-600 transition">{i+1}</span>
+                          {l.ref && <p className="mt-1 text-[10px] font-mono text-slate-400">{l.ref}</p>}
+                        </div>
+                        {/* Designation — full text, formatted */}
+                        <div className="pr-4 min-w-0">
+                          {l.designation.trim() ? (
+                            <div className="text-[12.5px] text-slate-700 leading-[1.6]" dangerouslySetInnerHTML={{ __html: renderDesignation(l.designation) }} />
+                          ) : (
+                            <span className="text-xs text-red-300 italic">Cliquer pour saisir la désignation…</span>
+                          )}
+                          {/* Fournisseur + marge badges inline */}
+                          {(fournName || (l.pu_achat > 0 && ptVente > 0)) && (
+                            <div className="flex items-center gap-2 mt-1.5">
+                              {fournName && <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">{fournName}</span>}
+                              {l.pu_achat > 0 && ptVente > 0 && (
+                                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${margePc>=20?'bg-emerald-50 text-emerald-600':margePc>=10?'bg-amber-50 text-amber-600':'bg-red-50 text-red-600'}`}>Marge {pct(margePc)}</span>
                               )}
                             </div>
-                          )
-                        })()}
-
-                        {/* Close button */}
-                        <div className="flex justify-end pt-1">
-                          <button onClick={() => setEditingIdx(null)}
-                            className="rounded-lg bg-slate-800 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-700 transition">
-                            ✓ Fermer
-                          </button>
+                          )}
                         </div>
+                        {/* Qté */}
+                        <span className="text-right text-sm font-semibold text-slate-700 pt-0.5">{l.qty}</span>
+                        {/* PU */}
+                        <span className="text-right text-sm text-slate-600 pt-0.5">{l.pu_vente ? numFmt(l.pu_vente) : '—'}</span>
+                        {/* PT */}
+                        <span className="text-right text-sm font-bold text-slate-800 pt-0.5">{ptVente > 0 ? numFmt(ptVente) : '—'}</span>
                       </div>
                     )}
                   </div>
@@ -1240,17 +1242,19 @@ export default function PurchasePage() {
             </div>
             {/* Devis footer - totals */}
             <div className="border-t-2 border-slate-300 bg-slate-50">
-              <div className="flex justify-end px-6 py-3">
-                <div className="w-[300px] space-y-1.5">
-                  <div className="flex justify-between text-sm"><span className="text-slate-500">Total HT</span><span className="font-bold text-slate-800">{numFmt(totalVente)}</span></div>
-                  {totalAchat > 0 && <>
-                    <div className="flex justify-between text-sm"><span className="text-slate-500">Total Achat</span><span className="font-semibold text-slate-600">{numFmt(totalAchat)}</span></div>
-                    <div className="flex justify-between text-sm border-t border-slate-200 pt-1.5"><span className="text-slate-500">Marge brute</span>
-                      <span className={`font-bold ${margePctBrute>=10?'text-emerald-700':'text-red-600'}`}>{mad(margeBrute)} ({pct(margePctBrute)})</span>
-                    </div>
-                  </>}
-                </div>
+              <div className="grid grid-cols-[50px_1fr_75px_110px_120px] px-5 py-3">
+                <span></span>
+                <span className="text-sm font-bold text-slate-500">Total HT</span>
+                <span></span>
+                <span></span>
+                <span className="text-right text-sm font-black text-slate-800">{numFmt(totalVente)}</span>
               </div>
+              {totalAchat > 0 && (
+                <div className="px-5 pb-3 flex justify-end gap-6">
+                  <span className="text-xs text-slate-400">Achat: <strong className="text-slate-600">{numFmt(totalAchat)}</strong></span>
+                  <span className={`text-xs font-bold ${margePctBrute>=10?'text-emerald-600':'text-red-600'}`}>Marge: {mad(margeBrute)} ({pct(margePctBrute)})</span>
+                </div>
+              )}
             </div>
           </div>
           </>)}
