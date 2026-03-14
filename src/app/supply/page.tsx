@@ -404,8 +404,10 @@ function LineCard({
         {!isFactured && (
           <div className="flex items-center gap-1">
             <CalendarDays className="h-3 w-3 text-slate-400" />
+            <span className="text-[8px] font-semibold text-slate-400 uppercase">ETA</span>
             <input
               type="date"
+              title="Date de livraison estimée"
               value={line.eta ? line.eta.slice(0, 10) : ''}
               disabled={busy}
               onChange={e => onUpdateEta(line.id, e.target.value)}

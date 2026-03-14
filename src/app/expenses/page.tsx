@@ -690,6 +690,7 @@ export default function ExpensesPage() {
                           <td className="px-3 py-2">
                             <input type="date" value={line.date}
                               onChange={e => updateLine(idx, { date: e.target.value })}
+                              title="Date de la dépense"
                               className={inp} />
                           </td>
                           <td className="px-3 py-2">

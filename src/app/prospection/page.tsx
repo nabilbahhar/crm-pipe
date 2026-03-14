@@ -1108,9 +1108,11 @@ export default function ProspectionPage() {
           {(dateFrom || dateTo) ? (
             <div className="flex h-9 items-center gap-1 rounded-xl border bg-white px-2 shadow-sm text-xs">
               <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                title="Date début" placeholder="Du"
                 className="bg-transparent outline-none text-xs text-slate-600 w-[105px]" />
               <span className="text-slate-300">→</span>
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                title="Date fin" placeholder="Au"
                 className="bg-transparent outline-none text-xs text-slate-600 w-[105px]" />
               <button onClick={() => { setDateFrom(''); setDateTo('') }} className="text-slate-400 hover:text-red-500">
                 <X className="h-3 w-3" />

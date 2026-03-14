@@ -273,7 +273,9 @@ export default function ProjectsPage() {
   const deploymentDeals = useMemo(() => {
     return deals.filter(d => {
       if (normStatus(d) !== 'Won') return false
-      if (!hasPrestation(d)) return false
+      // Un deal est en deploiement s'il a des project_services (créés lors du placement avec lignes PRESTA)
+      const hasServices = Array.isArray(d.project_services) && d.project_services.length > 0
+      if (!hasServices) return false
       if (buFilter !== 'Tous') {
         const mainBu = normMainBU(d.bu)
         if (mainBu !== buFilter) return false
@@ -700,7 +702,7 @@ export default function ProjectsPage() {
         {/* ── Mini pie chart — Projets par BU ── */}
         {deals.length > 0 && (() => {
           const buMap: Record<string, number> = {}
-          const serviceDeals = deals.filter(d => hasPrestation(d))
+          const serviceDeals = tab === 'prescription' ? prescriptionDeals : deploymentDeals
           serviceDeals.forEach(d => {
             const bu = normMainBU(d.bu) || 'Autre'
             buMap[bu] = (buMap[bu] || 0) + 1
@@ -1207,12 +1209,20 @@ export default function ProjectsPage() {
                                       onChange={e => setSvcForm({ ...svcForm, notes: e.target.value })}
                                       placeholder="Notes..."
                                       className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
-                                    <input type="date" value={svcForm.start_date}
-                                      onChange={e => setSvcForm({ ...svcForm, start_date: e.target.value })}
-                                      className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
-                                    <input type="date" value={svcForm.end_date}
-                                      onChange={e => setSvcForm({ ...svcForm, end_date: e.target.value })}
-                                      className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                    <div className="flex flex-col gap-0.5">
+                                      <label className="text-[9px] font-semibold text-slate-400 uppercase">Début</label>
+                                      <input type="date" value={svcForm.start_date}
+                                        onChange={e => setSvcForm({ ...svcForm, start_date: e.target.value })}
+                                        title="Date de début"
+                                        className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                    </div>
+                                    <div className="flex flex-col gap-0.5">
+                                      <label className="text-[9px] font-semibold text-slate-400 uppercase">Fin</label>
+                                      <input type="date" value={svcForm.end_date}
+                                        onChange={e => setSvcForm({ ...svcForm, end_date: e.target.value })}
+                                        title="Date de fin estimée"
+                                        className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400" />
+                                    </div>
                                   </div>
                                   <div className="flex gap-2">
                                     <button onClick={() => addService(opp.id)}
