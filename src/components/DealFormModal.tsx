@@ -509,6 +509,7 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
     if (!stage) return 'Étape obligatoire.'
     if (!bookingMonth || !/^\d{4}-\d{2}$/.test(bookingMonth)) return 'Closing obligatoire (format YYYY-MM).'
     if (!nextStep.trim()) return 'Next step obligatoire.'
+    if (status === 'Open' && !nextStepDate) return 'Date rappel obligatoire pour les deals Open.'
 
     if (status === 'Won') {
       if (!poNumber.trim()) return 'WON : Numéro de PO obligatoire.'
@@ -1165,7 +1166,7 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                 </Field>
               </div>
               {status === 'Open' && (
-                <Field label="📅 Date rappel">
+                <Field label="📅 Date rappel *">
                   <input type="date" value={nextStepDate} onChange={e => setNextStepDate(e.target.value)}
                     min={new Date().toISOString().slice(0, 10)}
                     className={inp} />
