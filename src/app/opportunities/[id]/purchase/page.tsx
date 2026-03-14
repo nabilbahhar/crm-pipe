@@ -403,7 +403,7 @@ export default function PurchasePage() {
     try {
       let infoId = existingInfo?.id
       const ptValue = paymentTemplate ? JSON.stringify({ template: paymentTemplate, milestones: paymentMilestones }) : null
-      const payload: any = {
+      const purchaseInfo: any = {
         opportunity_id: id, frais_engagement: frais, notes,
         filled_by: userEmail, updated_at: new Date().toISOString(),
         payment_terms: ptValue,
@@ -411,48 +411,41 @@ export default function PurchasePage() {
           ? { justif_reason: justifReason, justif_text: justifText, approved_by: null }
           : { justif_reason: null, justif_text: null }),
       }
-      if (!infoId) {
-        const { data: d, error: e } = await supabase.from('purchase_info').insert(payload).select('id').single()
-        if (e) throw e
-        infoId = d.id
-      } else {
-        await supabase.from('purchase_info').update(payload).eq('id', infoId)
+      const lineRows = validLines.map((l) => {
+        const fourn = fourns.find(f => f.id === l.fournisseur_id)
+        return {
+          ref: l.ref||null, designation: l.designation,
+          qty: l.qty, pu_vente: l.pu_vente,
+          pt_vente: l.pt_vente || l.qty*l.pu_vente, pu_achat: l.pu_achat,
+          fournisseur: fourn?.name || l.fournisseur || null,
+          fournisseur_id: l.fournisseur_id || null,
+          contact_fournisseur: l.contact_fournisseur || fourn?.contact || null,
+          email_fournisseur: l.email_fournisseur || fourn?.email || null,
+          tel_fournisseur: l.tel_fournisseur || fourn?.tel || null,
+          warranty_months: l.warranty_months || null,
+          license_months: l.license_months || null,
+          warranty_expiry: l.warranty_expiry || null,
+          license_expiry: l.license_expiry || null,
+          selected_contact_ids: l.selected_contact_ids?.length ? JSON.stringify(l.selected_contact_ids) : null,
+        }
+      })
+      const supplyOrder = {
+        opportunity_id: id,
+        status: partial ? 'a_commander' : 'place',
+        ...(partial ? {} : { placed_at: new Date().toISOString() }),
+        updated_at: new Date().toISOString(),
+        _ignoreDuplicates: partial,
       }
-      await supabase.from('purchase_lines').delete().eq('purchase_info_id', infoId)
-      const { error: e2 } = await supabase.from('purchase_lines').insert(
-        validLines.map((l, i) => {
-          const fourn = fourns.find(f => f.id === l.fournisseur_id)
-          return {
-            purchase_info_id: infoId, sort_order: i,
-            ref: l.ref||null, designation: l.designation,
-            qty: l.qty, pu_vente: l.pu_vente,
-            pt_vente: l.pt_vente || l.qty*l.pu_vente, pu_achat: l.pu_achat,
-            fournisseur: fourn?.name || l.fournisseur || null,
-            fournisseur_id: l.fournisseur_id || null,
-            contact_fournisseur: l.contact_fournisseur || fourn?.contact || null,
-            email_fournisseur: l.email_fournisseur || fourn?.email || null,
-            tel_fournisseur: l.tel_fournisseur || fourn?.tel || null,
-            warranty_months: l.warranty_months || null,
-            license_months: l.license_months || null,
-            warranty_expiry: l.warranty_expiry || null,
-            license_expiry: l.license_expiry || null,
-            selected_contact_ids: l.selected_contact_ids?.length ? JSON.stringify(l.selected_contact_ids) : null,
-          }
-        })
-      )
-      if (e2) throw e2
+      // Appel API server-side (service role → bypass RLS)
+      const res = await authFetch('/api/purchase-save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ purchaseInfo, lines: lineRows, supplyOrder, existingInfoId: infoId }),
+      })
+      const result = await res.json()
+      if (!res.ok) throw new Error(result.error || 'Erreur sauvegarde')
+      infoId = result.infoId
       await uploadNewFiles()
-      // Save complet = "Placer la commande" → status 'place'
-      // Save partiel = créer supply_order en 'a_commander' si n'existe pas encore
-      await supabase.from('supply_orders').upsert(
-        {
-          opportunity_id: id,
-          status: partial ? 'a_commander' : 'place',
-          ...(partial ? {} : { placed_at: new Date().toISOString() }),
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'opportunity_id', ignoreDuplicates: partial }
-      )
       await logActivity({
         action_type: existingInfo?.id ? 'update' : 'create',
         entity_type: 'deal', entity_id: id,
