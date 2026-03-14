@@ -4,6 +4,17 @@ import { requireAuth } from '@/lib/apiAuth'
 
 export const runtime = 'nodejs'
 
+// Known columns in purchase_lines (safe to insert)
+const KNOWN_LINE_COLS = new Set([
+  'purchase_info_id', 'sort_order', 'ref', 'designation',
+  'qty', 'pu_vente', 'pt_vente', 'pu_achat',
+  'fournisseur', 'contact_fournisseur', 'email_fournisseur', 'tel_fournisseur',
+  'warranty_months', 'license_months', 'warranty_expiry', 'license_expiry',
+  'line_status', 'eta', 'eta_updated_at', 'status_note',
+  // Columns that may or may not exist yet — will try, fallback without
+  'fournisseur_id', 'selected_contact_ids',
+])
+
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
   if (auth instanceof NextResponse) return auth
@@ -39,24 +50,42 @@ export async function POST(req: NextRequest) {
     if (delErr) throw delErr
 
     if (lines && lines.length > 0) {
-      const rows = lines.map((l: any, i: number) => ({
-        ...l,
-        purchase_info_id: infoId,
-        sort_order: i,
-      }))
-      const { error: insErr } = await supabaseServer
+      const rows = lines.map((l: any, i: number) => {
+        const row: any = { purchase_info_id: infoId, sort_order: i }
+        for (const key of Object.keys(l)) {
+          if (KNOWN_LINE_COLS.has(key)) row[key] = l[key]
+        }
+        return row
+      })
+
+      // Try insert with all columns first
+      let { error: insErr } = await supabaseServer
         .from('purchase_lines')
         .insert(rows)
+
+      // If error mentions unknown column, retry without fournisseur_id & selected_contact_ids
+      if (insErr && (insErr.message?.includes('fournisseur_id') || insErr.message?.includes('selected_contact_ids') || insErr.message?.includes('schema cache'))) {
+        console.warn('[purchase-save] Retrying without fournisseur_id/selected_contact_ids:', insErr.message)
+        const safeRows = rows.map((r: any) => {
+          const { fournisseur_id, selected_contact_ids, ...rest } = r
+          return rest
+        })
+        const retry = await supabaseServer
+          .from('purchase_lines')
+          .insert(safeRows)
+        insErr = retry.error
+      }
       if (insErr) throw insErr
     }
 
-    // 3. Upsert supply_order
+    // 3. Upsert supply_order (remove internal _ignoreDuplicates flag)
     if (supplyOrder) {
+      const { _ignoreDuplicates, ...soData } = supplyOrder
       const { error: soErr } = await supabaseServer
         .from('supply_orders')
-        .upsert(supplyOrder, {
+        .upsert(soData, {
           onConflict: 'opportunity_id',
-          ignoreDuplicates: supplyOrder._ignoreDuplicates ?? false,
+          ignoreDuplicates: _ignoreDuplicates ?? false,
         })
       if (soErr) throw soErr
     }

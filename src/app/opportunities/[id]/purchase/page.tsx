@@ -187,10 +187,10 @@ export default function PurchasePage() {
     if (!id || loading) return
     if (draftRef.current) clearTimeout(draftRef.current)
     draftRef.current = setTimeout(() => {
-      saveDraft(id, { lines, frais, notes, justifReason, justifText })
+      saveDraft(id, { lines, frais, notes, justifReason, justifText, paymentTemplate, paymentMilestones })
     }, 2000)
     return () => { if (draftRef.current) clearTimeout(draftRef.current) }
-  }, [lines, frais, notes, justifReason, justifText, id, loading])
+  }, [lines, frais, notes, justifReason, justifText, paymentTemplate, paymentMilestones, id, loading])
 
   async function loadAll() {
     setLoading(true)
@@ -278,6 +278,7 @@ export default function PurchasePage() {
       if (draft.notes)        setNotes(draft.notes)
       if (draft.justifReason) setJustifReason(draft.justifReason)
       if (draft.justifText)   setJustifText(draft.justifText)
+      if (draft.paymentTemplate) { setPaymentTemplate(draft.paymentTemplate); setPaymentMilestones(draft.paymentMilestones || []) }
       const mins = Math.round((Date.now() - draft._t) / 60000)
       setDraftAge(mins < 1 ? "à l'instant" : mins < 60 ? `il y a ${mins} min` : `il y a ${Math.floor(mins/60)}h`)
     }
