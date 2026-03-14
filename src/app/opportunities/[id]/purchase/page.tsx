@@ -891,8 +891,7 @@ export default function PurchasePage() {
           </div>
           </>)}
 
-// ═══ VIEW: TABLEAU COMPACT (Proposal A) ═══
-// Inspired by Compucom devis layout — clean table, no scroll, expandable rows
+          {/* ═══ VIEW: TABLEAU COMPACT (Proposal A) ═══ */}
           {viewMode === 'table' && (<>
           <div className="rounded-xl border border-slate-200 overflow-hidden">
             {/* Table header */}
@@ -1016,8 +1015,7 @@ export default function PurchasePage() {
           </div>
           </>)}
 
-// ═══ VIEW: DEVIS PRO (Proposal B) ═══
-// Looks like a real professional devis — clean, document-like, print-ready
+          {/* ═══ VIEW: DEVIS PRO (Proposal B) ═══ */}
           {viewMode === 'devis' && (<>
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
             {/* Devis header */}
