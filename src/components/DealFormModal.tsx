@@ -13,7 +13,8 @@ type Account   = { id: string; name: string }
 type CardRow   = { id: string; name: string }
 type BuLine    = { bu: string; card: string; amount: number }
 type CardSplit = { card: string; amount: number }
-type DRLine    = { id?: string; bu: string; card: string; platform: string; dr_number: string; expiry_date: string; enabled: boolean }
+type DRLine    = { id?: string; scope: 'deal' | 'line'; line_index: number | null; dr_number: string; expiry_date: string; enabled: boolean;
+  /* legacy compat */ bu?: string; card?: string; platform?: string }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const STAGES = [
@@ -76,6 +77,11 @@ function computeStatus(stage: string): 'Open' | 'Won' | 'Lost' {
 
 function clamp(n: number, a: number, b: number) {
   return Math.max(a, Math.min(b, n))
+}
+
+function autoGrow(el: HTMLTextAreaElement) {
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
 }
 
 function isValidDMY(dmy: string) {
@@ -290,9 +296,6 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
   // Inline account creation
   const [showNewAccount, setShowNewAccount] = useState(false)
   const [newAccName, setNewAccName] = useState('')
-  const [newAccSegment, setNewAccSegment] = useState('Privé')
-  const [newAccSector, setNewAccSector] = useState('')
-  const [newAccRegion, setNewAccRegion] = useState('Rabat')
   const [newAccSaving, setNewAccSaving] = useState(false)
   const [newAccErr, setNewAccErr] = useState<string | null>(null)
 
@@ -303,15 +306,12 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
     try {
       const { data, error } = await supabase.from('accounts').insert({
         name: newAccName.trim(),
-        segment: newAccSegment,
-        sector: newAccSector.trim() || null,
-        region: newAccRegion,
       }).select('id,name').single()
       if (error) throw error
       setAccounts(prev => [...prev, data as Account].sort((a, b) => a.name.localeCompare(b.name)))
       setAccountId(data.id)
       setShowNewAccount(false)
-      setNewAccName(''); setNewAccSector(''); setNewAccSegment('Privé'); setNewAccRegion('Rabat')
+      setNewAccName('')
     } catch (e: any) {
       setNewAccErr(e?.message || 'Erreur création compte')
     } finally {
@@ -405,8 +405,9 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
         const { data } = await supabase.from('deal_registrations').select('*').eq('opportunity_id', editRow.id)
         if (data && data.length > 0) {
           setDrLines(data.map((d: any) => ({
-            id: d.id, bu: d.bu || '', card: d.card || '', platform: d.platform || '',
+            id: d.id, scope: (d.scope as 'deal' | 'line') || 'deal', line_index: d.line_index ?? null,
             dr_number: d.dr_number || '', expiry_date: d.expiry_date || '', enabled: true,
+            bu: d.bu || '', card: d.card || '', platform: d.platform || '',
           })))
         }
       } catch {} // table may not exist yet
@@ -650,6 +651,8 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
             await supabase.from('deal_registrations').insert(
               activeDrs.map(d => ({
                 opportunity_id: dealId,
+                scope: d.scope || 'deal',
+                line_index: d.scope === 'line' ? d.line_index : null,
                 bu: d.bu || null,
                 card: d.card || null,
                 platform: d.platform || null,
@@ -734,29 +737,16 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                     </button>
                   </div>
                   {newAccErr && <div className="text-xs text-red-600">{newAccErr}</div>}
-                  <input value={newAccName} onChange={e => setNewAccName(e.target.value)}
-                    placeholder="Nom du compte" className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400" />
-                  <div className="grid grid-cols-3 gap-2">
-                    <select value={newAccSegment} onChange={e => setNewAccSegment(e.target.value)}
-                      className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none">
-                      <option value="Privé">Privé</option>
-                      <option value="Public">Public</option>
-                      <option value="Semi-public">Semi-public</option>
-                    </select>
-                    <input value={newAccSector} onChange={e => setNewAccSector(e.target.value)}
-                      placeholder="Secteur" className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none" />
-                    <select value={newAccRegion} onChange={e => setNewAccRegion(e.target.value)}
-                      className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none">
-                      <option value="Rabat">Rabat</option>
-                      <option value="Casablanca">Casablanca</option>
-                      <option value="Nord Ma">Nord Ma</option>
-                      <option value="Sud Ma">Sud Ma</option>
-                    </select>
+                  <div className="flex gap-2">
+                    <input value={newAccName} onChange={e => setNewAccName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && createInlineAccount()}
+                      placeholder="Nom du compte *" className="h-9 flex-1 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400" autoFocus />
+                    <button type="button" onClick={createInlineAccount} disabled={newAccSaving}
+                      className="h-9 rounded-lg bg-blue-600 px-4 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors whitespace-nowrap">
+                      {newAccSaving ? '…' : 'Créer'}
+                    </button>
                   </div>
-                  <button type="button" onClick={createInlineAccount} disabled={newAccSaving}
-                    className="h-8 w-full rounded-lg bg-blue-600 text-xs font-bold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                    {newAccSaving ? 'Création…' : 'Créer le compte'}
-                  </button>
+                  <div className="text-[10px] text-slate-400">Le reste des infos sera à compléter depuis la page Tâches → Fiches compte.</div>
                 </div>
               )}
             </div>
@@ -1078,35 +1068,65 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
               {drLines.length === 0 ? (
                 <p className="text-xs text-slate-400">Aucune DR. Clique ci-dessous pour en ajouter.</p>
               ) : (
-                drLines.map((dr, i) => (
-                  <div key={i} className={`rounded-xl border p-3 space-y-2 transition ${dr.enabled ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200 bg-slate-50 opacity-60'}`}>
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer select-none">
-                        <input type="checkbox" checked={dr.enabled}
-                          onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, enabled: e.target.checked } : d))}
-                          className="h-4 w-4 rounded" />
-                        <ShieldCheck className="h-3.5 w-3.5 text-blue-500" />
-                        DR {dr.bu && dr.card ? `${dr.bu} / ${dr.card}` : `#${i + 1}`}
-                      </label>
-                      <button type="button" onClick={() => setDrLines(p => p.filter((_, j) => j !== i))}
-                        className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                    {dr.enabled && (
-                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        <Field label="BU">
-                          <input value={dr.bu} onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, bu: e.target.value } : d))}
-                            placeholder="HCI, Network…" className={inp + ' !h-8 text-xs'} />
-                        </Field>
-                        <Field label="Carte / Éditeur">
-                          <input value={dr.card} onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, card: e.target.value } : d))}
-                            placeholder="HPE, Dell…" className={inp + ' !h-8 text-xs'} />
-                        </Field>
-                        <Field label="Plateforme">
-                          <input value={dr.platform} onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, platform: e.target.value } : d))}
-                            placeholder="Partner Portal…" className={inp + ' !h-8 text-xs'} />
-                        </Field>
+                drLines.map((dr, i) => {
+                  // Build available lines for line-specific DR
+                  const availableLines: { idx: number; label: string }[] = []
+                  if (multiBu) {
+                    lines.forEach((l, li) => availableLines.push({ idx: li, label: `Ligne ${li + 1} — ${l.bu} / ${isService(l.bu) ? SERVICE_CARD : l.card} (${mad(l.amount)})` }))
+                  } else if (multiCard) {
+                    cardLines.forEach((cl, ci) => availableLines.push({ idx: ci, label: `Ligne ${ci + 1} — ${bu} / ${cl.card} (${mad(cl.amount)})` }))
+                  }
+                  const hasMultipleLines = availableLines.length >= 2
+
+                  return (
+                    <div key={i} className={`rounded-xl border p-3 space-y-3 transition ${dr.enabled ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200 bg-slate-50 opacity-60'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck className="h-4 w-4 text-blue-500" />
+                          <span className="text-sm font-semibold text-slate-700">DR #{i + 1}</span>
+                        </div>
+                        <button type="button" onClick={() => setDrLines(p => p.filter((_, j) => j !== i))}
+                          className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Scope: tout le deal vs ligne spécifique */}
+                      {hasMultipleLines && (
+                        <div className="flex gap-2">
+                          <label className={`flex-1 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium cursor-pointer select-none transition-all
+                            ${dr.scope === 'deal' ? 'border-blue-300 bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
+                            <input type="radio" name={`dr_scope_${i}`} checked={dr.scope === 'deal'}
+                              onChange={() => setDrLines(p => p.map((d, j) => j === i ? { ...d, scope: 'deal' as const, line_index: null } : d))}
+                              className="h-3 w-3 accent-blue-600" />
+                            Tout le deal
+                          </label>
+                          <label className={`flex-1 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium cursor-pointer select-none transition-all
+                            ${dr.scope === 'line' ? 'border-blue-300 bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
+                            <input type="radio" name={`dr_scope_${i}`} checked={dr.scope === 'line'}
+                              onChange={() => setDrLines(p => p.map((d, j) => j === i ? { ...d, scope: 'line' as const, line_index: 0 } : d))}
+                              className="h-3 w-3 accent-blue-600" />
+                            Ligne spécifique
+                          </label>
+                        </div>
+                      )}
+
+                      {/* Line selector */}
+                      {dr.scope === 'line' && hasMultipleLines && (
+                        <div className="relative">
+                          <select value={dr.line_index ?? 0}
+                            onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, line_index: Number(e.target.value) } : d))}
+                            className={inp + ' !h-8 text-xs appearance-none pr-9'}>
+                            {availableLines.map(al => (
+                              <option key={al.idx} value={al.idx}>{al.label}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-2 h-4 w-4 text-slate-400 pointer-events-none" />
+                        </div>
+                      )}
+
+                      {/* DR number + expiry */}
+                      <div className="grid grid-cols-2 gap-2">
                         <Field label="N° DR *">
                           <input value={dr.dr_number} onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, dr_number: e.target.value } : d))}
                             placeholder="DR-2026-XXX" className={inp + ' !h-8 text-xs font-semibold'} />
@@ -1116,18 +1136,13 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                             className={inp + ' !h-8 text-xs'} />
                         </Field>
                       </div>
-                    )}
-                  </div>
-                ))
+                    </div>
+                  )
+                })
               )}
               <button type="button"
                 onClick={() => {
-                  // Pre-fill BU/card from current deal config
-                  const newDr: DRLine = { bu: '', card: '', platform: '', dr_number: '', expiry_date: '', enabled: true }
-                  if (!multiBu) {
-                    newDr.bu = bu
-                    newDr.card = isService(bu) ? SERVICE_CARD : card
-                  }
+                  const newDr: DRLine = { scope: 'deal', line_index: null, dr_number: '', expiry_date: '', enabled: true }
                   setDrLines(p => [...p, newDr])
                 }}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-slate-300 px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-50 hover:border-slate-400 transition">
@@ -1141,9 +1156,12 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="sm:col-span-2">
                 <Field label="Next step *">
-                  <input value={nextStep} onChange={e => setNextStep(e.target.value)}
+                  <textarea value={nextStep}
+                    onChange={e => { setNextStep(e.target.value); autoGrow(e.target) }}
+                    onFocus={e => autoGrow(e.target)}
                     placeholder="Ex: Relancer lundi, envoyer offre…"
-                    className={inp} />
+                    rows={1}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 resize-none overflow-hidden min-h-[40px]" />
                 </Field>
               </div>
               {status === 'Open' && (
@@ -1163,9 +1181,9 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                   { label: 'Dans 2j', days: 2 },
                   { label: 'Dans 3j', days: 3 },
                   { label: 'Lundi', days: (() => { const d = new Date(); const diff = (8 - d.getDay()) % 7 || 7; return diff })() },
-                  { label: 'Dans 1 sem.', days: 7 },
-                  { label: 'Dans 2 sem.', days: 14 },
-                  { label: 'Fin du mois', days: (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate() })() },
+                  { label: '1 sem.', days: 7 },
+                  { label: '2 sem.', days: 14 },
+                  { label: 'Fin mois', days: (() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate() })() },
                 ].map(({ label, days }) => {
                   const target = new Date(); target.setDate(target.getDate() + days)
                   const iso = target.toISOString().slice(0, 10)
@@ -1173,30 +1191,35 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                     <button key={label} type="button" onClick={() => setNextStepDate(iso)}
                       className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all
                         ${nextStepDate === iso ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
-                      📅 {label}
+                      {label}
                     </button>
                   )
                 })}
               </div>
             )}
 
-            {/* Next step suggestions */}
+            {/* Next step suggestions — grouped by category */}
             {status === 'Open' && (
-              <div className="flex flex-wrap gap-1.5">
-                {NEXT_STEP_SUGGESTIONS.map(s => (
-                  <button key={s} type="button" onClick={() => setNextStep(s)}
-                    className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-all
-                      ${nextStep === s ? 'border-blue-300 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:border-slate-300'}`}>
-                    {s}
-                  </button>
-                ))}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Suggestions rapides</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {NEXT_STEP_SUGGESTIONS.map(s => (
+                    <button key={s} type="button" onClick={() => setNextStep(s)}
+                      className={`rounded-full border px-3 py-1 text-[11px] font-medium transition-all
+                        ${nextStep === s ? 'border-blue-300 bg-blue-100 text-blue-700 ring-1 ring-blue-200' : 'border-slate-200 bg-white text-slate-600 hover:bg-white hover:border-slate-300 hover:shadow-sm'}`}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
             <Field label="Notes">
-              <textarea value={notes} onChange={e => setNotes(e.target.value)}
+              <textarea value={notes}
+                onChange={e => { setNotes(e.target.value); autoGrow(e.target) }}
+                onFocus={e => autoGrow(e.target)}
                 rows={2} placeholder="Notes internes…"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 resize-none" />
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 resize-none overflow-hidden min-h-[56px]" />
             </Field>
           </div>
 
