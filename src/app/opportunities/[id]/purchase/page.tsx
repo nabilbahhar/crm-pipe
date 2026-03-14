@@ -305,7 +305,19 @@ export default function PurchasePage() {
   // ── Validation ────────────────────────────────────────────────
   const hasBcClient = !!bcFile || dbFiles.some(f => f.file_type === 'bc_client')
   const hasDevis    = !!devisFile || dbFiles.some(f => f.file_type === 'devis_compucom')
-  const canSave     = hasBcClient && hasDevis && totalMatch
+  const activeLines = lines.filter(l => l.designation.trim())
+  const incompleteLinesDetail = activeLines.map((l, i) => {
+    const missing: string[] = []
+    if (!l.designation.trim()) missing.push('désignation')
+    if (!l.qty || l.qty <= 0) missing.push('quantité')
+    if (!l.pu_vente || l.pu_vente <= 0) missing.push('PU vente')
+    if (!l.pu_achat || l.pu_achat <= 0) missing.push('PU achat')
+    if (!l.fournisseur_id) missing.push('fournisseur')
+    if (l.fournisseur_id && l.fournisseur_id !== '__stock__' && !l.contact_fournisseur) missing.push('contact fournisseur')
+    return missing.length > 0 ? { line: i + 1, missing } : null
+  }).filter(Boolean) as { line: number; missing: string[] }[]
+  const allLinesComplete = activeLines.length > 0 && incompleteLinesDetail.length === 0
+  const canSave     = hasBcClient && hasDevis && totalMatch && allLinesComplete
 
   // ── Line update ───────────────────────────────────────────────
   const updateLine = (i: number, field: keyof PurchaseLine, val: any) =>
@@ -1128,10 +1140,12 @@ export default function PurchasePage() {
                             const contactOptions: { id: string; label: string; contact: string; email: string; tel: string }[] = []
                             /* Contacts individuels depuis supplier_contacts */
                             scContacts.forEach(c => contactOptions.push({ id: c.id, label: `${c.contact_name}${c.role ? ` (${c.role})` : ''}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
-                            /* Fallback: split fourn.contact par virgule si pas de supplier_contacts */
+                            /* Fallback: split fourn.contact + email + tel par virgule si pas de supplier_contacts */
                             if (contactOptions.length === 0 && fourn?.contact) {
                               const names = fourn.contact.split(',').map(n => n.trim()).filter(Boolean)
-                              names.forEach((name, ci) => contactOptions.push({ id: `main_${fourn.id}_${ci}`, label: name, contact: name, email: ci === 0 ? (fourn.email || '') : '', tel: ci === 0 ? (fourn.tel || '') : '' }))
+                              const emails = (fourn.email || '').split(',').map(e => e.trim()).filter(Boolean)
+                              const tels = (fourn.tel || '').split(',').map(t => t.trim()).filter(Boolean)
+                              names.forEach((name, ci) => contactOptions.push({ id: `main_${fourn.id}_${ci}`, label: name, contact: name, email: emails[ci] || '', tel: tels[ci] || '' }))
                             }
                             const selectedIds = l.selected_contact_ids || []
                             const toggleContact = (optId: string) => {
@@ -1423,7 +1437,20 @@ export default function PurchasePage() {
           )}
           {canSave && (
             <div className="flex items-center gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
-              <CheckCircle2 className="h-4 w-4 shrink-0" /> Fiche complète — prête à sauvegarder ✓
+              <CheckCircle2 className="h-4 w-4 shrink-0" /> Fiche complète — prête à placer ✓
+            </div>
+          )}
+          {!canSave && hasBcClient && hasDevis && totalMatch && !allLinesComplete && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-red-700 mb-2">
+                <AlertCircle className="h-4 w-4 shrink-0" /> Lignes incomplètes — impossible de placer la commande
+              </div>
+              <ul className="space-y-1 text-xs text-red-600">
+                {incompleteLinesDetail.map(d => (
+                  <li key={d.line}>Ligne {d.line} : <strong>{d.missing.join(', ')}</strong></li>
+                ))}
+              </ul>
+              <p className="mt-2 text-[11px] text-red-400">Tu peux enregistrer le brouillon et revenir compléter plus tard.</p>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-3">
