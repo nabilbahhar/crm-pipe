@@ -515,10 +515,17 @@ export default function PurchasePage() {
       formData.append('uploaded_by', email)
 
       const res = await authFetch('/api/upload', { method: 'POST', body: formData })
-      const result = await res.json()
+      let result: any
+      const contentType = res.headers.get('content-type') || ''
+      if (contentType.includes('application/json')) {
+        result = await res.json()
+      } else {
+        const text = await res.text()
+        result = { error: text || `Erreur ${res.status}` }
+      }
 
       if (!res.ok || result.error) {
-        setUploadError(`Erreur upload : ${result.error || 'Upload échoué'}`)
+        setUploadError(`Erreur upload : ${result.error || 'Upload échoué'}\nVérifie que le bucket deal-files existe dans Supabase Storage et que les politiques RLS autorisent INSERT.`)
         setUploadingFile(null)
         return
       }

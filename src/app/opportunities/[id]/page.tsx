@@ -7,14 +7,9 @@ import { authFetch } from '@/lib/authFetch'
 import { getSignedUrls } from '@/lib/getSignedUrls'
 import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName, paymentTermLabel } from '@/lib/utils'
 
-// HTML escape helper — prevents XSS in email template
-function esc(s: string | null | undefined): string {
-  if (!s) return ''
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
-}
 import {
   ArrowLeft, Package, Mail, Edit2, Loader2, X,
-  Copy, Check, ExternalLink, FileText, Building2,
+  Check, ExternalLink, FileText, Building2,
   Clock, ShieldCheck, AlertTriangle, CheckCircle2,
   TrendingUp, Download, Phone, Globe, MapPin,
   ChevronRight, Activity, Target, Calendar, Zap,
@@ -39,6 +34,7 @@ type PurchaseLine = {
   email_fournisseur?: string; tel_fournisseur?: string
   line_status?: string; eta?: string; eta_updated_at?: string; status_note?: string
   warranty_months?: number; license_months?: number
+  warranty_expiry?: string; license_expiry?: string
 }
 type PurchaseInfo = {
   id: string; frais_engagement: number; notes: string; payment_terms?: string
@@ -81,8 +77,18 @@ const ACTION_COLOR: Record<string, string> = {
   stage_change: '#8b5cf6', note: '#64748b', upload: '#06b6d4', email: '#8b5cf6',
 }
 
-// ─── HTML email builder ───────────────────────────────────────
-function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | null, files?: { file_type: string; file_name: string; url: string }[]): string {
+// ─── Team job titles ─────────────────────────────────────────
+const JOB_TITLES: Record<string, string> = {
+  'nabil.imdh@gmail.com': 'Regional Sales Manager',
+  's.chitachny@compucom.ma': 'Supply Chain Manager',
+}
+function ownerTitle(email: string | null | undefined): string {
+  if (!email) return ''
+  return JOB_TITLES[email] || ''
+}
+
+// ─── Build plain-text email body for mailto ──────────────────
+function buildEmailText(deal: Opp, info: PurchaseInfo, senderEmail?: string | null): string {
   const client     = deal.accounts?.name || deal.title
   const totalVente = info.purchase_lines.reduce((s,l) => s + (l.pt_vente || l.qty*l.pu_vente), 0)
   const totalAchat = info.purchase_lines.reduce((s,l) => s + l.qty*l.pu_achat, 0)
@@ -92,256 +98,110 @@ function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
   const margeNettePct = totalVente > 0 ? (margeNette/totalVente)*100 : 0
   const today      = new Date().toLocaleDateString('fr-MA', { day:'2-digit', month:'long', year:'numeric' })
   const sender     = senderEmail ? ownerName(senderEmail) : 'Compucom'
-  const COLORS     = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4']
-  const supGroups  = new Map<string, PurchaseLine[]>()
+  const senderTitle = senderEmail ? ownerTitle(senderEmail) : ''
+
+  // Group lines by supplier
+  const supGroups = new Map<string, PurchaseLine[]>()
   info.purchase_lines.forEach(l => {
     const k = l.fournisseur || 'Non spécifié'
     if (!supGroups.has(k)) supGroups.set(k, [])
     supGroups.get(k)!.push(l)
   })
-  let si = 0
-  const blocks = Array.from(supGroups.entries()).map(([name, lines]) => {
-    const col   = COLORS[si++ % COLORS.length]
-    const subT  = lines.reduce((s,l) => s + l.qty*l.pu_achat, 0)
-    // Group contacts within this supplier
-    const contactGroups = new Map<string, PurchaseLine[]>()
-    lines.forEach(l => {
-      const ck = l.contact_fournisseur || ''
-      if (!contactGroups.has(ck)) contactGroups.set(ck, [])
-      contactGroups.get(ck)!.push(l)
+
+  let body = `Bonjour,\n\nMerci de bien vouloir procéder à la commande suivante :\n\n`
+  body += `═══════════════════════════════════════\n`
+  body += `  FICHE DE COMMANDE — ${client.toUpperCase()}\n`
+  body += `  Date : ${today}\n`
+  if (deal.po_number) body += `  PO : ${deal.po_number}\n`
+  body += `═══════════════════════════════════════\n\n`
+
+  // Résumé financier
+  body += `RÉSUMÉ FINANCIER\n`
+  body += `─────────────────────────────────────\n`
+  body += `  Total vente :  ${mad(totalVente)}\n`
+  body += `  Total achat :  ${mad(totalAchat)}\n`
+  body += `  Marge brute :  ${mad(margeBrute)} (${margeBrutePct.toFixed(1)}%)\n`
+  if (info.frais_engagement) body += `  Frais engagement : ${mad(info.frais_engagement)}\n`
+  body += `  Marge nette :  ${mad(margeNette)} (${margeNettePct.toFixed(1)}%)\n`
+  body += `─────────────────────────────────────\n\n`
+
+  // Modalités de paiement
+  if (info.payment_terms) {
+    body += `MODALITÉS DE PAIEMENT\n`
+    body += `─────────────────────────────────────\n`
+    body += `  ${paymentTermLabel(info.payment_terms)}\n`
+    body += `─────────────────────────────────────\n\n`
+  }
+
+  // Lignes par fournisseur
+  body += `DÉTAIL DES LIGNES\n`
+  body += `═══════════════════════════════════════\n\n`
+
+  for (const [name, lines] of supGroups) {
+    const subT = lines.reduce((s,l) => s + l.qty*l.pu_achat, 0)
+    body += `▶ ${name.toUpperCase()} — Sous-total : ${mad(subT)}\n`
+
+    // Contact info
+    const contacts = [...new Set(lines.map(l => l.contact_fournisseur).filter(Boolean))]
+    const emails   = [...new Set(lines.map(l => l.email_fournisseur).filter(Boolean))]
+    const tels     = [...new Set(lines.map(l => l.tel_fournisseur).filter(Boolean))]
+    if (contacts.length) body += `  Contact : ${contacts.join(', ')}\n`
+    if (emails.length)   body += `  Email : ${emails.join(', ')}\n`
+    if (tels.length)     body += `  Tél : ${tels.join(', ')}\n`
+    body += `\n`
+
+    lines.forEach((l, i) => {
+      body += `  ${i+1}. ${l.designation || l.ref || 'Ligne'}\n`
+      if (l.ref) body += `     Réf : ${l.ref}\n`
+      body += `     Qté : ${l.qty}  |  PU achat : ${mad(l.pu_achat)}  |  Total : ${mad(l.qty * l.pu_achat)}\n`
+      body += `     PU vente : ${mad(l.pu_vente)}  |  Total vente : ${mad(l.pt_vente || l.qty * l.pu_vente)}\n`
+      if (l.warranty_months) body += `     Garantie : ${l.warranty_months} mois${l.warranty_expiry ? ` (exp. ${l.warranty_expiry})` : ''}\n`
+      if (l.license_months)  body += `     Licence : ${l.license_months} mois${l.license_expiry ? ` (exp. ${l.license_expiry})` : ''}\n`
     })
-    const contactBadges = Array.from(contactGroups.entries())
-      .filter(([c]) => c)
-      .map(([c, cls]) => {
-        const first = cls[0]
-        return `<span style="display:inline-block;background:rgba(255,255,255,.15);border-radius:4px;padding:2px 8px;font-size:11px;color:#fff;margin-right:4px">
-          👤 ${esc(c)}${first.email_fournisseur ? ` · ${esc(first.email_fournisseur)}` : ''}${first.tel_fournisseur ? ` · ${esc(first.tel_fournisseur)}` : ''}</span>`
-      }).join('')
-    const rows  = lines.map((l,i) => `
-      <tr style="background:${i%2?'#f8fafc':'#fff'}">
-        <td style="padding:10px 16px;font-size:13px;color:#374151;border-bottom:1px solid #f1f5f9">
-          ${l.ref?`<span style="color:#94a3b8;font-size:11px;margin-right:6px">[${esc(l.ref)}]</span>`:''}${esc(l.designation)}
-        </td>
-        <td style="padding:10px 16px;font-size:13px;text-align:center;font-weight:600;border-bottom:1px solid #f1f5f9">${l.qty}</td>
-        <td style="padding:10px 16px;font-size:13px;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(l.pu_achat)}</td>
-        <td style="padding:10px 16px;font-size:13px;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(l.qty*l.pu_achat)}</td>
-      </tr>`).join('')
-    return `<div style="margin-bottom:16px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
-      <div style="background:${col};padding:14px 20px">
-        <table width="100%"><tr>
-          <td>
-            <div style="color:#fff;font-size:15px;font-weight:800;margin-bottom:4px">🏭 ${esc(name)}</div>
-            <div style="margin-top:4px">${contactBadges || '<span style="color:rgba(255,255,255,.5);font-size:11px">Aucun contact spécifié</span>'}</div>
-          </td>
-          <td align="right" style="vertical-align:top"><span style="background:rgba(255,255,255,.2);border-radius:8px;padding:5px 14px;color:#fff;font-size:13px;font-weight:800">${mad(subT)}</span></td>
-        </tr></table>
-      </div>
-      <table width="100%" style="border-collapse:collapse">
-        <thead><tr style="background:#f8fafc">
-          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:left;border-bottom:2px solid #e2e8f0">Désignation</th>
-          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:center;border-bottom:2px solid #e2e8f0">Qté</th>
-          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:right;border-bottom:2px solid #e2e8f0">PU Achat</th>
-          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:right;border-bottom:2px solid #e2e8f0">Total HT</th>
-        </tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`
-  }).join('')
-  const mcB = margeBrutePct >= 20 ? '#16a34a' : margeBrutePct >= 10 ? '#d97706' : '#dc2626'
-  const mcN = margeNettePct >= 20 ? '#16a34a' : margeNettePct >= 10 ? '#d97706' : '#dc2626'
-  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 16px"><tr><td align="center">
-<table width="660" style="max-width:660px;width:100%">
-  <!-- Header -->
-  <tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#0f172a 100%);border-radius:16px 16px 0 0;padding:28px 32px">
-    <table width="100%"><tr>
-      <td>
-        <div style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">Commande · ${today}</div>
-        <div style="color:#fff;font-size:22px;font-weight:900;line-height:1.2">📦 ${esc(deal.title)}</div>
-        <div style="color:#cbd5e1;font-size:13px;margin-top:8px;line-height:1.5">🏢 <strong style="color:#e2e8f0">${esc(client)}</strong>${deal.po_number?` &nbsp;·&nbsp; PO <strong style="color:#e2e8f0">${esc(deal.po_number)}</strong>`:''}${deal.multi_bu && Array.isArray(deal.bu_lines) && deal.bu_lines.length > 0 ? ` &nbsp;·&nbsp; ${[...new Set(deal.bu_lines.map((l: any) => l.card || l.bu).filter(Boolean))].map(esc).join(' + ')}` : deal.bu ? ` &nbsp;·&nbsp; ${esc(deal.bu)}` : ''}</div>
-      </td>
-      <td align="right" style="vertical-align:top">
-        <div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:12px 16px;text-align:center">
-          <div style="color:#94a3b8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Total Achat</div>
-          <div style="color:#fff;font-size:18px;font-weight:900;font-family:monospace">${mad(totalAchat)}</div>
-        </div>
-      </td>
-    </tr></table>
-  </td></tr>
+    body += `\n`
+  }
 
-  <!-- Body -->
-  <tr><td style="background:#fff;padding:28px 32px">
-    <p style="margin:0 0 24px;color:#475569;font-size:14px;line-height:1.7">Bonjour,<br><br>Merci de traiter la commande ci-dessous pour le client <strong>${client}</strong>.<br>Merci de confirmer la prise en charge et le délai prévisionnel.</p>
+  // Validation warning (marge brute < 10%)
+  if (margeBrutePct < 10 && totalAchat > 0) {
+    body += `⚠ VALIDATION REQUISE — MARGE BRUTE < 10%\n`
+    body += `─────────────────────────────────────\n`
+    body += `  @Achraf Lahkim — Merci de valider cette commande.\n`
+    body += `  Marge brute : ${mad(margeBrute)} (${margeBrutePct.toFixed(1)}%)\n`
+    if (info.justif_reason) body += `  Raison : ${info.justif_reason}\n`
+    if (info.justif_text) body += `  Détail : ${info.justif_text}\n`
+    body += `─────────────────────────────────────\n\n`
+  }
 
-    <!-- Supplier blocks -->
-    ${blocks}
+  // Notes
+  if (info.notes) {
+    body += `NOTES INTERNES\n`
+    body += `─────────────────────────────────────\n`
+    body += `${info.notes}\n\n`
+  }
 
-    <!-- Financial summary -->
-    <div style="border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-top:8px">
-      <div style="background:#f8fafc;padding:12px 20px;border-bottom:1px solid #e2e8f0">
-        <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px">📊 Récapitulatif financier</span>
-      </div>
-      <table width="100%" style="border-collapse:collapse">
-        <tr>
-          <td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9">Total vente HT</td>
-          <td style="padding:12px 20px;font-size:14px;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(totalVente)}</td>
-        </tr>
-        <tr style="background:#fafafa">
-          <td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9">Total achat HT</td>
-          <td style="padding:12px 20px;font-size:14px;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(totalAchat)}</td>
-        </tr>
-        ${info.frais_engagement>0?`<tr>
-          <td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9">Frais d'engagement</td>
-          <td style="padding:12px 20px;font-size:14px;font-weight:700;color:#d97706;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">− ${mad(info.frais_engagement)}</td>
-        </tr>`:''}
-        <tr style="background:#f0fdf4">
-          <td style="padding:12px 20px;font-size:13px;font-weight:700;color:#166534">Marge brute</td>
-          <td style="padding:12px 20px;text-align:right">
-            <span style="font-size:15px;font-weight:800;color:${mcB};font-family:monospace">${mad(margeBrute)}</span>
-            <span style="margin-left:6px;background:${mcB};color:#fff;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700">${pct(margeBrutePct)}</span>
-          </td>
-        </tr>
-        ${info.frais_engagement > 0 ? `<tr style="background:#ecfdf5">
-          <td style="padding:14px 20px;font-size:14px;font-weight:800;color:#065f46">Marge nette</td>
-          <td style="padding:14px 20px;text-align:right">
-            <span style="font-size:17px;font-weight:900;color:${mcN};font-family:monospace">${mad(margeNette)}</span>
-            <span style="margin-left:6px;background:${mcN};color:#fff;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700">${pct(margeNettePct)}</span>
-          </td>
-        </tr>` : ''}
-      </table>
-    </div>
+  body += `═══════════════════════════════════════\n`
+  body += `Merci de confirmer la réception et d'indiquer le délai estimé.\n\n`
+  body += `Cordialement,\n${sender}${senderTitle ? `\n${senderTitle}` : ''}\nCompucom Maroc\n`
 
-    <!-- Validation warning -->
-    ${margeNettePct < 10 ? `<div style="margin-top:14px;border-radius:10px;border:2px solid #fbbf24;background:#fffbeb;padding:16px 20px">
-      <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">⚠️ Validation requise — Marge &lt; 10%</div>
-      <div style="font-size:13px;color:#78350f;line-height:1.6">
-        <strong>@Achraf Lahkim</strong> — Merci de valider cette commande (marge nette : <strong style="color:${mcN}">${pct(margeNettePct)}</strong>).
-        ${info.justif_reason ? `<br>Raison : <em>${esc(info.justif_reason)}</em>` : ''}
-        ${info.justif_text ? `<br>Détail : ${esc(info.justif_text)}` : ''}
-      </div>
-    </div>` : ''}
-
-    <!-- Pièces jointes -->
-    ${(() => {
-      const pj = files?.filter(f => f.url) || []
-      if (pj.length === 0) return ''
-      const typeIcon: Record<string, string> = { bc: '📄', devis: '📋', autre: '📎' }
-      const typeLabel: Record<string, string> = { bc: 'Bon de commande', devis: 'Devis fournisseur', autre: 'Document' }
-      const rows = pj.map(f => `
-        <tr>
-          <td style="padding:8px 16px;border-bottom:1px solid #f1f5f9">
-            <span style="font-size:14px;margin-right:6px">${typeIcon[f.file_type] || '📎'}</span>
-            <span style="font-size:12px;font-weight:600;color:#374151">${esc(f.file_name)}</span>
-            <span style="font-size:10px;color:#94a3b8;margin-left:6px">${esc(typeLabel[f.file_type] || f.file_type)}</span>
-          </td>
-          <td style="padding:8px 16px;border-bottom:1px solid #f1f5f9;text-align:right">
-            <a href="${encodeURI(f.url)}" style="background:#3b82f6;color:#fff;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;text-decoration:none">Télécharger</a>
-          </td>
-        </tr>`).join('')
-      return `<div style="margin-top:14px;border-radius:10px;overflow:hidden;border:1px solid #dbeafe;background:#eff6ff">
-        <div style="padding:12px 20px;border-bottom:1px solid #dbeafe">
-          <span style="font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;letter-spacing:0.5px">📎 Pièces jointes (${pj.length})</span>
-        </div>
-        <table width="100%" style="border-collapse:collapse;background:#fff">${rows}</table>
-      </div>`
-    })()}
-
-    <!-- Notes -->
-    ${info.notes?`<div style="margin-top:14px;border-radius:10px;border:1px solid #fde68a;background:#fffbeb;padding:14px 20px">
-      <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:4px">📝 Notes</div>
-      <div style="font-size:13px;color:#78350f;line-height:1.5">${esc(info.notes)}</div>
-    </div>`:''}
-  </td></tr>
-
-  <!-- Footer -->
-  <tr><td style="background:linear-gradient(135deg,#f8fafc,#f1f5f9);border-top:1px solid #e2e8f0;border-radius:0 0 16px 16px;padding:20px 32px">
-    <table width="100%"><tr>
-      <td style="font-size:12px;color:#94a3b8;line-height:1.5">Merci de <strong style="color:#64748b">confirmer la réception</strong><br>et d'indiquer le délai estimé.</td>
-      <td align="right">
-        <div style="display:inline-block;background:#0f172a;border-radius:10px;padding:10px 18px;text-align:center">
-          <div style="color:#94a3b8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px">Compucom Maroc</div>
-          <div style="color:#fff;font-size:13px;font-weight:800;margin-top:2px">${sender}</div>
-        </div>
-      </td>
-    </tr></table>
-  </td></tr>
-</table></td></tr></table></body></html>`
+  return body
 }
 
-// ─── Email Modal ──────────────────────────────────────────────
-function EmailModal({ deal, info, onClose, senderEmail, files, fileUrls }: { deal: Opp; info: PurchaseInfo; onClose: () => void; senderEmail?: string | null; files?: DealFile[]; fileUrls?: Record<string, string> }) {
-  const [copied, setCopied] = useState(false)
-  const fileItems = (files || []).map(f => ({ ...f, url: fileUrls?.[f.id] || '' }))
-  const html    = buildEmailHtml(deal, info, senderEmail, fileItems)
+// ─── Open supply chain email directly ─────────────────────────
+function openSupplyEmail(deal: Opp, info: PurchaseInfo, senderEmail?: string | null) {
   const client  = deal.accounts?.name || deal.title
   const today   = new Date().toLocaleDateString('fr-MA', { day:'2-digit', month:'2-digit', year:'numeric' })
   const subject = `Commande ${client}${deal.po_number ? ` – PO ${deal.po_number}` : ''} – ${mad(deal.amount)} – ${today}`
-  // Si marge < 10%, ajouter Achraf en CC pour validation
   const totalVente = info.purchase_lines.reduce((s,l) => s + (l.pt_vente || l.qty*l.pu_vente), 0)
   const totalAchat = info.purchase_lines.reduce((s,l) => s + l.qty*l.pu_achat, 0)
-  const margeNette = totalVente - totalAchat - (info.frais_engagement||0)
-  const margeFaible = totalVente > 0 && (margeNette/totalVente)*100 < 10
+  const margeBrute = totalVente - totalAchat
+  const margeBrutePct = totalVente > 0 ? (margeBrute/totalVente)*100 : 0
+  const margeFaible = margeBrutePct < 10 && totalAchat > 0
   const ccList = margeFaible
     ? 'n.bahhar@compucom.ma,A.lahkim@compucom.ma'
     : 'n.bahhar@compucom.ma'
-  const mailto  = `mailto:supplychain@compucom.ma?cc=${encodeURIComponent(ccList)}&subject=${encodeURIComponent(subject)}`
-
-  async function copyHtml() {
-    try {
-      // Copier en HTML formaté pour coller directement dans Outlook avec le design
-      const blob = new Blob([html], { type: 'text/html' })
-      await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob, 'text/plain': new Blob([html], { type: 'text/plain' }) })])
-    } catch {
-      // Fallback : copier en texte brut si l'API clipboard avancée échoue
-      await navigator.clipboard.writeText(html).catch(() => {})
-    }
-    setCopied(true); setTimeout(() => setCopied(false), 2500)
-  }
-
-  return (
-    <div className="fixed inset-0 z-[200] flex items-end justify-center bg-black/50 sm:items-center p-0 sm:p-4" role="presentation" onKeyDown={e => { if (e.key === 'Escape') onClose() }}>
-      <div className="flex w-full flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden" role="dialog" aria-modal="true" aria-label="Email commande Supply Chain" style={{ maxHeight: '92vh', maxWidth: 800 }}>
-        <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4 shrink-0">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-lg shrink-0">📧</div>
-          <div className="flex-1 min-w-0">
-            <div className="font-bold text-slate-900 text-sm">Email commande Supply Chain</div>
-            <div className="text-xs text-slate-400 truncate">
-              À : supplychain@compucom.ma · CC : n.bahhar@compucom.ma{margeFaible && ', A.lahkim@compucom.ma'}
-              {margeFaible && <span className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-700">Validation Achraf</span>}
-            </div>
-          </div>
-          <button onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-300 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="shrink-0 border-b border-slate-100 bg-slate-50 px-5 py-2.5">
-          <div className="flex items-start gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-0.5 shrink-0">Objet</span>
-            <span className="text-xs font-semibold text-slate-700 leading-relaxed">{subject}</span>
-          </div>
-        </div>
-        <div className="flex-1 overflow-auto bg-[#e8edf3] p-3">
-          <iframe srcDoc={html} sandbox="allow-popups" title="Aperçu email" className="w-full rounded-xl bg-white shadow border border-slate-200" style={{ minHeight: 480, height: '100%' }} />
-        </div>
-        <div className="shrink-0 border-t border-slate-100 px-5 py-4 space-y-2.5">
-          <div className="flex flex-wrap gap-2.5">
-            <button onClick={() => { window.location.href = mailto }}
-              className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-xs font-bold text-white hover:bg-slate-800 transition-colors">
-              <ExternalLink className="h-3.5 w-3.5" /> Étape 1 — Ouvrir Outlook
-            </button>
-            <button onClick={copyHtml}
-              className={`flex h-9 items-center gap-2 rounded-xl border px-4 text-xs font-bold transition-colors ${copied ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100'}`}>
-              {copied ? <><Check className="h-3.5 w-3.5" /> Copié !</> : <><Copy className="h-3.5 w-3.5" /> Étape 2 — Copier le HTML</>}
-            </button>
-          </div>
-          <div className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 text-xs text-slate-500 leading-relaxed">
-            <strong className="text-slate-700">Mode d'emploi :</strong> Ouvrir Outlook → cliquer dans le corps → Ctrl+V → Envoyer
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+  const body = buildEmailText(deal, info, senderEmail)
+  const mailto = `mailto:supplychain@compucom.ma?cc=${encodeURIComponent(ccList)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  window.location.href = mailto
 }
 
 // ─── Main Page ────────────────────────────────────────────────
@@ -358,7 +218,6 @@ export default function OpportunityDetailPage() {
   const [activities, setActivities] = useState<Activity[]>([])
   const [drs, setDrs]             = useState<DealRegistration[]>([])
   const [loading, setLoading]     = useState(true)
-  const [showEmail, setShowEmail] = useState(false)
   const [userEmail, setUserEmail] = useState<string | null>(null)
 
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null)) }, [])
@@ -426,12 +285,14 @@ export default function OpportunityDetailPage() {
   const totalAchat    = info ? info.purchase_lines.reduce((s,l) => s + l.qty*l.pu_achat, 0) : 0
   const margeBrute    = totalVente - totalAchat
   const margeNette    = margeBrute - (info?.frais_engagement || 0)
+  const margePctBrute = totalVente > 0 ? (margeBrute/totalVente)*100 : 0
   const margePctNette = totalVente > 0 ? (margeNette/totalVente)*100 : 0
   const linesOk       = info ? info.purchase_lines.filter(l => Number(l.pu_achat) > 0 && l.fournisseur?.trim()).length : 0
   const ficheComplete = !!(info && info.purchase_lines.length > 0 && linesOk === info.purchase_lines.length)
   const canEmail      = ficheComplete && isWon
   const supIdx        = supply ? STATUS_ORDER.indexOf(supply.status as SupplyStatus) : -1
   const supCfg        = supply ? STATUS_CFG[supply.status as SupplyStatus] : null
+  const commandePlacee = supIdx >= 1 // status is 'place' or beyond
   const cDate         = closingDate(opp)
   const stageCfg      = STAGE_CFG[opp.stage] || { bg: 'bg-slate-100', text: 'text-slate-600' }
 
@@ -474,11 +335,11 @@ export default function OpportunityDetailPage() {
               {opp.po_number && <><span className="text-slate-300">·</span><span className="font-medium">PO {opp.po_number}</span></>}
             </p>
           </div>
-          {isWon && (
+          {isWon && !commandePlacee && (
             <button onClick={() => router.push(`/opportunities/${id}/purchase`)}
               className={`shrink-0 inline-flex h-9 items-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-colors ${info ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
               <Package className="h-4 w-4" />
-              {info ? 'Modifier fiche' : 'Remplir fiche'}
+              {info ? 'Compléter fiche' : 'Remplir fiche'}
             </button>
           )}
         </div>
@@ -689,11 +550,17 @@ export default function OpportunityDetailPage() {
                   )}
                 </div>
               </div>
-              <button onClick={() => router.push(`/opportunities/${id}/purchase`)}
-                className={`inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors ${ficheComplete ? 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50' : info ? 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50' : 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600'}`}>
-                <Edit2 className="h-3.5 w-3.5" />
-                {ficheComplete ? 'Modifier' : info ? 'Compléter' : 'Remplir'}
-              </button>
+              {commandePlacee ? (
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Commande placée
+                </span>
+              ) : (
+                <button onClick={() => router.push(`/opportunities/${id}/purchase`)}
+                  className={`inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors ${ficheComplete ? 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50' : info ? 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50' : 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600'}`}>
+                  <Edit2 className="h-3.5 w-3.5" />
+                  {ficheComplete ? 'Compléter' : info ? 'Compléter' : 'Remplir'}
+                </button>
+              )}
             </div>
 
             {info && info.purchase_lines.length > 0 ? (
@@ -892,10 +759,10 @@ export default function OpportunityDetailPage() {
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">
                         À : supplychain@compucom.ma · CC : n.bahhar@compucom.ma
-                        {margePctNette < 10 && totalAchat > 0 && <>, A.lahkim@compucom.ma <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-700">⚠ Achraf</span></>}
+                        {margePctBrute < 10 && totalAchat > 0 && <>, A.lahkim@compucom.ma <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-700">⚠ Achraf</span></>}
                       </div>
                     </div>
-                    <button onClick={() => setShowEmail(true)} disabled={!canEmail}
+                    <button onClick={() => { if (opp && info) openSupplyEmail(opp, info, userEmail) }} disabled={!canEmail}
                       className={`shrink-0 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors shadow-sm ${canEmail ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
                       <Mail className="h-4 w-4" /> Commander via Outlook
                     </button>
@@ -950,9 +817,6 @@ export default function OpportunityDetailPage() {
 
       </div>
 
-      {showEmail && opp && info && (
-        <EmailModal deal={opp} info={info} onClose={() => setShowEmail(false)} senderEmail={userEmail} files={files} fileUrls={fileUrls} />
-      )}
     </div>
   )
 }
