@@ -425,8 +425,8 @@ export default function PurchasePage() {
           tel_fournisseur: l.tel_fournisseur || fourn?.tel || null,
           warranty_months: l.warranty_months || null,
           license_months: l.license_months || null,
-          warranty_expiry: l.warranty_expiry || null,
-          license_expiry: l.license_expiry || null,
+          warranty_expiry: l.warranty_expiry ? (l.warranty_expiry.length === 7 ? l.warranty_expiry + '-01' : l.warranty_expiry) : null,
+          license_expiry: l.license_expiry ? (l.license_expiry.length === 7 ? l.license_expiry + '-01' : l.license_expiry) : null,
           selected_contact_ids: l.selected_contact_ids?.length ? JSON.stringify(l.selected_contact_ids) : null,
         }
       })
@@ -533,6 +533,30 @@ export default function PurchasePage() {
     }
   }
 
+  async function downloadFile(filePath: string, fileName: string) {
+    try {
+      const res = await authFetch('/api/download', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bucket: 'deal-files', paths: [filePath] }),
+      })
+      if (!res.ok) { setErr('Erreur téléchargement'); return }
+      const { urls } = await res.json()
+      const signedUrl = urls[filePath]
+      if (signedUrl) {
+        const a = document.createElement('a')
+        a.href = signedUrl
+        a.download = fileName
+        a.target = '_blank'
+        a.click()
+      } else {
+        setErr('URL de téléchargement introuvable')
+      }
+    } catch (e: any) {
+      setErr(`Erreur téléchargement : ${e?.message}`)
+    }
+  }
+
   const inp = 'w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-50 transition placeholder:text-slate-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none'
 
   if (loading) return (
@@ -611,10 +635,10 @@ export default function PurchasePage() {
                 <div key={f.id} className="mb-2 flex items-center gap-2 rounded-xl border-2 border-blue-200 bg-blue-50/60 px-3 py-2">
                   <FileText className="h-4 w-4 text-blue-600 shrink-0" />
                   <span className="flex-1 text-xs font-semibold text-blue-700 truncate">{f.file_name}</span>
-                  <a href={f.file_url} target="_blank" rel="noopener noreferrer" download title="Télécharger"
+                  <button onClick={() => downloadFile(f.file_url!, f.file_name)} title="Télécharger"
                     className="flex h-5 w-5 items-center justify-center rounded text-blue-400 hover:text-blue-700 transition">
                     <Download className="h-3.5 w-3.5" />
-                  </a>
+                  </button>
                   <button onClick={() => deleteDbFile(f.id!, f.file_url!)} title="Supprimer"
                     className="flex h-5 w-5 items-center justify-center rounded text-blue-300 hover:text-red-500 transition">
                     <X className="h-3.5 w-3.5" />
@@ -646,10 +670,10 @@ export default function PurchasePage() {
                 <div key={f.id} className="mb-2 flex items-center gap-2 rounded-xl border-2 border-violet-200 bg-violet-50/60 px-3 py-2">
                   <FileText className="h-4 w-4 text-violet-600 shrink-0" />
                   <span className="flex-1 text-xs font-semibold text-violet-700 truncate">{f.file_name}</span>
-                  <a href={f.file_url} target="_blank" rel="noopener noreferrer" download title="Télécharger"
+                  <button onClick={() => downloadFile(f.file_url!, f.file_name)} title="Télécharger"
                     className="flex h-5 w-5 items-center justify-center rounded text-violet-400 hover:text-violet-700 transition">
                     <Download className="h-3.5 w-3.5" />
-                  </a>
+                  </button>
                   <button onClick={() => deleteDbFile(f.id!, f.file_url!)} title="Supprimer"
                     className="flex h-5 w-5 items-center justify-center rounded text-violet-300 hover:text-red-500 transition">
                     <X className="h-3.5 w-3.5" />
@@ -692,10 +716,10 @@ export default function PurchasePage() {
                 <div key={f.id} className="mb-1.5 flex items-center gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
                   <FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                   <span className="flex-1 truncate text-xs text-slate-600">{f.file_name}</span>
-                  <a href={f.file_url} target="_blank" rel="noopener noreferrer" download title="Télécharger"
+                  <button onClick={() => downloadFile(f.file_url!, f.file_name)} title="Télécharger"
                     className="flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:text-slate-700 transition">
                     <Download className="h-3 w-3" />
-                  </a>
+                  </button>
                   <button onClick={() => deleteDbFile(f.id!, f.file_url!)} title="Supprimer"
                     className="flex h-5 w-5 items-center justify-center rounded text-slate-300 hover:text-red-500 transition">
                     <X className="h-3 w-3" />
