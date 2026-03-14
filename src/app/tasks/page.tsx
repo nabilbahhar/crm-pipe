@@ -1884,7 +1884,7 @@ export default function TasksPage() {
                           `Cordialement,\nNabil Bahhar\nBusiness Development Manager\nCompucom Morocco`
                         )
                         const toEmails = p.clientEmails.length > 0 ? p.clientEmails.join(',') : ''
-                        const mailtoUrl = `mailto:${toEmails}?cc=${ccList}&subject=${subject}&body=${body}`
+                        const mailtoUrl = `mailto:${encodeURIComponent(toEmails)}?cc=${encodeURIComponent(ccList)}&subject=${subject}&body=${body}`
 
                         return (
                           <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
