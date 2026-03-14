@@ -820,6 +820,7 @@ export default function PurchasePage() {
                                 className={`h-9 flex-1 rounded-lg border px-2.5 text-xs outline-none transition focus:ring-2 focus:ring-slate-100
                                   ${l.fournisseur_id?'border-slate-300 bg-white text-slate-700 font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
                                 <option value="">Choisir…</option>
+                                <option value="__stock__">📦 Notre Stock</option>
                                 {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                               </select>
                               <button onClick={() => setShowFournModal(true)} title="Nouveau fournisseur"
@@ -995,6 +996,7 @@ export default function PurchasePage() {
                             }}
                               className={`h-8 flex-1 rounded-lg border px-2 text-xs outline-none ${l.fournisseur_id?'border-slate-300 bg-white font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
                               <option value="">Choisir…</option>
+                              <option value="__stock__">📦 Notre Stock</option>
                               {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                             </select>
                             <button onClick={() => setShowFournModal(true)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:text-slate-600"><Plus className="h-3.5 w-3.5" /></button>
@@ -1051,7 +1053,9 @@ export default function PurchasePage() {
                 const marge = ptVente - ptAchat
                 const margePc = ptVente > 0 ? (marge/ptVente)*100 : 0
                 const isOpen = editingIdx === i
-                const fournName = l.fournisseur_id ? fourns.find(f=>f.id===l.fournisseur_id)?.name : null
+                const fournName = l.fournisseur_id === '__stock__' ? 'Notre Stock' : l.fournisseur_id ? fourns.find(f=>f.id===l.fournisseur_id)?.name : null
+                const isStock = l.fournisseur_id === '__stock__'
+                const lineComplete = !!(l.designation.trim() && l.qty > 0 && l.pu_vente > 0 && l.pu_achat > 0 && l.fournisseur_id && (isStock || l.contact_fournisseur))
                 return (
                   <div key={i}>
                     {isOpen ? (
@@ -1059,7 +1063,7 @@ export default function PurchasePage() {
                       <div className="border-l-[3px] border-slate-400 bg-white">
                         {/* Compact header */}
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-100">
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-700 text-[10px] font-bold text-white">{i+1}</span>
+                          <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold text-white ${lineComplete ? 'bg-emerald-500' : 'bg-slate-700'}`}>{i+1}</span>
                           <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)} spellCheck={false}
                             placeholder="Réf…" className="h-6 w-20 rounded border-0 border-b border-b-slate-300 bg-transparent px-1 text-[10px] font-mono text-slate-500 outline-none focus:border-b-slate-500" />
                           <div className="flex-1" />
@@ -1155,6 +1159,7 @@ export default function PurchasePage() {
                                       }}
                                         className="h-7 flex-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400 font-medium text-slate-700">
                                         <option value="">Choisir…</option>
+                                        <option value="__stock__">📦 Notre Stock</option>
                                         {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                                       </select>
                                       <button onClick={() => setShowFournModal(true)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-slate-300 text-slate-400 hover:text-slate-600 hover:border-slate-400 transition"><Plus className="h-3 w-3" /></button>
@@ -1178,8 +1183,8 @@ export default function PurchasePage() {
                                     </select>
                                   </div>
                                 </div>
-                                {/* Contacts — chips individuels avec email/tel */}
-                                {l.fournisseur_id && contactOptions.length > 0 && (
+                                {/* Contacts — chips individuels avec email/tel (pas pour stock) */}
+                                {l.fournisseur_id && l.fournisseur_id !== '__stock__' && contactOptions.length > 0 && (
                                   <div>
                                     <label className="mb-1 block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Contact {selectedIds.length > 0 && <span className="text-emerald-500">({selectedIds.length})</span>}</label>
                                     <div className="flex flex-wrap gap-1.5">
@@ -1198,8 +1203,8 @@ export default function PurchasePage() {
                                     </div>
                                   </div>
                                 )}
-                                {/* Contact manual — quand fournisseur choisi mais aucun contact en base */}
-                                {l.fournisseur_id && contactOptions.length === 0 && (
+                                {/* Contact manual — quand fournisseur choisi (pas stock) mais aucun contact en base */}
+                                {l.fournisseur_id && l.fournisseur_id !== '__stock__' && contactOptions.length === 0 && (
                                   <div>
                                     <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Contact</label>
                                     <input value={l.contact_fournisseur||''} onChange={e => updateLine(i,'contact_fournisseur',e.target.value)}
@@ -1229,7 +1234,7 @@ export default function PurchasePage() {
                         className={`grid grid-cols-[44px_1fr_70px_105px_115px] items-start px-5 py-3.5 cursor-pointer hover:bg-slate-50 transition group ${i%2===1?'bg-slate-50/40':''}`}>
                         {/* # */}
                         <div className="pt-0.5">
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-500 group-hover:bg-slate-800 group-hover:text-white transition">{i+1}</span>
+                          <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold transition ${lineComplete ? 'bg-emerald-100 text-emerald-700 group-hover:bg-emerald-500 group-hover:text-white' : 'bg-slate-100 text-slate-500 group-hover:bg-slate-800 group-hover:text-white'}`}>{i+1}</span>
                           {l.ref && <p className="mt-1 text-[10px] font-mono text-slate-400">{l.ref}</p>}
                         </div>
                         {/* Designation */}
@@ -1241,7 +1246,7 @@ export default function PurchasePage() {
                           )}
                           {(fournName || (l.pu_achat > 0 && ptVente > 0)) && (
                             <div className="flex items-center gap-2 mt-2">
-                              {fournName && <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500">{fournName}</span>}
+                              {fournName && <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${isStock ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{isStock ? '📦 Notre Stock' : fournName}</span>}
                               {l.pu_achat > 0 && ptVente > 0 && (
                                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${margePc>=20?'bg-emerald-50 text-emerald-600':margePc>=10?'bg-amber-50 text-amber-600':'bg-red-50 text-red-600'}`}>Marge {pct(margePc)}</span>
                               )}
@@ -1261,21 +1266,32 @@ export default function PurchasePage() {
               })}
             </div>
             {/* Devis footer */}
+              {(() => {
+                const activeLines = lines.filter(l => l.designation.trim())
+                const completeLines = lines.filter(l => !!(l.designation.trim() && l.qty > 0 && l.pu_vente > 0 && l.pu_achat > 0 && l.fournisseur_id && (l.fournisseur_id === '__stock__' || l.contact_fournisseur)))
+                const allComplete = activeLines.length > 0 && completeLines.length === activeLines.length
+                return (
             <div className="border-t-2 border-slate-800 bg-slate-900">
               <div className="grid grid-cols-[44px_1fr_70px_105px_115px] px-5 py-3.5 items-center">
                 <span></span>
-                <span className="text-sm font-bold text-slate-400 uppercase tracking-wide">Total HT</span>
-                <span className="text-right text-xs text-slate-500">{lines.filter(l=>l.designation.trim()).length} art.</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-slate-400 uppercase tracking-wide">Total HT</span>
+                  <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${allComplete ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'}`}>
+                    {completeLines.length}/{activeLines.length} {allComplete ? '✓' : 'lignes'}
+                  </span>
+                </div>
+                <span className="text-right text-xs text-slate-500">{activeLines.length} art.</span>
                 <span></span>
                 <span className="text-right text-base font-black text-white">{numFmt(totalVente)}</span>
               </div>
               {totalAchat > 0 && (
                 <div className="px-5 pb-3.5 flex justify-end gap-6 items-center">
                   <span className="text-xs text-slate-500">Achat: <strong className="text-slate-400">{numFmt(totalAchat)}</strong></span>
-                  <span className={`rounded-full px-3 py-0.5 text-xs font-bold ${margePctBrute>=20?'bg-emerald-500/20 text-emerald-400':margePctBrute>=10?'bg-amber-500/20 text-amber-400':'bg-red-500/20 text-red-400'}`}>Marge {pct(margePctBrute)}</span>
+                  <span className={`rounded-full px-3 py-0.5 text-xs font-bold ${margePctBrute>=20?'bg-emerald-500/20 text-emerald-400':margePctBrute>=10?'bg-slate-600 text-slate-300':'bg-red-500/20 text-red-400'}`}>Marge {pct(margePctBrute)}</span>
                 </div>
               )}
-            </div>
+            </div>)
+              })()}
           </div>
           </>)}
 
