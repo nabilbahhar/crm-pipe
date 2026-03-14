@@ -1117,14 +1117,14 @@ export default function SupplyPage() {
                       <table className="w-full min-w-[900px] text-sm">
                         <thead>
                           <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold text-slate-400">
-                            <th className="px-4 py-2.5 text-left">Compte / Deal</th>
-                            <th className="px-4 py-2.5 text-left">BU</th>
-                            <th className="px-4 py-2.5 text-right">Montant</th>
-                            <th className="px-4 py-2.5 text-left">PO</th>
-                            <th className="px-4 py-2.5 text-left">Paiement</th>
-                            <th className="px-4 py-2.5 text-center">Lignes</th>
-                            <th className="px-4 py-2.5 text-center">Statut</th>
-                            <th className="px-4 py-2.5 text-center">Actions</th>
+                            <th className="px-4 py-2.5 text-left w-[22%]">Compte / Deal</th>
+                            <th className="px-4 py-2.5 text-center w-[8%]">BU</th>
+                            <th className="px-4 py-2.5 text-right w-[13%]">Montant</th>
+                            <th className="px-4 py-2.5 text-left w-[10%]">PO</th>
+                            <th className="px-4 py-2.5 text-left w-[17%]">Paiement</th>
+                            <th className="px-4 py-2.5 text-center w-[10%]">Lignes</th>
+                            <th className="px-4 py-2.5 text-center w-[12%]">Statut</th>
+                            <th className="px-4 py-2.5 text-center w-[8%]">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
@@ -1167,7 +1167,7 @@ export default function SupplyPage() {
                                     )}
                                   </div>
                                 </td>
-                                <td className="px-4 py-3">
+                                <td className="px-4 py-3 text-center">
                                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
                                     {opp?.bu || '—'}
                                   </span>

@@ -798,16 +798,15 @@ export default function OpportunityDetailPage() {
                   {/* Suppliers */}
                   <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
                     <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">🏭 Fournisseurs ({uniqueSuppliers.length})</div>
-                    <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {uniqueSuppliers.length === 0
                         ? <p className="text-xs text-slate-400 italic">Aucun fournisseur</p>
                         : uniqueSuppliers.map((s, i) => (
-                          <div key={i} className="rounded-lg border border-slate-200 bg-white p-3">
-                            <div className="font-bold text-sm text-slate-800">{s.fournisseur}</div>
-                            {s.contact_fournisseur && <div className="text-xs text-slate-500 mt-0.5">{s.contact_fournisseur}</div>}
-                            {s.email_fournisseur && <a href={`mailto:${s.email_fournisseur}`} className="text-xs text-blue-600 hover:underline block truncate">{s.email_fournisseur}</a>}
-                            {s.tel_fournisseur && <a href={`tel:${s.tel_fournisseur}`} className="text-xs text-slate-500 block">{s.tel_fournisseur}</a>}
-                            <div className="mt-1 text-[10px] text-slate-400">{info.purchase_lines.filter(l => l.fournisseur === s.fournisseur).length} ligne(s)</div>
+                          <div key={i}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-default transition-colors"
+                            title={[s.contact_fournisseur, s.email_fournisseur, s.tel_fournisseur].filter(Boolean).join(' · ')}>
+                            {s.fournisseur}
+                            <span className="text-slate-400 font-normal ml-1">· {info.purchase_lines.filter(l => l.fournisseur === s.fournisseur).length}</span>
                           </div>
                         ))}
                     </div>

@@ -104,3 +104,29 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: e?.message || 'Erreur mise à jour' }, { status: 500 })
   }
 }
+
+// DELETE: Remove a supply_order (resets deal to Won without placed order)
+export async function DELETE(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (auth instanceof NextResponse) return auth
+
+  try {
+    const { searchParams } = new URL(req.url)
+    const orderId = searchParams.get('orderId')
+
+    if (!orderId) {
+      return NextResponse.json({ error: 'orderId requis' }, { status: 400 })
+    }
+
+    const { error } = await supabaseServer
+      .from('supply_orders')
+      .delete()
+      .eq('id', orderId)
+
+    if (error) throw error
+    return NextResponse.json({ ok: true })
+  } catch (e: any) {
+    console.error('[supply DELETE]', e)
+    return NextResponse.json({ error: e?.message || 'Erreur suppression' }, { status: 500 })
+  }
+}

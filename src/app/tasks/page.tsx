@@ -97,7 +97,7 @@ type Task = {
 const TYPE_LABELS: Record<TaskType, string> = {
   relance_retard: 'Relance retard',
   relance_semaine: 'Relance semaine',
-  achat_manquant: 'Fiche achat',
+  achat_manquant: 'Commande à placer',
   closing_retard: 'Closing retard',
   eta_manquante: 'ETA manquante',
   relance_fournisseur: 'Relance fournisseur',
@@ -241,14 +241,24 @@ export default function TasksPage() {
     if (error) throw error
     if (!won?.length) return []
 
-    const { data: infos, error: infosErr } = await supabase
-      .from('purchase_info')
-      .select('opportunity_id, purchase_lines(id, pu_achat, fournisseur, designation)')
-      .in('opportunity_id', won.map((d: any) => d.id))
-    if (infosErr) console.warn('loadAchats purchase_info error:', infosErr.message)
+    const wonIds = won.map((d: any) => d.id)
+
+    // Fetch purchase_info + supply_orders in parallel
+    const [infosRes, supplyRaw] = await Promise.all([
+      supabase.from('purchase_info')
+        .select('opportunity_id, purchase_lines(id, pu_achat, fournisseur, designation)')
+        .in('opportunity_id', wonIds),
+      authFetch('/api/supply').then(r => r.json()).catch(() => ({ orders: [] })),
+    ])
+
+    if (infosRes.error) console.warn('loadAchats purchase_info error:', infosRes.error.message)
+
+    // Build set of opportunity_ids that already have a supply_order (commande placée)
+    const supplyOrders: any[] = supplyRaw?.orders || []
+    const placedOppIds = new Set(supplyOrders.map((o: any) => o.opportunity_id))
 
     const infoMap = new Map<string, { total: number; complete: number }>()
-    ;(infos || []).forEach((info: any) => {
+    ;(infosRes.data || []).forEach((info: any) => {
       const lines: any[] = info.purchase_lines || []
       const complete = lines.filter((ln: any) => Number(ln.pu_achat) > 0 && ln.fournisseur?.trim()).length
       infoMap.set(info.opportunity_id, { total: lines.length, complete })
@@ -256,8 +266,8 @@ export default function TasksPage() {
 
     return won
       .filter((d: any) => {
-        const info = infoMap.get(d.id)
-        if (info && info.total > 0 && info.complete === info.total) return false
+        // Exclude deals that already have a supply_order (commande already placed)
+        if (placedOppIds.has(d.id)) return false
         return true
       })
       .map((d: any) => {
@@ -269,7 +279,11 @@ export default function TasksPage() {
           linesTotal = info.total
           linesComplete = info.complete
           ficheProgress = info.total > 0 ? Math.round((info.complete / info.total) * 100) : 0
-          ficheStatus = 'en_cours'
+          if (info.total > 0 && info.complete === info.total) {
+            ficheStatus = 'complete'  // Fiche complete, ready to place order
+          } else {
+            ficheStatus = 'en_cours'
+          }
         }
 
         return {
@@ -780,20 +794,20 @@ export default function TasksPage() {
             STATUS_CFG[t.ficheStatus]?.label || t.ficheStatus,
           ]),
           totalsRow: ['TOTAL', `${visible.length} tâches`, '', '', visible.reduce((s,t)=>s+t.amount,0), '', ''],
-          notes: `Fiches achat: ${allAchats.length} · Relances retard: ${allRelances.length} · Closing retard: ${allClosing.length} · Relances semaine: ${allSemaine.length}`,
+          notes: `Commandes à placer: ${allAchats.length} · Relances retard: ${allRelances.length} · Closing retard: ${allClosing.length} · Relances semaine: ${allSemaine.length}`,
         }],
         summary: {
           title: `Résumé Tâches · ${new Date().toLocaleDateString('fr-MA')}`,
           kpis: [
-            { label: 'Total tâches', value: tasks.length, detail: `${allAchats.length} fiches + ${allRelances.length} relances + ${allClosing.length} closing + ${allSemaine.length} semaine` },
+            { label: 'Total tâches', value: tasks.length, detail: `${allAchats.length} commandes + ${allRelances.length} relances + ${allClosing.length} closing + ${allSemaine.length} semaine` },
             { label: 'Urgentes (haute priorité)', value: tasks.filter(t => t.priority === 'high').length, detail: 'Nécessitent une action immédiate' },
-            { label: 'CA fiches achat', value: totalAchatAmt, detail: `${allAchats.length} fiches à compléter` },
+            { label: 'CA commandes à placer', value: totalAchatAmt, detail: `${allAchats.length} commandes en attente` },
             { label: 'CA closing retard', value: closingAmt, detail: `${allClosing.length} deals en retard` },
           ],
           breakdownTitle: 'Répartition par type',
           breakdownHeaders: ['Type', 'Nombre', 'Urgentes', 'Montant (MAD)'],
           breakdown: [
-            ['Fiches achat', allAchats.length, allAchats.filter(t=>t.priority==='high').length, totalAchatAmt],
+            ['Commandes à placer', allAchats.length, allAchats.filter(t=>t.priority==='high').length, totalAchatAmt],
             ['Relances retard', allRelances.length, allRelances.filter(t=>t.priority==='high').length, 0],
             ['Closing retard', allClosing.length, allClosing.filter(t=>t.priority==='high').length, closingAmt],
             ['Relances semaine', allSemaine.length, allSemaine.filter(t=>t.priority==='high').length, 0],
@@ -859,7 +873,7 @@ export default function TasksPage() {
           />
           <KPICard
             icon={<FileText className="h-4 w-4" />}
-            label="Fiches achat"
+            label="Commandes à placer"
             value={String(allAchats.length)}
             sub={totalAchatAmt > 0 ? `${fmt(totalAchatAmt)} MAD` : '0 MAD'}
             color="amber"
@@ -1006,7 +1020,7 @@ export default function TasksPage() {
           if (dealRelToday > 0) tips.push(`🎯 ${dealRelToday} deal${dealRelToday > 1 ? 's' : ''} à suivre aujourd'hui`)
           if (dealRelOverdue > 0) tips.push(`⚠️ ${dealRelOverdue} suivi${dealRelOverdue > 1 ? 's' : ''} deal en retard — rappelle tes prospects !`)
           if (allRelances.length > 5) tips.push(`🔴 ${allRelances.length} relances en retard — priorise les plus anciennes`)
-          if (allAchats.length > 0) tips.push(`📋 ${allAchats.length} fiches achat à compléter (${fmt(totalAchatAmt)} MAD)`)
+          if (allAchats.length > 0) tips.push(`📋 ${allAchats.length} commande${allAchats.length > 1 ? 's' : ''} à placer (${fmt(totalAchatAmt)} MAD)`)
           if (allClosing.length > 3) tips.push(`⏰ ${allClosing.length} deals avec closing dépassé — requalifie ou relance`)
           if (gap > 0) tips.push(`📈 Retard vs objectif annuel : ${fmt(gap)} MAD — accélère le closing`)
           if (gap <= 0) tips.push(`🏆 En avance sur l'objectif annuel de ${fmt(Math.abs(gap))} MAD — continue !`)
@@ -1097,6 +1111,7 @@ export default function TasksPage() {
                 { key: 'Tous',     label: 'Tout statut' },
                 { key: 'a_faire',  label: 'À faire' },
                 { key: 'en_cours', label: 'En cours' },
+                { key: 'complete', label: 'Prêt à placer' },
               ] as const).map(({ key, label }) => (
                 <button key={key} onClick={() => setStatusFilter(key as any)}
                   className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap
@@ -1142,11 +1157,11 @@ export default function TasksPage() {
         ) : (
           <div className="space-y-4">
 
-            {/* ── Fiches achat ── */}
+            {/* ── Commandes à placer ── */}
             {achats.length > 0 && (typeFilter === 'Tous' || typeFilter === 'achat_manquant') && (
               <TaskSection
                 icon={<FileText className="h-4 w-4" />}
-                title="Fiches achat à compléter"
+                title="Commandes à placer"
                 count={achats.length}
                 colorScheme="amber"
                 amount={achats.reduce((s,t)=>s+t.amount,0)}>
@@ -1157,7 +1172,7 @@ export default function TasksPage() {
                       <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">Deal</th>
                       <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400 whitespace-nowrap">Info</th>
                       <TH col="amount" label="Montant" right />
-                      <TH col="ficheStatus" label="Statut fiche" />
+                      <TH col="ficheStatus" label="Avancement" />
                       <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Action</th>
                     </tr>
                   </thead>
@@ -1198,9 +1213,9 @@ export default function TasksPage() {
                             <div className="flex justify-center">
                               <button onClick={() => router.push(`/opportunities/${t.entity_id}/purchase`)}
                                 className={`inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-white transition-colors shadow-sm
-                                  ${t.ficheStatus === 'en_cours' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'}`}>
+                                  ${t.ficheStatus === 'complete' ? 'bg-emerald-600 hover:bg-emerald-700' : t.ficheStatus === 'en_cours' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'}`}>
                                 <Package className="h-3.5 w-3.5" />
-                                {t.ficheStatus === 'en_cours' ? 'Compléter' : 'Remplir'}
+                                {t.ficheStatus === 'complete' ? 'Placer commande' : t.ficheStatus === 'en_cours' ? 'Compléter fiche' : 'Remplir fiche'}
                               </button>
                             </div>
                           </td>
