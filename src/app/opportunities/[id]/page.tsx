@@ -373,7 +373,7 @@ export default function OpportunityDetailPage() {
   const canEmail      = ficheComplete && isWon
   const supIdx        = supply ? STATUS_ORDER.indexOf(supply.status as SupplyStatus) : -1
   const supCfg        = supply ? STATUS_CFG[supply.status as SupplyStatus] : null
-  const commandePlacee = supIdx >= 2 // status is 'commande' or beyond — fiche locked once supplier confirmed
+  const commandePlacee = supIdx >= 1 // status is 'commande' or beyond — fiche locked once supplier confirmed
   const cDate         = closingDate(opp)
   const stageCfg      = STAGE_CFG[opp.stage] || { bg: 'bg-slate-100', text: 'text-slate-600' }
 

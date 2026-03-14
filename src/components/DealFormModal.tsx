@@ -609,17 +609,7 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
           entity_name: title.trim(),
           detail: `${stage} · ${payload.bu || ''} · ${payload.amount ? payload.amount + ' MAD' : ''}`.trim(),
         })
-        // Auto-create supply_order when deal is moved to Won
-        if (status === 'Won') {
-          const { data: existing } = await supabase
-            .from('supply_orders').select('id').eq('opportunity_id', editRow.id).maybeSingle()
-          if (!existing) {
-            await supabase.from('supply_orders').insert({
-              opportunity_id: editRow.id,
-              status: 'a_commander',
-            })
-          }
-        }
+        // Supply order is created when user clicks "Placer la commande" on the purchase form
       } else {
         const { data: inserted, error } = await supabase.from('opportunities').insert(payload).select('id').single()
         if (error) throw error
@@ -631,13 +621,7 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
           entity_name: title.trim(),
           detail: `${stage} · ${payload.bu || ''} · ${payload.amount ? payload.amount + ' MAD' : ''}`.trim(),
         })
-        // Auto-create supply_order when deal is created as Won
-        if (status === 'Won' && savedDealId) {
-          await supabase.from('supply_orders').insert({
-            opportunity_id: savedDealId,
-            status: 'a_commander',
-          })
-        }
+        // Supply order is created when user clicks "Placer la commande" on the purchase form
       }
 
       // Save Deal Registrations

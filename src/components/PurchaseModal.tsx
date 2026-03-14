@@ -242,12 +242,7 @@ export default function PurchaseModal({
       // Upload files
       await uploadFiles(deal.id)
 
-      // Create supply_order if not exists
-      await supabase.from('supply_orders').upsert({
-        opportunity_id: deal.id,
-        status: 'a_commander',
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'opportunity_id', ignoreDuplicates: true })
+      // Supply order is created when user clicks "Placer la commande" on the purchase form
 
       const clientName  = deal.accounts?.name || deal.title
       const margePctStr = totalVente > 0 ? ((margeNette / totalVente) * 100).toFixed(1) : '0'

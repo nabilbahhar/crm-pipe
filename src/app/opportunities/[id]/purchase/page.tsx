@@ -439,12 +439,12 @@ export default function PurchasePage() {
           selected_contact_ids: l.selected_contact_ids?.length ? JSON.stringify(l.selected_contact_ids) : null,
         }
       })
-      const supplyOrder = {
+      // Supply order uniquement lors du placement (pas sur save partiel)
+      const supplyOrder = partial ? null : {
         opportunity_id: id,
-        status: partial ? 'a_commander' : 'place',
-        ...(partial ? {} : { placed_at: new Date().toISOString() }),
+        status: 'place',
+        placed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        _ignoreDuplicates: partial,
       }
       // Appel API server-side (service role → bypass RLS)
       const res = await authFetch('/api/purchase-save', {

@@ -714,17 +714,17 @@ export default function Dashboard() {
 
   const supplyCounts = useMemo(()=>{
     const counts: Record<string,number> = {
-      a_commander:0, place:0, commande:0, en_stock:0, livre:0, facture:0
+      place:0, commande:0, en_stock:0, livre:0, facture:0
     }
     for (const o of filteredSupplyOrders) counts[o.status] = (counts[o.status]||0)+1
     return counts
   },[filteredSupplyOrders])
 
-  // Commandes en retard : status 'a_commander' depuis plus de 24h
+  // Commandes en retard : status 'place' depuis plus de 3 jours (pas encore commandé)
   const overdueOrders = useMemo(()=>{
-    const limit = Date.now() - 24*60*60*1000
+    const limit = Date.now() - 3*24*60*60*1000
     return filteredSupplyOrders.filter(o => {
-      if (o.status !== 'a_commander') return false
+      if (o.status !== 'place') return false
       const ts = o.placed_at || o.updated_at
       if (!ts) return false
       return new Date(ts).getTime() < limit
@@ -1613,9 +1613,8 @@ export default function Dashboard() {
         {/* ══ SUPPLY CHAIN STATUTS ══ */}
         {filteredSupplyOrders.length > 0 && (
           <Panel title="📦 Supply Chain — Statuts" sub="Commandes en cours par étape">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-5 gap-3">
               {[
-                {key:'a_commander',label:'À commander',icon:'🟡',color:'text-amber-700', bg:'bg-amber-50',  border:'border-amber-200'},
                 {key:'place',      label:'Placé',      icon:'🔵',color:'text-blue-700',  bg:'bg-blue-50',   border:'border-blue-200'},
                 {key:'commande',   label:'Commandé',   icon:'🟣',color:'text-violet-700',bg:'bg-violet-50', border:'border-violet-200'},
                 {key:'en_stock',   label:'En stock',   icon:'🟠',color:'text-orange-700',bg:'bg-orange-50', border:'border-orange-200'},
@@ -1708,7 +1707,7 @@ export default function Dashboard() {
                 </div>
                 {supTotal > 0 && (
                   <div className="flex items-center gap-2">
-                    {(['a_commander','place','commande','en_stock','livre','facture'] as const).map(s => {
+                    {(['place','commande','en_stock','livre','facture'] as const).map(s => {
                       const cfg = SUPPLY_STATUS_CFG[s]
                       const cnt = supplyOrders.filter((o: any) => o.status === s).length
                       if (cnt === 0) return null

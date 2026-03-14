@@ -228,12 +228,11 @@ export const setProspectionTarget = (value: number): void => {
 
 // ─── Supply ───────────────────────────────────────────────────────────────────
 
-export type SupplyStatus = 'a_commander' | 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'
+export type SupplyStatus = 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'
 
 export const SUPPLY_STATUS_CFG: Record<SupplyStatus, {
   label: string; icon: string; color: string; bg: string; border: string; dot: string; next?: SupplyStatus
 }> = {
-  a_commander: { label: 'À commander', icon: '📋', color: 'text-amber-700',   bg: 'bg-amber-50',   border: 'border-amber-200',   dot: 'bg-amber-400',   next: 'place'     },
   place:       { label: 'Placé',        icon: '📤', color: 'text-blue-700',    bg: 'bg-blue-50',    border: 'border-blue-200',    dot: 'bg-blue-500',    next: 'commande'  },
   commande:    { label: 'Commandé',     icon: '🔄', color: 'text-violet-700',  bg: 'bg-violet-50',  border: 'border-violet-200',  dot: 'bg-violet-500',  next: 'en_stock'  },
   en_stock:    { label: 'En stock',     icon: '📦', color: 'text-orange-700',  bg: 'bg-orange-50',  border: 'border-orange-200',  dot: 'bg-orange-400',  next: 'livre'     },
@@ -242,7 +241,7 @@ export const SUPPLY_STATUS_CFG: Record<SupplyStatus, {
 }
 
 export const SUPPLY_STATUS_ORDER: SupplyStatus[] = [
-  'a_commander', 'place', 'commande', 'en_stock', 'livre', 'facture',
+  'place', 'commande', 'en_stock', 'livre', 'facture',
 ]
 
 // ─── Line status (tracking par ligne) ────────────────────────────────────────

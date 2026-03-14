@@ -16,7 +16,7 @@ import { logActivity } from '@/lib/logActivity'
 import { mad, fmt, normStatus, normMainBU, normSBU, STAGE_CFG, BU_BADGE_CLS, MAIN_BU_COLORS, ownerName } from '@/lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-type SupplyStatus = 'a_commander' | 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'
+type SupplyStatus = 'place' | 'commande' | 'en_stock' | 'livre' | 'facture'
 
 type Deal = {
   id: string; account_id: string|null; title: string; stage: string
@@ -36,7 +36,6 @@ const STATUS_ALL = ['Tous', 'Open', 'Won', 'Lost'] as const
 
 // ─── Supply helpers ──────────────────────────────────────────────────────────
 const SUPPLY_CFG: Record<SupplyStatus, { label: string; icon: string; color: string; bg: string }> = {
-  a_commander: { label: 'À commander', icon: '📋', color: 'text-amber-700',   bg: 'bg-amber-50'   },
   place:       { label: 'Placé',        icon: '📤', color: 'text-blue-700',    bg: 'bg-blue-50'    },
   commande:    { label: 'Commandé',     icon: '🔄', color: 'text-violet-700',  bg: 'bg-violet-50'  },
   en_stock:    { label: 'En stock',     icon: '📦', color: 'text-orange-700',  bg: 'bg-orange-50'  },
