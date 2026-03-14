@@ -25,7 +25,16 @@ export async function POST(req: NextRequest) {
 
     let infoId = existingInfoId
 
-    // 1. Upsert purchase_info
+    // 1. Upsert purchase_info — check server-side if record exists
+    if (!infoId && purchaseInfo.opportunity_id) {
+      const { data: existing } = await supabaseServer
+        .from('purchase_info')
+        .select('id')
+        .eq('opportunity_id', purchaseInfo.opportunity_id)
+        .maybeSingle()
+      if (existing?.id) infoId = existing.id
+    }
+
     if (!infoId) {
       const { data, error } = await supabaseServer
         .from('purchase_info')
