@@ -74,6 +74,7 @@ export default function SupportPage() {
 
   async function load() {
     setLoading(true)
+    try {
     const [{ data: tix }, { data: wonDeals }, { data: plData }] = await Promise.all([
       supabase.from('support_tickets').select('*, opportunities(id, title, accounts(name)), accounts(id, name)').order('created_at', { ascending: false }),
       supabase.from('opportunities').select('id, title, accounts(name)').eq('status', 'Won'),
@@ -109,6 +110,9 @@ export default function SupportPage() {
     }
     warns.sort((a, b) => a.expiresIn - b.expiresIn)
     setWarranties(warns)
+    } catch (e: any) {
+      console.error('[support] load error:', e)
+    }
     setLoading(false)
   }
 
@@ -172,13 +176,13 @@ export default function SupportPage() {
     }
     if (editId) {
       const { error } = await supabase.from('support_tickets').update(payload).eq('id', editId)
-      if (error) { alert(error.message); setSaving(false); return }
+      if (error) { alert('Erreur lors de l\'opération'); setSaving(false); return }
       logActivity({ action_type: 'update', entity_type: 'ticket', entity_name: fTitle, detail: 'Ticket support mis à jour' })
     } else {
       payload.created_by = userEmail
       payload.status = 'ouvert'
       const { error } = await supabase.from('support_tickets').insert(payload)
-      if (error) { alert(error.message); setSaving(false); return }
+      if (error) { alert('Erreur lors de l\'opération'); setSaving(false); return }
       logActivity({ action_type: 'create', entity_type: 'ticket', entity_name: fTitle, detail: 'Ticket support créé' })
     }
     setSaving(false); setShowModal(false); load()
@@ -188,7 +192,7 @@ export default function SupportPage() {
     const up: any = { status: newStatus, updated_at: new Date().toISOString() }
     if (newStatus === 'resolu' || newStatus === 'ferme') up.resolved_at = new Date().toISOString()
     const { error } = await supabase.from('support_tickets').update(up).eq('id', t.id)
-    if (error) { alert(error.message); return }
+    if (error) { alert('Erreur lors de l\'opération'); return }
     logActivity({ action_type: 'update', entity_type: 'ticket', entity_name: t.title, detail: `Ticket → ${(TICKET_STATUS_CFG as any)[newStatus]?.label || newStatus}` })
     load()
   }
@@ -196,7 +200,7 @@ export default function SupportPage() {
   async function deleteTicket(t: Ticket) {
     if (!confirm(`Supprimer le ticket "${t.title}" ?`)) return
     const { error } = await supabase.from('support_tickets').delete().eq('id', t.id)
-    if (error) { alert(error.message); return }
+    if (error) { alert('Erreur lors de l\'opération'); return }
     logActivity({ action_type: 'delete', entity_type: 'ticket', entity_name: t.title, detail: 'Ticket support supprimé' })
     load()
   }

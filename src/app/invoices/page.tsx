@@ -717,12 +717,17 @@ function InvoiceFormModal({
   useEffect(() => {
     if (isEdit) return
     async function generateNumber() {
-      const year = new Date().getFullYear()
-      const { count } = await supabase
-        .from('invoices')
-        .select('id', { count: 'exact', head: true })
-      const next = (count ?? 0) + 1
-      setInvoiceNumber(`FAC-${year}-${String(next).padStart(3, '0')}`)
+      try {
+        const year = new Date().getFullYear()
+        const { count } = await supabase
+          .from('invoices')
+          .select('id', { count: 'exact', head: true })
+        const next = (count ?? 0) + 1
+        setInvoiceNumber(`FAC-${year}-${String(next).padStart(3, '0')}`)
+      } catch (e) {
+        console.error('[invoices] generateNumber error:', e)
+        setInvoiceNumber(`FAC-${new Date().getFullYear()}-001`)
+      }
     }
     generateNumber()
   }, [isEdit])

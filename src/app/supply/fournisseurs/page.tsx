@@ -521,19 +521,23 @@ export default function SuppliersPage() {
 
   async function loadAll() {
     setLoading(true)
-    const [{ data: sups }, { data: statsData }, contactsRes] = await Promise.all([
-      supabase.from('suppliers').select('*').order('name'),
-      supabase.from('supplier_stats').select('*'),
-      supabase.from('supplier_contacts').select('supplier_id'),
-    ])
-    setSuppliers(sups || [])
-    setStats(statsData || [])
-    if (contactsRes && !contactsRes.error && contactsRes.data) {
-      const counts: Record<string, number> = {}
-      for (const c of contactsRes.data) {
-        counts[c.supplier_id] = (counts[c.supplier_id] || 0) + 1
+    try {
+      const [{ data: sups }, { data: statsData }, contactsRes] = await Promise.all([
+        supabase.from('suppliers').select('*').order('name'),
+        supabase.from('supplier_stats').select('*'),
+        supabase.from('supplier_contacts').select('supplier_id'),
+      ])
+      setSuppliers(sups || [])
+      setStats(statsData || [])
+      if (contactsRes && !contactsRes.error && contactsRes.data) {
+        const counts: Record<string, number> = {}
+        for (const c of contactsRes.data) {
+          counts[c.supplier_id] = (counts[c.supplier_id] || 0) + 1
+        }
+        setContactCounts(counts)
       }
-      setContactCounts(counts)
+    } catch (e: any) {
+      console.error('[fournisseurs] load error:', e)
     }
     setLoading(false)
   }
