@@ -1070,21 +1070,35 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                 <p className="text-xs text-slate-400">Aucune DR. Clique ci-dessous pour en ajouter.</p>
               ) : (
                 drLines.map((dr, i) => {
-                  // Build available lines for line-specific DR
+                  // Build available lines for line selector
                   const availableLines: { idx: number; label: string }[] = []
                   if (multiBu) {
-                    lines.forEach((l, li) => availableLines.push({ idx: li, label: `Ligne ${li + 1} — ${l.bu} / ${isService(l.bu) ? SERVICE_CARD : l.card} (${mad(l.amount)})` }))
+                    lines.forEach((l, li) => availableLines.push({ idx: li, label: `${isService(l.bu) ? SERVICE_CARD : l.card} (${mad(l.amount)})` }))
                   } else if (multiCard) {
-                    cardLines.forEach((cl, ci) => availableLines.push({ idx: ci, label: `Ligne ${ci + 1} — ${bu} / ${cl.card} (${mad(cl.amount)})` }))
+                    cardLines.forEach((cl, ci) => availableLines.push({ idx: ci, label: `${cl.card} (${mad(cl.amount)})` }))
                   }
                   const hasMultipleLines = availableLines.length >= 2
 
+                  // Resolve selected line label for recap
+                  const selectedLineLabel = dr.scope === 'line' && dr.line_index != null && availableLines[dr.line_index]
+                    ? availableLines[dr.line_index].label : null
+
                   return (
-                    <div key={i} className={`rounded-xl border p-3 space-y-3 transition ${dr.enabled ? 'border-blue-200 bg-blue-50/30' : 'border-slate-200 bg-slate-50 opacity-60'}`}>
+                    <div key={i} className="rounded-xl border border-blue-200 bg-blue-50/30 p-3 space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <ShieldCheck className="h-4 w-4 text-blue-500" />
                           <span className="text-sm font-semibold text-slate-700">DR #{i + 1}</span>
+                          {selectedLineLabel && (
+                            <span className="text-[10px] text-blue-600 bg-blue-100 rounded-full px-2 py-0.5 font-medium">
+                              {selectedLineLabel}
+                            </span>
+                          )}
+                          {dr.scope === 'deal' && hasMultipleLines && (
+                            <span className="text-[10px] text-slate-500 bg-slate-100 rounded-full px-2 py-0.5 font-medium">
+                              Tout le deal
+                            </span>
+                          )}
                         </div>
                         <button type="button" onClick={() => setDrLines(p => p.filter((_, j) => j !== i))}
                           className="h-7 w-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition">
@@ -1092,37 +1106,29 @@ export default function DealFormModal({ editRow, onClose, onSaved }: Props) {
                         </button>
                       </div>
 
-                      {/* Scope: tout le deal vs ligne spécifique */}
+                      {/* Line selector — single dropdown with "Tout le deal" + each line */}
                       {hasMultipleLines && (
-                        <div className="flex gap-2">
-                          <label className={`flex-1 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium cursor-pointer select-none transition-all
-                            ${dr.scope === 'deal' ? 'border-blue-300 bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
-                            <input type="radio" name={`dr_scope_${i}`} checked={dr.scope === 'deal'}
-                              onChange={() => setDrLines(p => p.map((d, j) => j === i ? { ...d, scope: 'deal' as const, line_index: null } : d))}
-                              className="h-3 w-3 accent-blue-600" />
-                            Tout le deal
-                          </label>
-                          <label className={`flex-1 flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium cursor-pointer select-none transition-all
-                            ${dr.scope === 'line' ? 'border-blue-300 bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'}`}>
-                            <input type="radio" name={`dr_scope_${i}`} checked={dr.scope === 'line'}
-                              onChange={() => setDrLines(p => p.map((d, j) => j === i ? { ...d, scope: 'line' as const, line_index: 0 } : d))}
-                              className="h-3 w-3 accent-blue-600" />
-                            Ligne spécifique
-                          </label>
-                        </div>
-                      )}
-
-                      {/* Line selector */}
-                      {dr.scope === 'line' && hasMultipleLines && (
-                        <div className="relative">
-                          <select value={dr.line_index ?? 0}
-                            onChange={e => setDrLines(p => p.map((d, j) => j === i ? { ...d, line_index: Number(e.target.value) } : d))}
-                            className={inp + ' !h-8 text-xs appearance-none pr-9'}>
-                            {availableLines.map(al => (
-                              <option key={al.idx} value={al.idx}>{al.label}</option>
-                            ))}
-                          </select>
-                          <ChevronDown className="absolute right-3 top-2 h-4 w-4 text-slate-400 pointer-events-none" />
+                        <div>
+                          <div className="mb-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Concerne</div>
+                          <div className="relative">
+                            <select
+                              value={dr.scope === 'deal' ? 'deal' : String(dr.line_index ?? 0)}
+                              onChange={e => {
+                                const v = e.target.value
+                                if (v === 'deal') {
+                                  setDrLines(p => p.map((d, j) => j === i ? { ...d, scope: 'deal' as const, line_index: null } : d))
+                                } else {
+                                  setDrLines(p => p.map((d, j) => j === i ? { ...d, scope: 'line' as const, line_index: Number(v) } : d))
+                                }
+                              }}
+                              className={inp + ' !h-9 text-xs appearance-none pr-9'}>
+                              <option value="deal">🔵 Tout le deal</option>
+                              {availableLines.map(al => (
+                                <option key={al.idx} value={al.idx}>📦 Ligne {al.idx + 1} — {al.label}</option>
+                              ))}
+                            </select>
+                            <ChevronDown className="absolute right-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                          </div>
                         </div>
                       )}
 

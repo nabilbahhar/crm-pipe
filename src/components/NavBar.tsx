@@ -17,6 +17,7 @@ const NAV_ITEMS: NavItem[] = [
     { label: "Pipeline", href: "/pipeline" },
     { label: "Deals", href: "/opportunities" },
     { label: "Comptes", href: "/accounts" },
+    { label: "Partenaires", href: "/partenaires" },
   ]},
   { label: "Logistique", href: "/supply", children: [
     { label: "Supply", href: "/supply" },
