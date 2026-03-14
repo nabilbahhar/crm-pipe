@@ -673,220 +673,212 @@ export default function PurchasePage() {
             </div>
           )}
 
-          <div className="overflow-x-auto rounded-xl border border-slate-200">
-            <table className="w-full" style={{ minWidth: 1500 }}>
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  {[
-                    { l:'Réf',        w:70,  r:false },
-                    { l:'Désignation *', w:280, r:false },
-                    { l:'Qté',        w:65,  r:true  },
-                    { l:'PU Vente',   w:110, r:true  },
-                    { l:'PT Vente',   w:120, r:true  },
-                    { l:'PU Achat ★', w:110, r:true, amber:true },
-                    { l:'PT Achat',   w:120, r:true  },
-                    { l:'Marge',      w:75,  r:true  },
-                    { l:'Fin garantie', w:125, r:false },
-                    { l:'Fin licence', w:125, r:false },
-                    { l:'Fournisseur / Contact',w:250, r:false },
-                    { l:'',           w:40,  r:false },
-                  ].map(({ l, w, r, amber }, i) => (
-                    <th key={i} style={w ? { width: w, minWidth: w } : {}} className={`px-3 py-3 text-[11px] font-bold uppercase tracking-wide ${r?'text-right':'text-left'} ${amber?'text-amber-500':'text-slate-400'}`}>
-                      {l}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((l, i) => {
-                  const ptVente = Number(l.pt_vente) || Number(l.qty)*Number(l.pu_vente)
-                  const ptAchat = Number(l.qty)*Number(l.pu_achat)
-                  const marge   = ptVente - ptAchat
-                  const margePc = ptVente > 0 ? (marge/ptVente)*100 : 0
-                  return (
-                    <tr key={i} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-3">
-                        <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)}
-                          placeholder="C1300…" className={inp} />
-                      </td>
-                      <td className="px-3 py-3">
-                        <textarea value={l.designation}
-                          onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=Math.max(e.target.scrollHeight, 56)+'px' }}
-                          onFocus={e => { e.target.style.height='auto'; e.target.style.height=Math.max(e.target.scrollHeight, 56)+'px' }}
-                          placeholder="Description du produit *"
-                          rows={2}
-                          className={`${inp} resize-none overflow-hidden leading-snug py-2 text-xs ${!l.designation.trim()?'border-red-300 bg-red-50 focus:border-red-400':''}`}
-                          style={{ minHeight: 56, minWidth: 250 }} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input type="number" min={1} value={Number(l.qty) || 1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
-                          className={`${inp} text-right font-semibold`} style={{ minWidth: 72 }} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
-                          className={`${inp} text-right`} />
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="font-semibold text-slate-800 text-sm">
-                          {ptVente > 0 ? numFmt(ptVente) : <span className="text-slate-300 font-normal">—</span>}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
-                          className={`${inp} text-right font-bold bg-amber-50 border-amber-200 focus:border-amber-500`} />
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="font-semibold text-slate-800 text-sm">
-                          {ptAchat > 0 ? numFmt(ptAchat) : <span className="text-slate-300 font-normal">—</span>}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
+          {/* ── Product Line Cards ── */}
+          <div className="space-y-3">
+            {lines.map((l, i) => {
+              const ptVente = Number(l.pt_vente) || Number(l.qty)*Number(l.pu_vente)
+              const ptAchat = Number(l.qty)*Number(l.pu_achat)
+              const marge   = ptVente - ptAchat
+              const margePc = ptVente > 0 ? (marge/ptVente)*100 : 0
+              return (
+                <div key={i} className="group rounded-xl border border-slate-200 bg-white overflow-hidden transition-shadow hover:shadow-md">
+                  {/* Card Header */}
+                  <div className="flex items-center gap-3 bg-gradient-to-r from-slate-50 to-white px-4 py-2.5 border-b border-slate-100">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-800 text-[11px] font-bold text-white shrink-0">{i+1}</span>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)}
+                        placeholder="Réf…"
+                        className="h-8 w-[140px] shrink-0 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-mono font-semibold text-slate-700 outline-none focus:border-slate-400 placeholder:text-slate-300 transition" />
+                      {l.designation.trim() && (
+                        <span className="text-xs text-slate-400 truncate hidden sm:block">{l.designation.slice(0, 60)}{l.designation.length > 60 ? '…' : ''}</span>
+                      )}
+                    </div>
+                    {ptVente > 0 && <span className="shrink-0 rounded-lg bg-slate-100 px-3 py-1 text-sm font-bold text-slate-800">{numFmt(ptVente)}</span>}
+                    <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500 transition opacity-0 group-hover:opacity-100">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Designation — full width auto-grow */}
+                  <div className="px-4 pt-3 pb-2">
+                    <textarea value={l.designation}
+                      onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                      onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                      ref={el => { if (el && l.designation) { el.style.height='auto'; el.style.height=el.scrollHeight+'px' } }}
+                      placeholder="Description du produit *"
+                      rows={1}
+                      className={`w-full rounded-lg border px-3 py-2.5 text-[13px] leading-relaxed outline-none resize-none overflow-hidden transition focus:ring-2 focus:ring-slate-100
+                        ${!l.designation.trim() ? 'border-red-200 bg-red-50/40 placeholder:text-red-300 focus:border-red-300' : 'border-slate-200 bg-slate-50/30 placeholder:text-slate-300 focus:border-slate-400 focus:bg-white'}`}
+                      style={{ minHeight: 40 }} />
+                  </div>
+
+                  {/* Numbers grid — 6 columns */}
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-x-3 gap-y-2 px-4 pb-3">
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Qté</label>
+                      <input type="number" min={1} value={Number(l.qty)||1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
+                        className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-right font-semibold outline-none focus:border-slate-400 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">PU Vente</label>
+                      <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
+                        className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-sm text-right outline-none focus:border-slate-400 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">PT Vente</label>
+                      <div className="flex h-9 items-center justify-end rounded-lg bg-slate-100 px-2.5 text-sm font-bold text-slate-800">
+                        {ptVente > 0 ? numFmt(ptVente) : <span className="text-slate-300 font-normal">—</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-amber-500">PU Achat ★</label>
+                      <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
+                        className="h-9 w-full rounded-lg border border-amber-200 bg-amber-50 px-2.5 text-sm text-right font-bold outline-none focus:border-amber-400 transition [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">PT Achat</label>
+                      <div className="flex h-9 items-center justify-end rounded-lg bg-slate-100 px-2.5 text-sm font-bold text-slate-800">
+                        {ptAchat > 0 ? numFmt(ptAchat) : <span className="text-slate-300 font-normal">—</span>}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Marge</label>
+                      <div className="flex h-9 items-center justify-center">
                         {l.pu_achat > 0 && ptVente > 0 ? (
-                          <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>
+                          <span className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>
                             {pct(margePc)}
                           </span>
                         ) : <span className="text-slate-300 text-sm">—</span>}
-                      </td>
-                      {/* Fin garantie (mois/année) — optionnel */}
-                      <td className="px-4 py-3">
-                        <input type="month" value={l.warranty_expiry || ''}
-                          onChange={e => updateLine(i, 'warranty_expiry', e.target.value)}
-                          className={`${inp} text-xs`} style={{ minWidth: 120 }} />
-                      </td>
-                      {/* Fin licence (mois/année) — optionnel */}
-                      <td className="px-4 py-3">
-                        <input type="month" value={l.license_expiry || ''}
-                          onChange={e => updateLine(i, 'license_expiry', e.target.value)}
-                          className={`${inp} text-xs`} style={{ minWidth: 120 }} />
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="space-y-2">
-                          {/* Fournisseur selector */}
-                          <div className="flex gap-1.5">
-                            <select value={l.fournisseur_id||''} onChange={e => {
-                              const fid = e.target.value || null
-                              // Set supplier + clear contacts in one state update
-                              setLines(prev => prev.map((ln, idx) => idx !== i ? ln : {
-                                ...ln,
-                                fournisseur_id: fid,
-                                selected_contact_ids: [],
-                                contact_fournisseur: '',
-                                email_fournisseur: '',
-                                tel_fournisseur: '',
-                              }))
-                            }}
-                              className={`h-10 flex-1 rounded-lg border px-3 text-sm outline-none transition focus:ring-2 focus:ring-slate-50
-                                ${l.fournisseur_id?'border-slate-300 bg-white text-slate-800 font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
-                              <option value="">Choisir…</option>
-                              {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                            </select>
-                            <button onClick={() => setShowFournModal(true)} title="Nouveau fournisseur"
-                              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-slate-400 hover:text-slate-600 transition">
-                              <Plus className="h-4 w-4" />
-                            </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Fournisseur & Détails (collapsible) */}
+                  <div className="border-t border-slate-100">
+                    <details className="group/det" {...(l.fournisseur_id ? { open: true } : {})}>
+                      <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 transition select-none list-none [&::-webkit-details-marker]:hidden">
+                        <span className="text-[10px] transition-transform group-open/det:rotate-90">▶</span>
+                        Fournisseur & Détails
+                        {l.fournisseur_id && <span className="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">{fourns.find(f=>f.id===l.fournisseur_id)?.name}</span>}
+                      </summary>
+                      <div className="px-4 pb-4 pt-1 space-y-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                          <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Fournisseur</label>
+                            <div className="flex gap-1.5">
+                              <select value={l.fournisseur_id||''} onChange={e => {
+                                const fid = e.target.value || null
+                                setLines(prev => prev.map((ln, idx) => idx !== i ? ln : {
+                                  ...ln, fournisseur_id: fid, selected_contact_ids: [],
+                                  contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '',
+                                }))
+                              }}
+                                className={`h-9 flex-1 rounded-lg border px-2.5 text-xs outline-none transition focus:ring-2 focus:ring-slate-100
+                                  ${l.fournisseur_id?'border-slate-300 bg-white text-slate-700 font-medium':'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                                <option value="">Choisir…</option>
+                                {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                              </select>
+                              <button onClick={() => setShowFournModal(true)} title="Nouveau fournisseur"
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:border-slate-400 hover:text-slate-600 transition">
+                                <Plus className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
-                          {/* Contact selector — checkboxes for multiple contacts */}
-                          {l.fournisseur_id && (() => {
-                            const contacts = supplierContacts.filter(c => c.supplier_id === l.fournisseur_id)
-                            const fourn = fourns.find(f => f.id === l.fournisseur_id)
-                            const options: { id: string; label: string; contact: string; email: string; tel: string }[] = []
-                            if (fourn?.contact) options.push({ id: `main_${fourn.id}`, label: `${fourn.contact} (principal)`, contact: fourn.contact, email: fourn.email || '', tel: fourn.tel || '' })
-                            contacts.forEach(c => options.push({ id: c.id, label: `${c.contact_name}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
-                            const selectedIds = l.selected_contact_ids || []
-                            const toggleContact = (optId: string) => {
-                              setLines(prev => prev.map((ln, idx) => {
-                                if (idx !== i) return ln
-                                const curIds = ln.selected_contact_ids || []
-                                const isSelected = curIds.includes(optId)
-                                const newIds = isSelected
-                                  ? curIds.filter((sid: string) => sid !== optId)
-                                  : [...curIds, optId]
-                                const contactNames = newIds.map(sid => options.find(o => o.id === sid)?.contact).filter(Boolean).join(', ')
-                                const emails = newIds.map(sid => options.find(o => o.id === sid)?.email).filter(Boolean).join(', ')
-                                const tels = newIds.map(sid => options.find(o => o.id === sid)?.tel).filter(Boolean).join(', ')
-                                return {
-                                  ...ln,
-                                  selected_contact_ids: newIds,
-                                  contact_fournisseur: contactNames,
-                                  email_fournisseur: emails,
-                                  tel_fournisseur: tels,
-                                }
-                              }))
-                            }
-                            return (
-                              <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-2 space-y-1.5">
-                                <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                                  <span>👤</span> Contacts fournisseur {selectedIds.length > 0 && <span className="ml-1 rounded-full bg-blue-500 text-white px-1.5 py-0 text-[9px]">{selectedIds.length}</span>}
-                                </div>
-                                {options.length >= 1 ? (
-                                  <div className="space-y-1 max-h-[140px] overflow-y-auto">
-                                    {options.map((opt) => {
-                                      const checked = selectedIds.includes(opt.id)
-                                      return (
-                                        <label key={opt.id}
-                                          className={`flex items-start gap-2 rounded-md px-2 py-1.5 cursor-pointer transition text-xs
-                                            ${checked ? 'bg-blue-100 border border-blue-300' : 'bg-white border border-blue-100 hover:bg-blue-50'}`}>
-                                          <input type="checkbox" checked={checked}
-                                            onChange={() => toggleContact(opt.id)}
-                                            className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 accent-blue-600" />
-                                          <div className="flex-1 min-w-0">
-                                            <div className="font-semibold text-slate-700 truncate">{opt.label}</div>
-                                            {(opt.email || opt.tel) && (
-                                              <div className="text-[10px] text-slate-400 truncate">
-                                                {opt.email}{opt.email && opt.tel ? ' · ' : ''}{opt.tel}
-                                              </div>
-                                            )}
-                                          </div>
-                                        </label>
-                                      )
-                                    })}
-                                  </div>
-                                ) : (
-                                  <input value={l.contact_fournisseur || ''} onChange={e => updateLine(i, 'contact_fournisseur', e.target.value)}
-                                    placeholder="Nom du contact…"
-                                    className="h-8 w-full rounded-md border border-blue-200 bg-white px-2 text-xs outline-none focus:border-blue-400 transition" />
-                                )}
-                              </div>
-                            )
-                          })()}
+                          <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Fin garantie</label>
+                            <input type="month" value={l.warranty_expiry||''} onChange={e => updateLine(i,'warranty_expiry',e.target.value)}
+                              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-slate-400 transition" />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Fin licence</label>
+                            <input type="month" value={l.license_expiry||''} onChange={e => updateLine(i,'license_expiry',e.target.value)}
+                              className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs outline-none focus:border-slate-400 transition" />
+                          </div>
                         </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
-                          className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-300 hover:bg-red-50 hover:text-red-500 transition">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-              {lines.length > 1 && (
-                <tfoot>
-                  <tr className="border-t-2 border-slate-200 bg-slate-50">
-                    <td colSpan={4} className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wide text-slate-400">Totaux</td>
-                    <td className="px-4 py-3 text-right text-sm font-bold text-slate-900">{mad(totalVente)}</td>
-                    <td />
-                    <td className="px-4 py-3 text-right text-sm font-bold text-slate-900">{totalAchat>0?mad(totalAchat):'—'}</td>
-                    <td className="px-4 py-3 text-right">
-                      {totalAchat > 0 && (
-                        <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${margePctBrute>=20?'bg-emerald-100 text-emerald-700':margePctBrute>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>
-                          {pct(margePctBrute)}
-                        </span>
-                      )}
-                    </td>
-                    <td colSpan={4} />
-                  </tr>
-                </tfoot>
-              )}
-            </table>
+                        {/* Contacts fournisseur */}
+                        {l.fournisseur_id && (() => {
+                          const contacts = supplierContacts.filter(c => c.supplier_id === l.fournisseur_id)
+                          const fourn = fourns.find(f => f.id === l.fournisseur_id)
+                          const options: { id: string; label: string; contact: string; email: string; tel: string }[] = []
+                          if (fourn?.contact) options.push({ id: `main_${fourn.id}`, label: `${fourn.contact} (principal)`, contact: fourn.contact, email: fourn.email || '', tel: fourn.tel || '' })
+                          contacts.forEach(c => options.push({ id: c.id, label: `${c.contact_name}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
+                          const selectedIds = l.selected_contact_ids || []
+                          const toggleContact = (optId: string) => {
+                            setLines(prev => prev.map((ln, idx) => {
+                              if (idx !== i) return ln
+                              const curIds = ln.selected_contact_ids || []
+                              const isSelected = curIds.includes(optId)
+                              const newIds = isSelected ? curIds.filter((sid: string) => sid !== optId) : [...curIds, optId]
+                              const contactNames = newIds.map(sid => options.find(o => o.id === sid)?.contact).filter(Boolean).join(', ')
+                              const emails = newIds.map(sid => options.find(o => o.id === sid)?.email).filter(Boolean).join(', ')
+                              const tels = newIds.map(sid => options.find(o => o.id === sid)?.tel).filter(Boolean).join(', ')
+                              return { ...ln, selected_contact_ids: newIds, contact_fournisseur: contactNames, email_fournisseur: emails, tel_fournisseur: tels }
+                            }))
+                          }
+                          return (
+                            <div className="rounded-lg border border-blue-100 bg-blue-50/40 p-2.5 space-y-2">
+                              <div className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-400">
+                                <span>👤</span> Contacts fournisseur {selectedIds.length > 0 && <span className="ml-1 rounded-full bg-blue-500 text-white px-1.5 text-[9px]">{selectedIds.length}</span>}
+                              </div>
+                              {options.length >= 1 ? (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {options.map(opt => {
+                                    const checked = selectedIds.includes(opt.id)
+                                    return (
+                                      <label key={opt.id}
+                                        className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 cursor-pointer transition text-xs
+                                          ${checked ? 'bg-blue-100 border border-blue-300 shadow-sm' : 'bg-white border border-blue-100 hover:bg-blue-50'}`}>
+                                        <input type="checkbox" checked={checked} onChange={() => toggleContact(opt.id)}
+                                          className="h-3.5 w-3.5 rounded border-slate-300 text-blue-600 accent-blue-600" />
+                                        <div className="min-w-0">
+                                          <div className="font-semibold text-slate-700">{opt.label}</div>
+                                          {(opt.email || opt.tel) && (
+                                            <div className="text-[10px] text-slate-400 truncate">{opt.email}{opt.email && opt.tel ? ' · ' : ''}{opt.tel}</div>
+                                          )}
+                                        </div>
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              ) : (
+                                <input value={l.contact_fournisseur||''} onChange={e => updateLine(i,'contact_fournisseur',e.target.value)}
+                                  placeholder="Nom du contact…"
+                                  className="h-8 w-full rounded-lg border border-blue-200 bg-white px-2.5 text-xs outline-none focus:border-blue-400 transition" />
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    </details>
+                  </div>
+                </div>
+              )
+            })}
           </div>
+
+          {/* Totals bar */}
+          {lines.length > 1 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-900 px-5 py-3.5">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Totaux · {lines.filter(l=>l.designation.trim()).length} ligne{lines.filter(l=>l.designation.trim()).length>1?'s':''}</span>
+              <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+                <div><span className="text-slate-500 text-[10px] uppercase tracking-wide mr-1.5">Vente</span><span className="text-sm font-bold text-white">{mad(totalVente)}</span></div>
+                <div><span className="text-slate-500 text-[10px] uppercase tracking-wide mr-1.5">Achat</span><span className="text-sm font-bold text-white">{totalAchat>0?mad(totalAchat):'—'}</span></div>
+                {totalAchat > 0 && (
+                  <span className={`inline-block rounded-full px-3 py-0.5 text-xs font-bold ${margePctBrute>=20?'bg-emerald-500/20 text-emerald-400':margePctBrute>=10?'bg-amber-500/20 text-amber-400':'bg-red-500/20 text-red-400'}`}>
+                    Marge {pct(margePctBrute)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Ajouter une ligne */}
           <button onClick={() => setLines(l => [...l, emptyLine()])}
             className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-slate-200 py-3 text-sm font-semibold text-slate-400 hover:text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors">
             <Plus className="h-4 w-4" /> Ajouter une ligne
           </button>
+
 
           {fourns.length === 0 && (
             <div className="mt-3 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
