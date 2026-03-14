@@ -9,10 +9,10 @@ import {
   Search, ArrowUp, ArrowDown, ChevronsUpDown, X, Download,
   Clock, AlertCircle, PlayCircle, CircleDashed, CalendarClock,
   FileText, AlertTriangle, TrendingUp, Users, Target, Zap, Sun,
-  Shield, Key, BookOpen, Receipt, Crosshair,
+  Shield, Key, BookOpen, Receipt, Crosshair, Mail, Banknote,
 } from 'lucide-react'
 
-type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard' | 'eta_retard' | 'deal_relance' | 'compte_incomplet'
+type TaskType   = 'relance_retard' | 'relance_semaine' | 'achat_manquant' | 'closing_retard' | 'eta_retard' | 'deal_relance' | 'compte_incomplet' | 'echeance_paiement'
 
 // ── Types for new sections ──
 type WarrantyItem = {
@@ -56,6 +56,23 @@ type InvoiceItem = {
   status: InvoiceStatus
   opportunityId: string
 }
+type PaymentReminderItem = {
+  id: string
+  dealTitle: string
+  client: string
+  accountId: string
+  opportunityId: string
+  milestoneLabel: string
+  milestonePct: number
+  amount: number       // deal amount * pct / 100
+  dueDate: string      // ISO date
+  daysUntil: number    // negative = overdue
+  trigger: string
+  totalDealAmount: number
+  clientEmails: string[]
+  clientContacts: string[]
+}
+
 type Priority   = 'high' | 'medium'
 type FicheStatus = 'a_faire' | 'en_cours' | 'complete'
 type SortKey    = 'priority' | 'title' | 'amount' | 'daysLate' | 'ficheStatus'
@@ -85,6 +102,7 @@ const TYPE_LABELS: Record<TaskType, string> = {
   eta_retard: 'ETA retard',
   deal_relance: 'Suivi deal',
   compte_incomplet: 'Fiche compte',
+  echeance_paiement: 'Échéance paiement',
 }
 
 const STATUS_CFG: Record<FicheStatus, { label: string; icon: React.ReactNode; badge: string; row: string }> = {
@@ -128,6 +146,7 @@ export default function TasksPage() {
   const [licenses, setLicenses]         = useState<LicenseItem[]>([])
   const [drs, setDrs]                   = useState<DRItem[]>([])
   const [overdueInvoices, setOverdueInvoices] = useState<InvoiceItem[]>([])
+  const [paymentReminders, setPaymentReminders] = useState<PaymentReminderItem[]>([])
 
   useEffect(() => { document.title = 'Tâches · CRM-PIPE'; load() }, [])
 
@@ -138,11 +157,11 @@ export default function TasksPage() {
     setLoading(true); setErr(null)
     try {
       const year = new Date().getFullYear()
-      const [a, b, c, d, e, f, g, wonRes, openRes, warr, lic, drItems, invItems] = await Promise.all([
+      const [a, b, c, d, e, f, g, wonRes, openRes, warr, lic, drItems, invItems, payReminders] = await Promise.all([
         loadRelances(), loadAchats(), loadClosingRetards(), loadRelancesSemaine(), loadEtaRetards(), loadDealRelances(), loadComptesIncomplets(),
         supabase.from('opportunities').select('amount').eq('status', 'Won').gte('booking_month', `${year}-01`),
         supabase.from('opportunities').select('amount').eq('status', 'Open'),
-        loadWarranties(), loadLicenses(), loadDRs(), loadOverdueInvoices(),
+        loadWarranties(), loadLicenses(), loadDRs(), loadOverdueInvoices(), loadPaymentReminders(),
       ])
       setTasks([...a, ...b, ...c, ...d, ...e, ...f, ...g])
       if (wonRes.error) console.warn('tasks wonRes error:', wonRes.error.message)
@@ -153,6 +172,7 @@ export default function TasksPage() {
       setLicenses(lic)
       setDrs(drItems)
       setOverdueInvoices(invItems)
+      setPaymentReminders(payReminders)
     } catch (e: any) { setErr(e?.message || 'Erreur chargement') }
     finally { setLoading(false); loadingRef.current = false }
   }
@@ -546,6 +566,110 @@ export default function TasksPage() {
     } catch { return [] }
   }
 
+  // ── Échéances paiement (rappels 7j avant) ────────────
+  async function loadPaymentReminders(): Promise<PaymentReminderItem[]> {
+    try {
+      // Get all Won deals that have payment_terms set
+      const { data: infos, error } = await supabase
+        .from('purchase_info')
+        .select('opportunity_id, payment_terms, opportunities!inner(id, title, amount, po_date, accounts(id, name))')
+        .not('payment_terms', 'is', null)
+      if (error || !infos) return []
+
+      // Get supply orders for delivery dates
+      const oppIds = infos.map((i: any) => i.opportunity_id)
+      if (oppIds.length === 0) return []
+      const { data: orders } = await supabase
+        .from('supply_orders')
+        .select('opportunity_id, status, placed_at, delivered_at')
+        .in('opportunity_id', oppIds)
+      const orderMap = new Map<string, any>()
+      for (const o of (orders || [])) orderMap.set(o.opportunity_id, o)
+
+      // Get account contacts for emails
+      const accountIds = [...new Set(infos.map((i: any) => i.opportunities?.accounts?.id).filter(Boolean))]
+      const { data: contacts } = accountIds.length > 0
+        ? await supabase.from('account_contacts').select('account_id, full_name, email').in('account_id', accountIds)
+        : { data: [] }
+      const contactMap = new Map<string, { names: string[]; emails: string[] }>()
+      for (const c of (contacts || [])) {
+        if (!contactMap.has(c.account_id)) contactMap.set(c.account_id, { names: [], emails: [] })
+        const entry = contactMap.get(c.account_id)!
+        if (c.full_name) entry.names.push(c.full_name)
+        if (c.email) entry.emails.push(c.email)
+      }
+
+      const now = new Date()
+      const items: PaymentReminderItem[] = []
+
+      for (const info of infos as any[]) {
+        const opp = info.opportunities
+        if (!opp) continue
+        let parsed: any
+        try { parsed = JSON.parse(info.payment_terms) } catch { continue }
+        if (!parsed?.milestones) continue
+        const dealAmount = Number(opp.amount) || 0
+        const poDate = opp.po_date ? new Date(opp.po_date) : null
+        const order = orderMap.get(info.opportunity_id)
+        const accountId = opp.accounts?.id || ''
+        const clientName = opp.accounts?.name || opp.title
+        const ci = contactMap.get(accountId)
+
+        for (const ms of parsed.milestones) {
+          let dueDate: Date | null = null
+          const trigger = ms.trigger as string
+
+          if (trigger === 'commande' && poDate) {
+            dueDate = new Date(poDate)
+          } else if (trigger === 'livraison' && order?.delivered_at) {
+            dueDate = new Date(order.delivered_at)
+          } else if (trigger === '30j' && poDate) {
+            dueDate = new Date(poDate); dueDate.setDate(dueDate.getDate() + 30)
+          } else if (trigger === '60j' && poDate) {
+            dueDate = new Date(poDate); dueDate.setDate(dueDate.getDate() + 60)
+          } else if (trigger === '90j' && poDate) {
+            dueDate = new Date(poDate); dueDate.setDate(dueDate.getDate() + 90)
+          } else if (trigger === 'pv_final') {
+            // No automatic date — skip for now
+            continue
+          } else if (trigger === 'fin_garantie') {
+            // Would need warranty end date — skip for now
+            continue
+          } else {
+            continue
+          }
+
+          if (!dueDate) continue
+          const daysUntil = Math.ceil((dueDate.getTime() - now.getTime()) / 86400000)
+          // Show if within 7 days from now or overdue (up to 60 days overdue)
+          if (daysUntil > 7 || daysUntil < -60) continue
+
+          items.push({
+            id: `pay_${info.opportunity_id}_${trigger}_${ms.pct}`,
+            dealTitle: opp.title || '—',
+            client: clientName,
+            accountId,
+            opportunityId: opp.id,
+            milestoneLabel: ms.label || trigger,
+            milestonePct: ms.pct || 0,
+            amount: Math.round(dealAmount * (ms.pct || 0) / 100),
+            dueDate: dueDate.toISOString().split('T')[0],
+            daysUntil,
+            trigger,
+            totalDealAmount: dealAmount,
+            clientEmails: ci?.emails || [],
+            clientContacts: ci?.names || [],
+          })
+        }
+      }
+
+      return items.sort((a, b) => a.daysUntil - b.daysUntil)
+    } catch (e) {
+      console.warn('loadPaymentReminders error:', e)
+      return []
+    }
+  }
+
   // ── Filtered & sorted ────────────────────────────────
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -749,8 +873,8 @@ export default function TasksPage() {
           />
         </div>
 
-        {/* ── KPI STRIP 2 — Renewals & Invoices ── */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {/* ── KPI STRIP 2 — Renewals, Invoices & Payments ── */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <KPICard
             icon={<Shield className="h-4 w-4" />}
             label="Garanties"
@@ -796,6 +920,18 @@ export default function TasksPage() {
             active={false}
             onClick={() => {
               const el = document.getElementById('section-invoices')
+              el?.scrollIntoView({ behavior: 'smooth' })
+            }}
+          />
+          <KPICard
+            icon={<Banknote className="h-4 w-4" />}
+            label="Echeances paiem."
+            value={String(paymentReminders.length)}
+            sub={paymentReminders.filter(p => p.daysUntil < 0).length + ' en retard'}
+            color="amber"
+            active={false}
+            onClick={() => {
+              const el = document.getElementById('section-payments')
               el?.scrollIntoView({ behavior: 'smooth' })
             }}
           />
@@ -1558,6 +1694,100 @@ export default function TasksPage() {
                             <td className="px-4 py-3">
                               <div className="flex justify-center">
                                 <button onClick={() => router.push(`/opportunities/${inv.opportunityId}`)}
+                                  className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
+                                  Voir <ChevronRight className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </TaskSection>
+              </div>
+            )}
+
+            {/* ── Échéances de paiement ── */}
+            {paymentReminders.length > 0 && typeFilter === 'Tous' && (
+              <div id="section-payments">
+                <TaskSection
+                  icon={<Banknote className="h-4 w-4" />}
+                  title="Échéances de paiement — rappels client"
+                  count={paymentReminders.length}
+                  colorScheme="amber"
+                  amount={paymentReminders.reduce((s, p) => s + p.amount, 0)}>
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-slate-100 bg-slate-50/70">
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Client</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Deal</th>
+                        <th className="px-4 py-2.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">Échéance</th>
+                        <th className="px-4 py-2.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-400">Montant</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Délai</th>
+                        <th className="px-4 py-2.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {paymentReminders.map(p => {
+                        const isOverdue = p.daysUntil < 0
+                        const isToday = p.daysUntil === 0
+                        const dayLabel = isOverdue ? `${Math.abs(p.daysUntil)}j retard` : isToday ? "Aujourd'hui" : `Dans ${p.daysUntil}j`
+
+                        // Build Outlook mailto link
+                        const triggerLabels: Record<string, string> = {
+                          commande: 'la commande', livraison: 'la livraison', '30j': '30 jours',
+                          '60j': '60 jours', '90j': '90 jours', pv_final: 'le PV final', fin_garantie: 'la fin de garantie',
+                        }
+                        const triggerLabel = triggerLabels[p.trigger] || p.trigger
+                        const ccList = ['supply@compucom.ma', 'salim@compucom.ma', 'FinanceHub@compucom.ma'].join(',')
+                        const subject = encodeURIComponent(`Rappel échéance — ${p.client} — ${p.milestoneLabel} (${mad(p.amount)})`)
+                        const dueDateFmt = new Date(p.dueDate).toLocaleDateString('fr-MA', { day: 'numeric', month: 'long', year: 'numeric' })
+                        const contactName = p.clientContacts.length > 0 ? p.clientContacts[0].split(' ')[0] : 'Monsieur, Madame'
+                        const body = encodeURIComponent(
+                          `Bonjour ${contactName},\n\n` +
+                          `Nous nous permettons de vous rappeler que l'échéance de paiement relative à ${triggerLabel} pour le projet « ${p.dealTitle} » est prévue le ${dueDateFmt}.\n\n` +
+                          `Détails :\n` +
+                          `• Montant : ${mad(p.amount)}\n` +
+                          `• Échéance : ${p.milestoneLabel} (${p.milestonePct}%)\n` +
+                          `• Montant total du projet : ${mad(p.totalDealAmount)}\n\n` +
+                          `Nous vous serions reconnaissants de bien vouloir procéder au règlement dans les délais convenus.\n\n` +
+                          `Nous restons à votre entière disposition pour toute question.\n\n` +
+                          `Cordialement,\nNabil Bahhar\nBusiness Development Manager\nCompucom Morocco`
+                        )
+                        const toEmails = p.clientEmails.length > 0 ? p.clientEmails.join(',') : ''
+                        const mailtoUrl = `mailto:${toEmails}?cc=${ccList}&subject=${subject}&body=${body}`
+
+                        return (
+                          <tr key={p.id} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className={`h-2 w-2 rounded-full shrink-0 ${isOverdue ? 'bg-red-500' : isToday ? 'bg-amber-500 animate-pulse' : 'bg-emerald-400'}`} />
+                                <span className="font-bold text-slate-900 text-xs">{p.client}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-xs text-slate-600 max-w-[160px]">
+                              <span className="truncate block">{p.dealTitle}</span>
+                              <span className="text-[10px] text-slate-400">{p.milestoneLabel} · {p.milestonePct}%</span>
+                            </td>
+                            <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(p.dueDate)}</td>
+                            <td className="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap text-xs">
+                              {mad(p.amount)}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`text-xs font-bold px-2.5 py-1 rounded-full
+                                ${isOverdue ? 'bg-red-100 text-red-700' : isToday ? 'bg-amber-100 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                                {dayLabel}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <a href={mailtoUrl} target="_blank" rel="noopener noreferrer"
+                                  title="Envoyer un rappel par email"
+                                  className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white hover:bg-blue-700 transition-colors shadow-sm">
+                                  <Mail className="h-3.5 w-3.5" /> Relancer
+                                </a>
+                                <button onClick={() => router.push(`/opportunities/${p.opportunityId}`)}
                                   className="inline-flex h-8 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors">
                                   Voir <ChevronRight className="h-3.5 w-3.5" />
                                 </button>
