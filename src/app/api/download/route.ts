@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ urls })
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Erreur serveur' }, { status: 500 })
+    console.error('[download] Error:', e)
+    return NextResponse.json({ error: 'Erreur serveur téléchargement' }, { status: 500 })
   }
 }

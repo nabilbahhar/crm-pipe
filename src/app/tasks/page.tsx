@@ -1954,7 +1954,7 @@ function KPICard({ icon, label, value, sub, color, active, onClick }: {
     rose:    { ring: active ? 'ring-rose-400'    : 'ring-slate-200', icon: 'bg-rose-100 text-rose-600',       val: 'text-rose-700'    },
     indigo:  { ring: active ? 'ring-indigo-400'  : 'ring-slate-200', icon: 'bg-indigo-100 text-indigo-600',   val: 'text-indigo-700'  },
   }
-  const colors = colorMap[color]
+  const colors = colorMap[color] || colorMap.blue
 
   return (
     <button onClick={onClick}
@@ -1986,7 +1986,7 @@ function TaskSection({ icon, title, count, colorScheme, amount, children }: {
     rose:    { border: 'border-rose-200',    bg: 'bg-rose-50',    text: 'text-rose-800',    badge: 'bg-rose-200 text-rose-800',       icon: 'text-rose-600'    },
     indigo:  { border: 'border-indigo-200',  bg: 'bg-indigo-50',  text: 'text-indigo-800',  badge: 'bg-indigo-200 text-indigo-800',   icon: 'text-indigo-600'  },
   }
-  const cfg = cfgMap[colorScheme]
+  const cfg = cfgMap[colorScheme] || cfgMap.blue
 
   return (
     <div className="rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm">

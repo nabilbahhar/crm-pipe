@@ -402,11 +402,11 @@ export default function ExpensesPage() {
       action_type: 'update',
       entity_type: 'expense' as any,
       entity_name: `Note ${report.month}/${report.year}`,
-      detail: EXPENSE_STATUS_CFG[newStatus].label,
+      detail: EXPENSE_STATUS_CFG[newStatus]?.label || newStatus,
     })
 
     setStatusDropdown(null)
-    showToast(`Statut mis a jour : ${EXPENSE_STATUS_CFG[newStatus].label}`)
+    showToast(`Statut mis a jour : ${EXPENSE_STATUS_CFG[newStatus]?.label || newStatus}`)
     await load()
   }
 

@@ -580,9 +580,9 @@ export default function InvoicesPage() {
                             {nextStatus && (
                               <button onClick={() => changeStatus(inv, nextStatus)}
                                 className="inline-flex h-7 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 hover:text-blue-600 transition-colors"
-                                title={`Passer a ${STATUS_CONFIG[nextStatus].label}`}>
+                                title={`Passer a ${STATUS_CONFIG[nextStatus]?.label || nextStatus}`}>
                                 <ChevronRight className="h-3 w-3" />
-                                {STATUS_CONFIG[nextStatus].label}
+                                {STATUS_CONFIG[nextStatus]?.label || nextStatus}
                               </button>
                             )}
 

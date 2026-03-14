@@ -430,8 +430,8 @@ export default function OpportunityDetailPage() {
             </div>
             <p className="mt-1 text-sm text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
               {opp.accounts?.name && (
-                <Link href={`/accounts/${opp.accounts.id}`} className="flex items-center gap-1 font-medium text-slate-700 hover:text-blue-700 hover:underline transition-colors">
-                  <Building2 className="h-3.5 w-3.5 shrink-0" /> {opp.accounts.name}
+                <Link href={`/accounts/${opp.accounts?.id}`} className="flex items-center gap-1 font-medium text-slate-700 hover:text-blue-700 hover:underline transition-colors">
+                  <Building2 className="h-3.5 w-3.5 shrink-0" /> {opp.accounts?.name}
                 </Link>
               )}
               {opp.bu && <><span className="text-slate-300">·</span><span>{opp.multi_bu && Array.isArray(opp.bu_lines) && opp.bu_lines.length > 0 ? [...new Set(opp.bu_lines.map((l: any) => l.card || l.bu).filter(Boolean))].join(' + ') : opp.bu}</span></>}

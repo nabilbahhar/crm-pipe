@@ -264,7 +264,7 @@ export default function ProfilePage() {
   if (!profile) return null
 
   const initials = profile.full_name
-    ? profile.full_name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    ? profile.full_name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2)
     : (email || '?')[0].toUpperCase()
 
   return (
