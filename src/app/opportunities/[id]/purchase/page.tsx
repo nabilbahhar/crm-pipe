@@ -1046,134 +1046,97 @@ export default function PurchasePage() {
                   <div key={i}>
                     {isOpen ? (
                       /* ═══ EDIT MODE ═══ */
-                      <div className="border-l-[3px] border-slate-800 bg-gradient-to-b from-slate-50 to-white">
-                        {/* Edit header */}
-                        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200">
-                          <div className="flex items-center gap-3">
-                            <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800 text-[11px] font-bold text-white">{i+1}</span>
-                            <span className="text-[13px] font-bold text-slate-700">Ligne {i+1}</span>
-                            {l.ref && <span className="text-[11px] font-mono text-slate-400 bg-slate-100 rounded px-2 py-0.5">{l.ref}</span>}
-                          </div>
-                          <div className="flex items-center gap-2.5">
-                            {ptVente > 0 && <span className="text-[13px] font-bold text-slate-700">{numFmt(ptVente)} MAD</span>}
-                            {l.pu_achat > 0 && ptVente > 0 && (
-                              <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
-                            )}
-                            <button onClick={() => setEditingIdx(null)}
-                              className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3.5 py-1.5 text-[11px] font-semibold text-white hover:bg-slate-700 transition shadow-sm">
-                              <CheckCircle2 className="h-3.5 w-3.5" /> OK
-                            </button>
-                          </div>
+                      <div className="border-l-[3px] border-slate-800 bg-slate-50/60">
+                        {/* Compact header */}
+                        <div className="flex items-center gap-2 px-4 py-2 border-b border-slate-200/80">
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-800 text-[10px] font-bold text-white">{i+1}</span>
+                          <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)} spellCheck={false}
+                            placeholder="Réf…" className="h-6 w-24 rounded border border-slate-200 bg-white px-2 text-[10px] font-mono text-slate-500 outline-none focus:border-slate-400" />
+                          <div className="flex-1" />
+                          {ptVente > 0 && <span className="text-[12px] font-bold text-slate-700">{numFmt(ptVente)} MAD</span>}
+                          {l.pu_achat > 0 && ptVente > 0 && (
+                            <span className={`rounded-full px-2 py-px text-[10px] font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
+                          )}
+                          <button onClick={() => setEditingIdx(null)}
+                            className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-slate-700 transition">
+                            <CheckCircle2 className="h-3 w-3" /> OK
+                          </button>
                         </div>
 
-                        {/* Edit body */}
-                        <div className="px-5 py-5 space-y-5">
-                          {/* ── Produit ── */}
-                          <div className="rounded-lg border border-slate-200 bg-white p-4">
-                            <div className="flex items-center gap-3 mb-3">
-                              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Produit</span>
-                              <div className="flex-1 h-px bg-slate-100" />
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-slate-400">Réf:</span>
-                                <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)} spellCheck={false}
-                                  placeholder="—" className="h-7 w-[130px] rounded border border-slate-200 bg-slate-50 px-2.5 text-[11px] font-mono text-slate-600 outline-none focus:border-slate-400 focus:bg-white" />
-                              </div>
-                            </div>
-                            <textarea value={l.designation} spellCheck={false}
-                              autoFocus
-                              onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
-                              onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
-                              rows={3} placeholder="Description du produit ou service…"
-                              className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-[13px] leading-[1.7] text-slate-700 outline-none resize-none overflow-hidden focus:border-slate-400 focus:ring-2 focus:ring-slate-100 placeholder:text-slate-300"
-                              style={{ minHeight: 80 }} />
-                          </div>
+                        <div className="px-4 py-3 space-y-2.5">
+                          {/* Designation */}
+                          <textarea value={l.designation} spellCheck={false} autoFocus
+                            onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                            onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
+                            rows={2} placeholder="Description…"
+                            className="w-full rounded border border-slate-200 bg-white px-3 py-2 text-[12px] leading-[1.6] text-slate-700 outline-none resize-none overflow-hidden focus:border-slate-400 placeholder:text-slate-300"
+                            style={{ minHeight: 52 }} />
 
-                          {/* ── Vente ── */}
-                          <div className="rounded-lg border border-slate-200 bg-white p-4">
-                            <div className="flex items-center gap-3 mb-3">
-                              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Vente</span>
-                              <div className="flex-1 h-px bg-slate-100" />
+                          {/* Prix — une seule ligne : Qté | PU Vente | PT Vente │ PU Achat | PT Achat | Marge */}
+                          <div className="grid grid-cols-6 gap-2">
+                            <div>
+                              <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Qté</label>
+                              <input type="number" min={1} value={Number(l.qty)||1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
+                                className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-[12px] text-right font-semibold text-slate-800 outline-none focus:border-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
-                            <div className="grid grid-cols-3 gap-4">
-                              <div>
-                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Quantité</label>
-                                <input type="number" min={1} value={Number(l.qty)||1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
-                                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-right font-semibold text-slate-800 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                              </div>
-                              <div>
-                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Prix Unitaire</label>
-                                <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
-                                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-right text-slate-700 outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                              </div>
-                              <div>
-                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Prix Total</label>
-                                <div className="flex h-10 items-center justify-end rounded-lg bg-slate-50 border border-slate-100 px-3 text-sm font-bold text-slate-800">{ptVente > 0 ? numFmt(ptVente) : '—'}</div>
-                              </div>
+                            <div>
+                              <label className="mb-0.5 block text-[10px] font-medium text-slate-400">PU Vente</label>
+                              <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
+                                className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-[12px] text-right text-slate-700 outline-none focus:border-slate-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
-                          </div>
-
-                          {/* ── Achat ── */}
-                          <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
-                            <div className="flex items-center gap-3 mb-3">
-                              <span className="text-[11px] font-bold uppercase tracking-wide text-amber-600">★ Achat</span>
-                              <div className="flex-1 h-px bg-amber-200/60" />
+                            <div>
+                              <label className="mb-0.5 block text-[10px] font-medium text-slate-400">PT Vente</label>
+                              <div className="flex h-8 items-center justify-end rounded bg-slate-100 px-2 text-[12px] font-bold text-slate-800">{ptVente > 0 ? numFmt(ptVente) : '—'}</div>
                             </div>
-                            <div className="grid grid-cols-3 gap-4">
-                              <div>
-                                <label className="mb-1.5 block text-[11px] font-semibold text-amber-600">Prix Unitaire</label>
-                                <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
-                                  className="h-10 w-full rounded-lg border border-amber-300 bg-white px-3 text-sm text-right font-bold text-slate-800 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                              </div>
-                              <div>
-                                <label className="mb-1.5 block text-[11px] font-semibold text-amber-600">Prix Total</label>
-                                <div className="flex h-10 items-center justify-end rounded-lg bg-amber-100/50 border border-amber-200 px-3 text-sm font-bold text-slate-700">{ptAchat > 0 ? numFmt(ptAchat) : '—'}</div>
-                              </div>
-                              <div>
-                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Marge</label>
-                                <div className="flex h-10 items-center justify-center rounded-lg border border-slate-100 bg-white">
-                                  {l.pu_achat > 0 && ptVente > 0 ? (
-                                    <span className={`rounded-full px-4 py-1 text-xs font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
-                                  ) : <span className="text-slate-300 text-xs">—</span>}
-                                </div>
+                            <div>
+                              <label className="mb-0.5 block text-[10px] font-medium text-amber-500">PU Achat</label>
+                              <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
+                                className="h-8 w-full rounded border border-amber-200 bg-amber-50/40 px-2 text-[12px] text-right font-semibold text-slate-800 outline-none focus:border-amber-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            </div>
+                            <div>
+                              <label className="mb-0.5 block text-[10px] font-medium text-amber-500">PT Achat</label>
+                              <div className="flex h-8 items-center justify-end rounded bg-amber-50 px-2 text-[12px] font-bold text-slate-700">{ptAchat > 0 ? numFmt(ptAchat) : '—'}</div>
+                            </div>
+                            <div>
+                              <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Marge</label>
+                              <div className="flex h-8 items-center justify-center rounded bg-white border border-slate-100">
+                                {l.pu_achat > 0 && ptVente > 0 ? (
+                                  <span className={`rounded-full px-2.5 py-px text-[10px] font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
+                                ) : <span className="text-slate-300 text-[10px]">—</span>}
                               </div>
                             </div>
                           </div>
 
-                          {/* ── Fournisseur & Détails ── */}
-                          <div className="rounded-lg border border-slate-200 bg-white p-4">
-                            <div className="flex items-center gap-3 mb-3">
-                              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Fournisseur & Détails</span>
-                              <div className="flex-1 h-px bg-slate-100" />
+                          {/* Fournisseur + dates — une seule ligne */}
+                          <div className="grid grid-cols-[1fr_auto_130px_130px] gap-2 items-end">
+                            <div>
+                              <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Fournisseur</label>
+                              <div className="flex gap-1">
+                                <select value={l.fournisseur_id||''} onChange={e => {
+                                  const fid = e.target.value || null
+                                  setLines(prev => prev.map((ln, idx) => idx !== i ? ln : { ...ln, fournisseur_id: fid, selected_contact_ids: [], contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '' }))
+                                }}
+                                  className={`h-8 flex-1 rounded border px-2 text-[11px] outline-none focus:border-slate-400 ${l.fournisseur_id?'border-slate-300 bg-white font-medium text-slate-700':'border-slate-200 bg-white text-slate-400'}`}>
+                                  <option value="">Sélectionner…</option>
+                                  {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                                </select>
+                                <button onClick={() => setShowFournModal(true)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-dashed border-slate-300 text-slate-400 hover:text-slate-600 transition"><Plus className="h-3.5 w-3.5" /></button>
+                              </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-4">
-                              <div>
-                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Fournisseur</label>
-                                <div className="flex gap-1.5">
-                                  <select value={l.fournisseur_id||''} onChange={e => {
-                                    const fid = e.target.value || null
-                                    setLines(prev => prev.map((ln, idx) => idx !== i ? ln : { ...ln, fournisseur_id: fid, selected_contact_ids: [], contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '' }))
-                                  }}
-                                    className={`h-10 flex-1 rounded-lg border px-3 text-xs outline-none focus:ring-2 focus:ring-slate-100 ${l.fournisseur_id?'border-slate-300 bg-white font-medium text-slate-700':'border-slate-200 bg-slate-50 text-slate-400'}`}>
-                                    <option value="">Sélectionner…</option>
-                                    {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
-                                  </select>
-                                  <button onClick={() => setShowFournModal(true)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-400 hover:text-slate-600 hover:border-slate-400 transition"><Plus className="h-4 w-4" /></button>
-                                </div>
-                              </div>
-                              <div>
-                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Fin garantie</label>
-                                <input type="month" value={l.warranty_expiry||''} onChange={e => updateLine(i,'warranty_expiry',e.target.value)}
-                                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100" />
-                              </div>
-                              <div>
-                                <label className="mb-1.5 block text-[11px] font-semibold text-slate-500">Fin licence</label>
-                                <input type="month" value={l.license_expiry||''} onChange={e => updateLine(i,'license_expiry',e.target.value)}
-                                  className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100" />
-                              </div>
+                            <div />
+                            <div>
+                              <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Garantie</label>
+                              <input type="month" value={l.warranty_expiry||''} onChange={e => updateLine(i,'warranty_expiry',e.target.value)}
+                                className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400" />
+                            </div>
+                            <div>
+                              <label className="mb-0.5 block text-[10px] font-medium text-slate-400">Licence</label>
+                              <input type="month" value={l.license_expiry||''} onChange={e => updateLine(i,'license_expiry',e.target.value)}
+                                className="h-8 w-full rounded border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400" />
                             </div>
                           </div>
 
-                          {/* Contacts fournisseur */}
+                          {/* Contacts fournisseur — compact */}
                           {l.fournisseur_id && (() => {
                             const contacts = supplierContacts.filter(c => c.supplier_id === l.fournisseur_id)
                             const fourn = fourns.find(f => f.id === l.fournisseur_id)
@@ -1194,45 +1157,36 @@ export default function PurchasePage() {
                               }))
                             }
                             return (
-                              <div className="rounded-lg border border-slate-200 bg-slate-50/50 p-3 space-y-2">
-                                <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                                  👤 Contacts fournisseur {selectedIds.length > 0 && <span className="rounded-full bg-slate-700 text-white px-1.5 py-px text-[9px]">{selectedIds.length}</span>}
-                                </div>
-                                {options.length >= 1 ? (
-                                  <div className="flex flex-wrap gap-2">
-                                    {options.map(opt => {
-                                      const checked = selectedIds.includes(opt.id)
-                                      return (
-                                        <label key={opt.id}
-                                          className={`flex items-center gap-1.5 rounded-lg px-3 py-2 cursor-pointer transition text-xs
-                                            ${checked ? 'bg-slate-800 text-white shadow-sm border border-slate-700' : 'bg-white border border-slate-200 hover:border-slate-300 text-slate-600'}`}>
-                                          <input type="checkbox" checked={checked} onChange={() => toggleContact(opt.id)}
-                                            className="h-3.5 w-3.5 rounded border-slate-300 accent-slate-800" />
-                                          <div className="min-w-0">
-                                            <div className={`font-semibold ${checked ? 'text-white' : 'text-slate-700'}`}>{opt.label}</div>
-                                            {(opt.email || opt.tel) && <div className={`text-[10px] truncate ${checked ? 'text-slate-300' : 'text-slate-400'}`}>{opt.email}{opt.email && opt.tel ? ' · ' : ''}{opt.tel}</div>}
-                                          </div>
-                                        </label>
-                                      )
-                                    })}
-                                  </div>
-                                ) : (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-[10px] font-medium text-slate-400 mr-1">Contacts:</span>
+                                {options.length >= 1 ? options.map(opt => {
+                                  const checked = selectedIds.includes(opt.id)
+                                  return (
+                                    <label key={opt.id}
+                                      className={`flex items-center gap-1 rounded-md px-2 py-1 cursor-pointer transition text-[11px]
+                                        ${checked ? 'bg-slate-800 text-white border border-slate-700' : 'bg-white border border-slate-200 hover:border-slate-300 text-slate-600'}`}>
+                                      <input type="checkbox" checked={checked} onChange={() => toggleContact(opt.id)}
+                                        className="h-3 w-3 rounded border-slate-300 accent-slate-800" />
+                                      <span className={`font-medium ${checked ? 'text-white' : 'text-slate-600'}`}>{opt.label}</span>
+                                    </label>
+                                  )
+                                }) : (
                                   <input value={l.contact_fournisseur||''} onChange={e => updateLine(i,'contact_fournisseur',e.target.value)}
-                                    placeholder="Nom du contact…" className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs outline-none focus:border-slate-400" />
+                                    placeholder="Nom du contact…" className="h-7 flex-1 rounded border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400" />
                                 )}
                               </div>
                             )
                           })()}
 
-                          {/* Footer actions */}
-                          <div className="flex items-center justify-between pt-2">
+                          {/* Footer — compact */}
+                          <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                             <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
-                              className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-[11px] font-medium text-red-400 hover:text-red-600 hover:bg-red-50 transition">
-                              <Trash2 className="h-3.5 w-3.5" /> Supprimer cette ligne
+                              className="flex items-center gap-1 text-[10px] font-medium text-red-400 hover:text-red-600 transition">
+                              <Trash2 className="h-3 w-3" /> Supprimer
                             </button>
                             <button onClick={() => setEditingIdx(null)}
-                              className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-5 py-2 text-[11px] font-semibold text-white hover:bg-slate-700 transition shadow-sm">
-                              <CheckCircle2 className="h-3.5 w-3.5" /> Terminé
+                              className="flex items-center gap-1 rounded-md bg-slate-800 px-3 py-1 text-[10px] font-semibold text-white hover:bg-slate-700 transition">
+                              <CheckCircle2 className="h-3 w-3" /> Terminé
                             </button>
                           </div>
                         </div>
