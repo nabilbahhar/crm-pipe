@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
@@ -309,7 +309,7 @@ export default function Dashboard() {
     return [`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`]
   },[view,year,quarter,month])
 
-  const loadingRef = { current: false }
+  const loadingRef = useRef(false)
   const load = async () => {
     if (loadingRef.current) return
     loadingRef.current = true
@@ -331,8 +331,8 @@ export default function Dashboard() {
       // Load invoices and deal registrations (may not exist yet)
       try {
         const [{ data: inv, error: invErr }, { data: drs, error: drErr }] = await Promise.all([
-          supabase.from('invoices').select('*'),
-          supabase.from('deal_registrations').select('*'),
+          supabase.from('invoices').select('*').limit(5000),
+          supabase.from('deal_registrations').select('*').limit(5000),
         ])
         if (invErr) console.warn('invoices load error:', invErr.message)
         if (drErr) console.warn('deal_registrations load error:', drErr.message)

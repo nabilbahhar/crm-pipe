@@ -173,7 +173,7 @@ export default function AccountsPage() {
     try {
       const [{ data: acc, error: e1 }, { data: opps }, { data: ctcs }] = await Promise.all([
         supabase.from('accounts').select('id,name,sector,segment,region,created_at').order('name'),
-        supabase.from('opportunities').select('account_id,status,amount,booking_month,created_at,bu'),
+        supabase.from('opportunities').select('account_id,status,amount,booking_month,created_at,bu').limit(5000),
         supabase.from('account_contacts').select('id,account_id,full_name,email,phone,role,is_primary').eq('is_primary', true),
       ])
       if (e1) throw e1
