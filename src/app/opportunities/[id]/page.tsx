@@ -87,8 +87,14 @@ function ownerTitle(email: string | null | undefined): string {
   return JOB_TITLES[email] || ''
 }
 
-// ─── Build plain-text email body for mailto ──────────────────
-function buildEmailText(deal: Opp, info: PurchaseInfo, senderEmail?: string | null): string {
+// HTML escape helper
+function esc(s: string | null | undefined): string {
+  if (!s) return ''
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+}
+
+// ─── Build HTML email for clipboard ──────────────────────────
+function buildEmailHtml(deal: Opp, info: PurchaseInfo, senderEmail?: string | null): string {
   const client     = deal.accounts?.name || deal.title
   const totalVente = info.purchase_lines.reduce((s,l) => s + (l.pt_vente || l.qty*l.pu_vente), 0)
   const totalAchat = info.purchase_lines.reduce((s,l) => s + l.qty*l.pu_achat, 0)
@@ -99,95 +105,141 @@ function buildEmailText(deal: Opp, info: PurchaseInfo, senderEmail?: string | nu
   const today      = new Date().toLocaleDateString('fr-MA', { day:'2-digit', month:'long', year:'numeric' })
   const sender     = senderEmail ? ownerName(senderEmail) : 'Compucom'
   const senderTitle = senderEmail ? ownerTitle(senderEmail) : ''
-
-  // Group lines by supplier
-  const supGroups = new Map<string, PurchaseLine[]>()
+  const COLORS     = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4']
+  const supGroups  = new Map<string, PurchaseLine[]>()
   info.purchase_lines.forEach(l => {
     const k = l.fournisseur || 'Non spécifié'
     if (!supGroups.has(k)) supGroups.set(k, [])
     supGroups.get(k)!.push(l)
   })
-
-  let body = `Bonjour,\n\nMerci de bien vouloir procéder à la commande suivante :\n\n`
-  body += `═══════════════════════════════════════\n`
-  body += `  FICHE DE COMMANDE — ${client.toUpperCase()}\n`
-  body += `  Date : ${today}\n`
-  if (deal.po_number) body += `  PO : ${deal.po_number}\n`
-  body += `═══════════════════════════════════════\n\n`
-
-  // Résumé financier
-  body += `RÉSUMÉ FINANCIER\n`
-  body += `─────────────────────────────────────\n`
-  body += `  Total vente :  ${mad(totalVente)}\n`
-  body += `  Total achat :  ${mad(totalAchat)}\n`
-  body += `  Marge brute :  ${mad(margeBrute)} (${margeBrutePct.toFixed(1)}%)\n`
-  if (info.frais_engagement) body += `  Frais engagement : ${mad(info.frais_engagement)}\n`
-  body += `  Marge nette :  ${mad(margeNette)} (${margeNettePct.toFixed(1)}%)\n`
-  body += `─────────────────────────────────────\n\n`
-
-  // Modalités de paiement
-  if (info.payment_terms) {
-    body += `MODALITÉS DE PAIEMENT\n`
-    body += `─────────────────────────────────────\n`
-    body += `  ${paymentTermLabel(info.payment_terms)}\n`
-    body += `─────────────────────────────────────\n\n`
-  }
-
-  // Lignes par fournisseur
-  body += `DÉTAIL DES LIGNES\n`
-  body += `═══════════════════════════════════════\n\n`
-
-  for (const [name, lines] of supGroups) {
-    const subT = lines.reduce((s,l) => s + l.qty*l.pu_achat, 0)
-    body += `▶ ${name.toUpperCase()} — Sous-total : ${mad(subT)}\n`
-
-    // Contact info
-    const contacts = [...new Set(lines.map(l => l.contact_fournisseur).filter(Boolean))]
-    const emails   = [...new Set(lines.map(l => l.email_fournisseur).filter(Boolean))]
-    const tels     = [...new Set(lines.map(l => l.tel_fournisseur).filter(Boolean))]
-    if (contacts.length) body += `  Contact : ${contacts.join(', ')}\n`
-    if (emails.length)   body += `  Email : ${emails.join(', ')}\n`
-    if (tels.length)     body += `  Tél : ${tels.join(', ')}\n`
-    body += `\n`
-
-    lines.forEach((l, i) => {
-      body += `  ${i+1}. ${l.designation || l.ref || 'Ligne'}\n`
-      if (l.ref) body += `     Réf : ${l.ref}\n`
-      body += `     Qté : ${l.qty}  |  PU achat : ${mad(l.pu_achat)}  |  Total : ${mad(l.qty * l.pu_achat)}\n`
-      body += `     PU vente : ${mad(l.pu_vente)}  |  Total vente : ${mad(l.pt_vente || l.qty * l.pu_vente)}\n`
-      if (l.warranty_months) body += `     Garantie : ${l.warranty_months} mois${l.warranty_expiry ? ` (exp. ${l.warranty_expiry})` : ''}\n`
-      if (l.license_months)  body += `     Licence : ${l.license_months} mois${l.license_expiry ? ` (exp. ${l.license_expiry})` : ''}\n`
+  let si = 0
+  const blocks = Array.from(supGroups.entries()).map(([name, lines]) => {
+    const col   = COLORS[si++ % COLORS.length]
+    const subT  = lines.reduce((s,l) => s + l.qty*l.pu_achat, 0)
+    const contactGroups = new Map<string, PurchaseLine[]>()
+    lines.forEach(l => {
+      const ck = l.contact_fournisseur || ''
+      if (!contactGroups.has(ck)) contactGroups.set(ck, [])
+      contactGroups.get(ck)!.push(l)
     })
-    body += `\n`
-  }
-
-  // Validation warning (marge brute < 10%)
-  if (margeBrutePct < 10 && totalAchat > 0) {
-    body += `⚠ VALIDATION REQUISE — MARGE BRUTE < 10%\n`
-    body += `─────────────────────────────────────\n`
-    body += `  @Achraf Lahkim — Merci de valider cette commande.\n`
-    body += `  Marge brute : ${mad(margeBrute)} (${margeBrutePct.toFixed(1)}%)\n`
-    if (info.justif_reason) body += `  Raison : ${info.justif_reason}\n`
-    if (info.justif_text) body += `  Détail : ${info.justif_text}\n`
-    body += `─────────────────────────────────────\n\n`
-  }
-
-  // Notes
-  if (info.notes) {
-    body += `NOTES INTERNES\n`
-    body += `─────────────────────────────────────\n`
-    body += `${info.notes}\n\n`
-  }
-
-  body += `═══════════════════════════════════════\n`
-  body += `Merci de confirmer la réception et d'indiquer le délai estimé.\n\n`
-  body += `Cordialement,\n${sender}${senderTitle ? `\n${senderTitle}` : ''}\nCompucom Maroc\n`
-
-  return body
+    const contactBadges = Array.from(contactGroups.entries())
+      .filter(([c]) => c)
+      .map(([c, cls]) => {
+        const first = cls[0]
+        return `<span style="display:inline-block;background:rgba(255,255,255,.15);border-radius:4px;padding:2px 8px;font-size:11px;color:#fff;margin-right:4px">
+          ${esc(c)}${first.email_fournisseur ? ` · ${esc(first.email_fournisseur)}` : ''}${first.tel_fournisseur ? ` · ${esc(first.tel_fournisseur)}` : ''}</span>`
+      }).join('')
+    const rows  = lines.map((l,i) => `
+      <tr style="background:${i%2?'#f8fafc':'#fff'}">
+        <td style="padding:10px 16px;font-size:13px;color:#374151;border-bottom:1px solid #f1f5f9">
+          ${l.ref?`<span style="color:#94a3b8;font-size:11px;margin-right:6px">[${esc(l.ref)}]</span>`:''}${esc(l.designation)}
+        </td>
+        <td style="padding:10px 16px;font-size:13px;text-align:center;font-weight:600;border-bottom:1px solid #f1f5f9">${l.qty}</td>
+        <td style="padding:10px 16px;font-size:13px;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(l.pu_achat)}</td>
+        <td style="padding:10px 16px;font-size:13px;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(l.qty*l.pu_achat)}</td>
+      </tr>`).join('')
+    return `<div style="margin-bottom:16px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0">
+      <div style="background:${col};padding:14px 20px">
+        <table width="100%"><tr>
+          <td>
+            <div style="color:#fff;font-size:15px;font-weight:800;margin-bottom:4px">${esc(name)}</div>
+            <div style="margin-top:4px">${contactBadges || '<span style="color:rgba(255,255,255,.5);font-size:11px">Aucun contact</span>'}</div>
+          </td>
+          <td align="right" style="vertical-align:top"><span style="background:rgba(255,255,255,.2);border-radius:8px;padding:5px 14px;color:#fff;font-size:13px;font-weight:800">${mad(subT)}</span></td>
+        </tr></table>
+      </div>
+      <table width="100%" style="border-collapse:collapse">
+        <thead><tr style="background:#f8fafc">
+          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:left;border-bottom:2px solid #e2e8f0">Désignation</th>
+          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:center;border-bottom:2px solid #e2e8f0">Qté</th>
+          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:right;border-bottom:2px solid #e2e8f0">PU Achat</th>
+          <th style="padding:8px 16px;font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;text-align:right;border-bottom:2px solid #e2e8f0">Total HT</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`
+  }).join('')
+  const mcB = margeBrutePct >= 20 ? '#16a34a' : margeBrutePct >= 10 ? '#d97706' : '#dc2626'
+  const mcN = margeNettePct >= 20 ? '#16a34a' : margeNettePct >= 10 ? '#d97706' : '#dc2626'
+  return `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:24px 16px"><tr><td align="center">
+<table width="660" style="max-width:660px;width:100%">
+  <tr><td style="background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 60%,#0f172a 100%);border-radius:16px 16px 0 0;padding:28px 32px">
+    <table width="100%"><tr>
+      <td>
+        <div style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">Commande · ${today}</div>
+        <div style="color:#fff;font-size:22px;font-weight:900;line-height:1.2">${esc(deal.title)}</div>
+        <div style="color:#cbd5e1;font-size:13px;margin-top:8px;line-height:1.5">${esc(client)}${deal.po_number?` · PO <strong style="color:#e2e8f0">${esc(deal.po_number)}</strong>`:''}</div>
+      </td>
+      <td align="right" style="vertical-align:top">
+        <div style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);border-radius:12px;padding:12px 16px;text-align:center">
+          <div style="color:#94a3b8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Total Achat</div>
+          <div style="color:#fff;font-size:18px;font-weight:900;font-family:monospace">${mad(totalAchat)}</div>
+        </div>
+      </td>
+    </tr></table>
+  </td></tr>
+  <tr><td style="background:#fff;padding:28px 32px">
+    <p style="margin:0 0 24px;color:#475569;font-size:14px;line-height:1.7">Bonjour,<br><br>Merci de traiter la commande ci-dessous pour le client <strong>${esc(client)}</strong>.<br>Merci de confirmer la prise en charge et le délai prévisionnel.</p>
+    ${blocks}
+    <div style="border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-top:8px">
+      <div style="background:#f8fafc;padding:12px 20px;border-bottom:1px solid #e2e8f0">
+        <span style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:1px">Récapitulatif financier</span>
+      </div>
+      <table width="100%" style="border-collapse:collapse">
+        <tr><td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9">Total vente HT</td>
+          <td style="padding:12px 20px;font-size:14px;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(totalVente)}</td></tr>
+        <tr style="background:#fafafa"><td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9">Total achat HT</td>
+          <td style="padding:12px 20px;font-size:14px;font-weight:700;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">${mad(totalAchat)}</td></tr>
+        ${info.frais_engagement>0?`<tr><td style="padding:12px 20px;font-size:13px;color:#64748b;border-bottom:1px solid #f1f5f9">Frais engagement</td>
+          <td style="padding:12px 20px;font-size:14px;font-weight:700;color:#d97706;text-align:right;font-family:monospace;border-bottom:1px solid #f1f5f9">− ${mad(info.frais_engagement)}</td></tr>`:''}
+        <tr style="background:#f0fdf4"><td style="padding:12px 20px;font-size:13px;font-weight:700;color:#166534">Marge brute</td>
+          <td style="padding:12px 20px;text-align:right">
+            <span style="font-size:15px;font-weight:800;color:${mcB};font-family:monospace">${mad(margeBrute)}</span>
+            <span style="margin-left:6px;background:${mcB};color:#fff;border-radius:4px;padding:2px 7px;font-size:11px;font-weight:700">${pct(margeBrutePct)}</span>
+          </td></tr>
+        ${info.frais_engagement > 0 ? `<tr style="background:#ecfdf5"><td style="padding:14px 20px;font-size:14px;font-weight:800;color:#065f46">Marge nette</td>
+          <td style="padding:14px 20px;text-align:right">
+            <span style="font-size:17px;font-weight:900;color:${mcN};font-family:monospace">${mad(margeNette)}</span>
+            <span style="margin-left:6px;background:${mcN};color:#fff;border-radius:4px;padding:3px 8px;font-size:11px;font-weight:700">${pct(margeNettePct)}</span>
+          </td></tr>` : ''}
+      </table>
+    </div>
+    ${info.payment_terms ? `<div style="margin-top:14px;border-radius:10px;border:1px solid #dbeafe;background:#eff6ff;padding:14px 20px">
+      <div style="font-size:10px;font-weight:700;color:#3b82f6;text-transform:uppercase;margin-bottom:4px">Modalités de paiement</div>
+      <div style="font-size:13px;color:#1e40af;font-weight:600">${esc(paymentTermLabel(info.payment_terms))}</div>
+    </div>` : ''}
+    ${margeBrutePct < 10 && totalAchat > 0 ? `<div style="margin-top:14px;border-radius:10px;border:2px solid #fbbf24;background:#fffbeb;padding:16px 20px">
+      <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px">⚠️ Validation requise — Marge brute &lt; 10%</div>
+      <div style="font-size:13px;color:#78350f;line-height:1.6">
+        <strong>@Achraf Lahkim</strong> — Merci de valider cette commande (marge brute : <strong style="color:${mcB}">${pct(margeBrutePct)}</strong>).
+        ${info.justif_reason ? `<br>Raison : <em>${esc(info.justif_reason)}</em>` : ''}
+        ${info.justif_text ? `<br>Détail : ${esc(info.justif_text)}` : ''}
+      </div>
+    </div>` : ''}
+    ${info.notes?`<div style="margin-top:14px;border-radius:10px;border:1px solid #fde68a;background:#fffbeb;padding:14px 20px">
+      <div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:4px">Notes</div>
+      <div style="font-size:13px;color:#78350f;line-height:1.5">${esc(info.notes)}</div>
+    </div>`:''}
+  </td></tr>
+  <tr><td style="background:linear-gradient(135deg,#f8fafc,#f1f5f9);border-top:1px solid #e2e8f0;border-radius:0 0 16px 16px;padding:20px 32px">
+    <table width="100%"><tr>
+      <td style="font-size:12px;color:#94a3b8;line-height:1.5">Merci de <strong style="color:#64748b">confirmer la réception</strong><br>et d'indiquer le délai estimé.</td>
+      <td align="right">
+        <div style="display:inline-block;background:#0f172a;border-radius:10px;padding:10px 18px;text-align:center">
+          <div style="color:#94a3b8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px">Compucom Maroc</div>
+          <div style="color:#fff;font-size:13px;font-weight:800;margin-top:2px">${esc(sender)}</div>
+          ${senderTitle ? `<div style="color:#94a3b8;font-size:10px;margin-top:1px">${esc(senderTitle)}</div>` : ''}
+        </div>
+      </td>
+    </tr></table>
+  </td></tr>
+</table></td></tr></table></body></html>`
 }
 
-// ─── Open supply chain email directly ─────────────────────────
-function openSupplyEmail(deal: Opp, info: PurchaseInfo, senderEmail?: string | null) {
+// ─── 1-clic : copie HTML + ouvre Outlook ─────────────────────
+async function openSupplyEmail(deal: Opp, info: PurchaseInfo, senderEmail?: string | null) {
   const client  = deal.accounts?.name || deal.title
   const today   = new Date().toLocaleDateString('fr-MA', { day:'2-digit', month:'2-digit', year:'numeric' })
   const subject = `Commande ${client}${deal.po_number ? ` – PO ${deal.po_number}` : ''} – ${mad(deal.amount)} – ${today}`
@@ -199,8 +251,18 @@ function openSupplyEmail(deal: Opp, info: PurchaseInfo, senderEmail?: string | n
   const ccList = margeFaible
     ? 'n.bahhar@compucom.ma,A.lahkim@compucom.ma'
     : 'n.bahhar@compucom.ma'
-  const body = buildEmailText(deal, info, senderEmail)
-  const mailto = `mailto:supplychain@compucom.ma?cc=${encodeURIComponent(ccList)}&subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+  const html = buildEmailHtml(deal, info, senderEmail)
+
+  // 1) Copier le HTML formaté dans le presse-papier
+  try {
+    const blob = new Blob([html], { type: 'text/html' })
+    await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob, 'text/plain': new Blob([html], { type: 'text/plain' }) })])
+  } catch {
+    await navigator.clipboard.writeText(html).catch(() => {})
+  }
+
+  // 2) Ouvrir Outlook avec To/CC/Objet pré-remplis (corps vide — on colle avec Ctrl+V)
+  const mailto = `mailto:supplychain@compucom.ma?cc=${encodeURIComponent(ccList)}&subject=${encodeURIComponent(subject)}`
   window.location.href = mailto
 }
 
@@ -219,6 +281,7 @@ export default function OpportunityDetailPage() {
   const [drs, setDrs]             = useState<DealRegistration[]>([])
   const [loading, setLoading]     = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [emailCopied, setEmailCopied] = useState(false)
 
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null)) }, [])
   useEffect(() => { if (id) loadAll() }, [id])
@@ -762,11 +825,22 @@ export default function OpportunityDetailPage() {
                         {margePctBrute < 10 && totalAchat > 0 && <>, A.lahkim@compucom.ma <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-700">⚠ Achraf</span></>}
                       </div>
                     </div>
-                    <button onClick={() => { if (opp && info) openSupplyEmail(opp, info, userEmail) }} disabled={!canEmail}
-                      className={`shrink-0 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors shadow-sm ${canEmail ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
-                      <Mail className="h-4 w-4" /> Commander via Outlook
+                    <button onClick={async () => {
+                        if (opp && info) {
+                          await openSupplyEmail(opp, info, userEmail)
+                          setEmailCopied(true)
+                          setTimeout(() => setEmailCopied(false), 8000)
+                        }
+                      }} disabled={!canEmail}
+                      className={`shrink-0 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors shadow-sm ${emailCopied ? 'bg-emerald-600 text-white' : canEmail ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                      {emailCopied ? <><Check className="h-4 w-4" /> Copié ! Ctrl+V dans Outlook</> : <><Mail className="h-4 w-4" /> Commander via Outlook</>}
                     </button>
                   </div>
+                  {emailCopied && (
+                    <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 font-medium">
+                      ✅ Email copié dans le presse-papier — <strong>Collez (Ctrl+V)</strong> dans le corps du mail Outlook puis Envoyer
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
