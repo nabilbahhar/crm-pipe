@@ -214,10 +214,15 @@ export default function PurchasePage() {
       setSupplierContacts(contactsRes.data as SupplierContact[])
     }
 
-    // Existing purchase info
-    const { data: info } = await supabase
-      .from('purchase_info').select('*, purchase_lines(*)')
-      .eq('opportunity_id', id).maybeSingle()
+    // Existing purchase info — via server route (service role → bypasses RLS)
+    let info: any = null
+    try {
+      const infoRes = await authFetch(`/api/purchase-save?opportunity_id=${id}`)
+      if (infoRes.ok) {
+        const { info: d } = await infoRes.json()
+        info = d
+      }
+    } catch { /* silent */ }
 
     // Existing files — via server route (service role → bypasses RLS)
     try {
@@ -547,15 +552,17 @@ export default function PurchasePage() {
       if (!res.ok) { setErr('Erreur téléchargement'); return }
       const { urls } = await res.json()
       const signedUrl = urls[filePath]
-      if (signedUrl) {
-        const a = document.createElement('a')
-        a.href = signedUrl
-        a.download = fileName
-        a.target = '_blank'
-        a.click()
-      } else {
-        setErr('URL de téléchargement introuvable')
-      }
+      if (!signedUrl) { setErr('URL de téléchargement introuvable'); return }
+      // Fetch blob then force local download (cross-origin URLs ignore a.download)
+      const blob = await fetch(signedUrl).then(r => r.blob())
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
     } catch (e: any) {
       setErr(`Erreur téléchargement : ${e?.message}`)
     }

@@ -15,6 +15,29 @@ const KNOWN_LINE_COLS = new Set([
   'fournisseur_id', 'selected_contact_ids',
 ])
 
+// GET: Load purchase_info + purchase_lines via service role (bypasses RLS)
+export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (auth instanceof NextResponse) return auth
+
+  try {
+    const oppId = req.nextUrl.searchParams.get('opportunity_id')
+    if (!oppId) return NextResponse.json({ error: 'opportunity_id requis' }, { status: 400 })
+
+    const { data, error } = await supabaseServer
+      .from('purchase_info')
+      .select('*, purchase_lines(*)')
+      .eq('opportunity_id', oppId)
+      .maybeSingle()
+    if (error) throw error
+
+    return NextResponse.json({ info: data })
+  } catch (e: any) {
+    console.error('[purchase-save GET]', e)
+    return NextResponse.json({ error: e?.message || 'Erreur lecture' }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
   if (auth instanceof NextResponse) return auth

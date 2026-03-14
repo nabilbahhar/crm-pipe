@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
+import { authFetch } from '@/lib/authFetch'
 import { getSignedUrls } from '@/lib/getSignedUrls'
 import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName, paymentTermLabel } from '@/lib/utils'
 
@@ -366,13 +367,11 @@ export default function OpportunityDetailPage() {
 
   async function loadAll() {
     setLoading(true)
-    const [oppRes, infoRes, filesRes, supplyRes, actRes] = await Promise.all([
+    const [oppRes, infoApiRes, filesRes, supplyRes, actRes] = await Promise.all([
       supabase.from('opportunities')
         .select('*, accounts(id,name,sector,segment,region)')
         .eq('id', id).single(),
-      supabase.from('purchase_info')
-        .select('*, purchase_lines(*)')
-        .eq('opportunity_id', id).maybeSingle(),
+      authFetch(`/api/purchase-save?opportunity_id=${id}`).then(r => r.ok ? r.json() : { info: null }).catch(() => ({ info: null })),
       supabase.from('deal_files')
         .select('id,file_type,file_name,file_url')
         .eq('opportunity_id', id),
@@ -387,9 +386,9 @@ export default function OpportunityDetailPage() {
 
     if (oppRes.data) setOpp({ ...oppRes.data, accounts: oppRes.data.accounts as any })
 
-    if (infoRes.data) setInfo({
-      ...infoRes.data,
-      purchase_lines: (infoRes.data.purchase_lines || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
+    if (infoApiRes.info) setInfo({
+      ...infoApiRes.info,
+      purchase_lines: (infoApiRes.info.purchase_lines || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
     })
 
     const f = filesRes.data || []
