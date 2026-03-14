@@ -1029,13 +1029,13 @@ export default function PurchasePage() {
           {viewMode === 'devis' && (<>
           <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
             {/* Devis header */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-5 flex items-center justify-between">
+            <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-3.5 flex items-center justify-between">
               <div>
-                <h3 className="text-white font-bold text-base tracking-tight">Fiche Achat</h3>
-                <p className="text-slate-400 text-xs mt-0.5">{deal?.accounts?.name} · {deal?.title}</p>
+                <h3 className="text-white font-semibold text-sm tracking-tight">Fiche Achat</h3>
+                <p className="text-slate-400 text-[11px] mt-0.5">{deal?.accounts?.name} · {deal?.title}</p>
               </div>
               <div className="text-right">
-                <span className="text-white text-xl font-black tracking-tight">{mad(dealAmount)}</span>
+                <span className="text-white text-lg font-bold tracking-tight">{mad(dealAmount)}</span>
                 <p className="text-slate-500 text-[10px] mt-0.5">{lines.filter(l=>l.designation.trim()).length} article{lines.filter(l=>l.designation.trim()).length>1?'s':''}</p>
               </div>
             </div>
@@ -1056,30 +1056,30 @@ export default function PurchasePage() {
                   <div key={i}>
                     {isOpen ? (
                       /* ═══ EDIT MODE ═══ */
-                      <div className="border-l-[3px] border-indigo-400 bg-white">
+                      <div className="border-l-[3px] border-slate-400 bg-white">
                         {/* Compact header */}
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border-b border-slate-100">
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-indigo-500 text-[10px] font-bold text-white">{i+1}</span>
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-slate-700 text-[10px] font-bold text-white">{i+1}</span>
                           <input value={l.ref} onChange={e => updateLine(i,'ref',e.target.value)} spellCheck={false}
-                            placeholder="Réf…" className="h-6 w-20 rounded border-0 border-b-2 border-b-indigo-200 bg-transparent px-1 text-[10px] font-mono text-slate-500 outline-none focus:border-b-indigo-400" />
+                            placeholder="Réf…" className="h-6 w-20 rounded border-0 border-b border-b-slate-300 bg-transparent px-1 text-[10px] font-mono text-slate-500 outline-none focus:border-b-slate-500" />
                           <div className="flex-1" />
-                          {ptVente > 0 && <span className="text-[12px] font-bold text-slate-700">{numFmt(ptVente)} MAD</span>}
+                          {ptVente > 0 && <span className="text-[12px] font-semibold text-slate-600">{numFmt(ptVente)} MAD</span>}
                           {l.pu_achat > 0 && ptVente > 0 && (
-                            <span className={`rounded-full px-2 py-px text-[10px] font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
+                            <span className={`rounded-full px-2 py-px text-[10px] font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-slate-100 text-slate-600':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
                           )}
                           <button onClick={() => setEditingIdx(null)}
-                            className="flex items-center gap-1 rounded-md bg-indigo-500 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-indigo-600 transition">
+                            className="flex items-center gap-1 rounded-md bg-slate-700 px-2.5 py-1 text-[10px] font-semibold text-white hover:bg-slate-800 transition">
                             <CheckCircle2 className="h-3 w-3" /> OK
                           </button>
                         </div>
 
                         <div className="px-3 py-2 space-y-2">
-                          {/* Designation — input clairement identifiable */}
+                          {/* Designation */}
                           <textarea value={l.designation} spellCheck={false} autoFocus
                             onChange={e => { updateLine(i,'designation',e.target.value); e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
                             onFocus={e => { e.target.style.height='auto'; e.target.style.height=e.target.scrollHeight+'px' }}
                             rows={2} placeholder="Description du produit…"
-                            className="w-full rounded-md border-0 border-b-2 border-b-indigo-200 bg-indigo-50/30 px-3 py-2 text-[12px] leading-[1.6] text-slate-700 outline-none resize-none overflow-hidden focus:border-b-indigo-400 focus:bg-indigo-50/50 placeholder:text-slate-300"
+                            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-[12px] leading-[1.6] text-slate-700 outline-none resize-none overflow-hidden focus:border-slate-400 focus:ring-1 focus:ring-slate-200 placeholder:text-slate-300"
                             style={{ minHeight: 48 }} />
 
                           {/* Prix — une seule ligne */}
@@ -1087,43 +1087,48 @@ export default function PurchasePage() {
                             <div>
                               <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Qté</label>
                               <input type="number" min={1} value={Number(l.qty)||1} onChange={e => updateLine(i,'qty',Number(e.target.value)||1)}
-                                className="h-7 w-full rounded-md border-0 border-b-2 border-b-indigo-200 bg-indigo-50/30 px-2 text-[12px] text-right font-bold text-slate-800 outline-none focus:border-b-indigo-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-[12px] text-right font-bold text-slate-800 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
                             <div>
                               <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">PU Vente</label>
                               <input type="number" min={0} value={l.pu_vente||''} onChange={e => updateLine(i,'pu_vente',Number(e.target.value))}
-                                className="h-7 w-full rounded-md border-0 border-b-2 border-b-indigo-200 bg-indigo-50/30 px-2 text-[12px] text-right text-slate-700 outline-none focus:border-b-indigo-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-[12px] text-right text-slate-700 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
                             <div>
                               <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">PT Vente</label>
-                              <div className="flex h-7 items-center justify-end rounded-md bg-slate-100 px-2 text-[12px] font-bold text-slate-800">{ptVente > 0 ? numFmt(ptVente) : '—'}</div>
+                              <div className="flex h-7 items-center justify-end rounded-md bg-slate-50 px-2 text-[12px] font-bold text-slate-700">{ptVente > 0 ? numFmt(ptVente) : '—'}</div>
                             </div>
                             <div>
-                              <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-amber-500">PU Achat</label>
+                              <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-500">PU Achat</label>
                               <input type="number" min={0} value={l.pu_achat||''} onChange={e => updateLine(i,'pu_achat',Number(e.target.value))}
-                                className="h-7 w-full rounded-md border-0 border-b-2 border-b-amber-300 bg-amber-50/40 px-2 text-[12px] text-right font-bold text-slate-800 outline-none focus:border-b-amber-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                className="h-7 w-full rounded-md border border-slate-300 bg-slate-50 px-2 text-[12px] text-right font-bold text-slate-800 outline-none focus:border-slate-400 focus:ring-1 focus:ring-slate-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
                             </div>
                             <div>
-                              <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-amber-500">PT Achat</label>
-                              <div className="flex h-7 items-center justify-end rounded-md bg-amber-50 px-2 text-[12px] font-bold text-slate-700">{ptAchat > 0 ? numFmt(ptAchat) : '—'}</div>
+                              <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-500">PT Achat</label>
+                              <div className="flex h-7 items-center justify-end rounded-md bg-slate-50 px-2 text-[12px] font-bold text-slate-600">{ptAchat > 0 ? numFmt(ptAchat) : '—'}</div>
                             </div>
                             <div>
                               <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Marge</label>
                               <div className="flex h-7 items-center justify-center rounded-md bg-slate-50">
                                 {l.pu_achat > 0 && ptVente > 0 ? (
-                                  <span className={`rounded-full px-2 py-px text-[10px] font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-amber-100 text-amber-700':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
+                                  <span className={`rounded-full px-2 py-px text-[10px] font-bold ${margePc>=20?'bg-emerald-100 text-emerald-700':margePc>=10?'bg-slate-200 text-slate-600':'bg-red-100 text-red-700'}`}>{pct(margePc)}</span>
                                 ) : <span className="text-slate-300 text-[10px]">—</span>}
                               </div>
                             </div>
                           </div>
 
-                          {/* Fournisseur + Contact + dates — une seule ligne */}
+                          {/* Fournisseur + Contact + dates */}
                           {(() => {
-                            const contacts = l.fournisseur_id ? supplierContacts.filter(c => c.supplier_id === l.fournisseur_id) : []
+                            const scContacts = l.fournisseur_id ? supplierContacts.filter(c => c.supplier_id === l.fournisseur_id) : []
                             const fourn = l.fournisseur_id ? fourns.find(f => f.id === l.fournisseur_id) : null
                             const contactOptions: { id: string; label: string; contact: string; email: string; tel: string }[] = []
-                            if (fourn?.contact) contactOptions.push({ id: `main_${fourn.id}`, label: `${fourn.contact} (principal)`, contact: fourn.contact, email: fourn.email || '', tel: fourn.tel || '' })
-                            contacts.forEach(c => contactOptions.push({ id: c.id, label: `${c.contact_name}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
+                            /* Contacts individuels depuis supplier_contacts */
+                            scContacts.forEach(c => contactOptions.push({ id: c.id, label: `${c.contact_name}${c.role ? ` (${c.role})` : ''}${c.brands ? ` · ${c.brands}` : ''}`, contact: c.contact_name, email: c.email || '', tel: c.tel || '' }))
+                            /* Fallback: split fourn.contact par virgule si pas de supplier_contacts */
+                            if (contactOptions.length === 0 && fourn?.contact) {
+                              const names = fourn.contact.split(',').map(n => n.trim()).filter(Boolean)
+                              names.forEach((name, ci) => contactOptions.push({ id: `main_${fourn.id}_${ci}`, label: name, contact: name, email: ci === 0 ? (fourn.email || '') : '', tel: ci === 0 ? (fourn.tel || '') : '' }))
+                            }
                             const selectedIds = l.selected_contact_ids || []
                             const toggleContact = (optId: string) => {
                               setLines(prev => prev.map((ln, idx) => {
@@ -1139,7 +1144,8 @@ export default function PurchasePage() {
                             }
                             return (
                               <>
-                                <div className={`grid ${l.fournisseur_id && contactOptions.length > 0 ? 'grid-cols-[1fr_auto_1fr_110px_110px]' : 'grid-cols-[1fr_auto_110px_110px]'} gap-1.5 items-end`}>
+                                {/* Row: Fournisseur + Dates */}
+                                <div className="grid grid-cols-[1fr_auto_110px_110px] gap-1.5 items-end">
                                   <div>
                                     <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Fournisseur</label>
                                     <div className="flex gap-1">
@@ -1147,36 +1153,18 @@ export default function PurchasePage() {
                                         const fid = e.target.value || null
                                         setLines(prev => prev.map((ln, idx) => idx !== i ? ln : { ...ln, fournisseur_id: fid, selected_contact_ids: [], contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '' }))
                                       }}
-                                        className="h-7 flex-1 rounded-md border-0 border-b-2 border-b-indigo-200 bg-indigo-50/30 px-2 text-[11px] outline-none focus:border-b-indigo-400 font-medium text-slate-700">
+                                        className="h-7 flex-1 rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400 font-medium text-slate-700">
                                         <option value="">Choisir…</option>
                                         {fourns.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
                                       </select>
-                                      <button onClick={() => setShowFournModal(true)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-slate-300 text-slate-400 hover:text-indigo-500 hover:border-indigo-300 transition"><Plus className="h-3 w-3" /></button>
+                                      <button onClick={() => setShowFournModal(true)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-dashed border-slate-300 text-slate-400 hover:text-slate-600 hover:border-slate-400 transition"><Plus className="h-3 w-3" /></button>
                                     </div>
                                   </div>
-                                  {/* Contact — apparaît quand fournisseur choisi */}
-                                  {l.fournisseur_id && contactOptions.length > 0 && (
-                                    <div>
-                                      <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-indigo-400">Contact</label>
-                                      <div className="flex flex-wrap gap-1">
-                                        {contactOptions.map(opt => {
-                                          const checked = selectedIds.includes(opt.id)
-                                          return (
-                                            <button key={opt.id} type="button" onClick={() => toggleContact(opt.id)}
-                                              className={`h-7 rounded-md px-2 text-[10px] font-semibold transition whitespace-nowrap
-                                                ${checked ? 'bg-indigo-500 text-white shadow-sm' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600'}`}>
-                                              {opt.contact}{checked && ' ✓'}
-                                            </button>
-                                          )
-                                        })}
-                                      </div>
-                                    </div>
-                                  )}
                                   <div />
                                   <div>
                                     <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Garantie</label>
                                     <select value={l.warranty_expiry||''} onChange={e => updateLine(i,'warranty_expiry',e.target.value)}
-                                      className="h-7 w-full rounded-md border-0 border-b-2 border-b-indigo-200 bg-indigo-50/30 px-1.5 text-[10px] outline-none focus:border-b-indigo-400 text-slate-600">
+                                      className="h-7 w-full rounded-md border border-slate-200 bg-white px-1.5 text-[10px] outline-none focus:border-slate-400 text-slate-600">
                                       <option value="">—</option>
                                       {Array.from({length: 60}, (_, m) => { const d = new Date(); d.setMonth(d.getMonth()+m); const v = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; return <option key={v} value={v}>{d.toLocaleDateString('fr-FR',{month:'short',year:'numeric'})}</option> })}
                                     </select>
@@ -1184,29 +1172,52 @@ export default function PurchasePage() {
                                   <div>
                                     <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Licence</label>
                                     <select value={l.license_expiry||''} onChange={e => updateLine(i,'license_expiry',e.target.value)}
-                                      className="h-7 w-full rounded-md border-0 border-b-2 border-b-indigo-200 bg-indigo-50/30 px-1.5 text-[10px] outline-none focus:border-b-indigo-400 text-slate-600">
+                                      className="h-7 w-full rounded-md border border-slate-200 bg-white px-1.5 text-[10px] outline-none focus:border-slate-400 text-slate-600">
                                       <option value="">—</option>
                                       {Array.from({length: 60}, (_, m) => { const d = new Date(); d.setMonth(d.getMonth()+m); const v = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; return <option key={v} value={v}>{d.toLocaleDateString('fr-FR',{month:'short',year:'numeric'})}</option> })}
                                     </select>
                                   </div>
                                 </div>
-                                {/* Contact manual input — quand fournisseur choisi mais pas de contacts en base */}
+                                {/* Contacts — chips individuels avec email/tel */}
+                                {l.fournisseur_id && contactOptions.length > 0 && (
+                                  <div>
+                                    <label className="mb-1 block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Contact {selectedIds.length > 0 && <span className="text-emerald-500">({selectedIds.length})</span>}</label>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {contactOptions.map(opt => {
+                                        const checked = selectedIds.includes(opt.id)
+                                        return (
+                                          <button key={opt.id} type="button" onClick={() => toggleContact(opt.id)}
+                                            className={`rounded-lg px-2.5 py-1.5 text-left transition border
+                                              ${checked ? 'bg-slate-700 text-white border-slate-600 shadow-sm' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50'}`}>
+                                            <div className="text-[11px] font-semibold">{opt.contact}{checked && ' ✓'}</div>
+                                            {opt.email && <div className={`text-[9px] ${checked ? 'text-slate-300' : 'text-slate-400'}`}>{opt.email}</div>}
+                                            {opt.tel && <div className={`text-[9px] ${checked ? 'text-slate-300' : 'text-slate-400'}`}>{opt.tel}</div>}
+                                          </button>
+                                        )
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                                {/* Contact manual — quand fournisseur choisi mais aucun contact en base */}
                                 {l.fournisseur_id && contactOptions.length === 0 && (
-                                  <input value={l.contact_fournisseur||''} onChange={e => updateLine(i,'contact_fournisseur',e.target.value)}
-                                    placeholder="Nom du contact…" className="h-7 w-full rounded-md border-0 border-b-2 border-b-indigo-200 bg-indigo-50/30 px-2 text-[11px] outline-none focus:border-b-indigo-400" />
+                                  <div>
+                                    <label className="mb-px block text-[9px] font-semibold uppercase tracking-wider text-slate-400">Contact</label>
+                                    <input value={l.contact_fournisseur||''} onChange={e => updateLine(i,'contact_fournisseur',e.target.value)}
+                                      placeholder="Nom du contact…" className="h-7 w-full rounded-md border border-slate-200 bg-white px-2 text-[11px] outline-none focus:border-slate-400" />
+                                  </div>
                                 )}
                               </>
                             )
                           })()}
 
-                          {/* Footer — compact */}
+                          {/* Footer */}
                           <div className="flex items-center justify-between pt-1">
                             <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
                               className="flex items-center gap-1 text-[10px] font-medium text-red-400 hover:text-red-600 transition">
                               <Trash2 className="h-3 w-3" /> Supprimer
                             </button>
                             <button onClick={() => setEditingIdx(null)}
-                              className="flex items-center gap-1 rounded-md bg-indigo-500 px-3 py-1 text-[10px] font-semibold text-white hover:bg-indigo-600 transition">
+                              className="flex items-center gap-1 rounded-md bg-slate-700 px-3 py-1 text-[10px] font-semibold text-white hover:bg-slate-800 transition">
                               <CheckCircle2 className="h-3 w-3" /> Terminé
                             </button>
                           </div>
