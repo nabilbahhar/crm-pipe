@@ -188,7 +188,10 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
       // Cascade: supprimer les données liées avant l'opportunité
       const { data: piRows } = await supabase.from('purchase_info').select('id').eq('opportunity_id', deal.id)
       const piIds = (piRows || []).map((r: any) => r.id)
-      // Delete supply_order via API (bypasses RLS)
+      // Get invoice IDs to cascade-delete invoice_lines
+      const { data: invRows } = await supabase.from('invoices').select('id').eq('opportunity_id', deal.id)
+      const invIds = (invRows || []).map((r: any) => r.id)
+      // Delete supply_order via API (bypasses RLS, also cleans purchase_info/lines/project_services)
       const supplyRes = await authFetch('/api/supply').then(r => r.json()).catch(() => ({ orders: [] }))
       const supplyOrder = (supplyRes?.orders || []).find((o: any) => o.opportunity_id === deal.id)
       await Promise.all([
@@ -196,10 +199,13 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
         supplyOrder ? authFetch(`/api/supply?orderId=${supplyOrder.id}`, { method: 'DELETE' }) : Promise.resolve(),
         supabase.from('project_services').delete().eq('opportunity_id', deal.id),
         supabase.from('deal_registrations').delete().eq('opportunity_id', deal.id),
-        supabase.from('invoices').delete().eq('opportunity_id', deal.id),
         supabase.from('support_tickets').delete().eq('opportunity_id', deal.id),
+        supabase.from('activity_log').delete().eq('entity_id', deal.id),
+        ...(invIds.length ? [supabase.from('invoice_lines').delete().in('invoice_id', invIds)] : []),
         ...(piIds.length ? [supabase.from('purchase_lines').delete().in('purchase_info_id', piIds)] : []),
       ])
+      // Delete invoices after invoice_lines
+      if (invIds.length) await supabase.from('invoices').delete().eq('opportunity_id', deal.id)
       if (piIds.length) await supabase.from('purchase_info').delete().eq('opportunity_id', deal.id)
       const { error } = await supabase.from('opportunities').delete().eq('id', deal.id)
       if (error) { setRows(prev => [deal, ...prev]); setErr(error.message); setUndoToast(null); return }
@@ -421,19 +427,17 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-[1500px] px-4 py-6">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
         {/* Header */}
-        <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-violet-500 text-white shadow-lg">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
               <TrendingUp className="h-5 w-5" />
             </div>
             <div>
-              <div className="text-2xl font-black text-slate-900 tracking-tight">Pipeline</div>
-              <div className="text-xs text-slate-500">
-                Suivi visuel & progression — {rows.filter(r=>r.status==='Open').length} deals ouverts · Drag & drop pour avancer
-              </div>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Pipeline</h1>
+              <p className="text-xs text-slate-500">{rows.filter(r=>r.status==='Open').length} deals ouverts · Drag & drop</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -444,10 +448,6 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
             <Link href="/opportunities" className="inline-flex h-9 items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors shadow-sm">
               <Eye className="h-4 w-4" /> Gestion détaillée
             </Link>
-            <button onClick={load} disabled={loading}
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm">
-              <RefreshCw className={`h-4 w-4 ${loading?'animate-spin':''}`} />
-            </button>
           </div>
         </div>
 
@@ -521,7 +521,7 @@ Cette action changera le statut en Won. Un numéro de PO sera requis.`)) return
             <div className="mb-2 flex items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wide">
               <TrendingUp className="h-3.5 w-3.5" /> Pipeline actif
             </div>
-            <div className="text-xl font-bold text-slate-900">{mad(stats.pipeline)}</div>
+            <div className="text-xl font-black text-slate-900 tracking-tight">{mad(stats.pipeline)}</div>
             <div className="mt-1 text-xs text-slate-500">{stats.totalOpen} deals ouverts</div>
           </div>
           <div className="rounded-2xl border bg-white p-4 shadow-sm">

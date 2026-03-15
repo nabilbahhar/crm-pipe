@@ -800,16 +800,16 @@ export default function Dashboard() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#f8fafc]">
-      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-6">
+      <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
 
         {/* ══ HEADER ══ */}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white shadow-lg">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
               <Activity className="h-5 w-5"/>
             </div>
             <div>
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight">Dashboard</h1>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Dashboard</h1>
               <p className="text-xs text-slate-500">{periodLabel} · {inPeriodRaw.length} deals{activeFilterCount>0?` · ${inPeriod.length} filtrés`:''}</p>
             </div>
           </div>
@@ -858,11 +858,6 @@ export default function Dashboard() {
               )}
             </button>
 
-            <button onClick={load} disabled={loading} type="button" title="Rafraîchir les données"
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-60">
-              <RefreshCw className={`h-4 w-4 ${loading?'animate-spin':''}`}/>
-              {loading?'Chargement…':'Actualiser'}
-            </button>
           </div>
         </div>
 

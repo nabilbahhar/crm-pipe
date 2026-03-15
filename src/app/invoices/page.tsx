@@ -233,6 +233,8 @@ export default function InvoicesPage() {
   async function deleteInvoice() {
     if (!confirmDel) return
     setDeleting(true)
+    // Clean invoice_lines before deleting invoice
+    await supabase.from('invoice_lines').delete().eq('invoice_id', confirmDel.id)
     const { error } = await supabase.from('invoices').delete().eq('id', confirmDel.id)
     if (error) { alert(error.message); setDeleting(false); return }
     await logActivity({
@@ -353,10 +355,6 @@ export default function InvoicesPage() {
             <button onClick={exportExcel} disabled={exporting}
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-60">
               <Download className="h-4 w-4" /> {exporting ? 'Export...' : 'Excel'}
-            </button>
-            <button onClick={load} disabled={loading}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-60">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button onClick={() => { setEditInvoice(null); setShowForm(true) }}
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-900 bg-slate-900 px-3.5 text-sm font-semibold text-white hover:bg-slate-800 transition-colors shadow-sm">

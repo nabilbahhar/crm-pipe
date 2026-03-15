@@ -132,6 +132,39 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'orderId requis' }, { status: 400 })
     }
 
+    // Get the opportunity_id before deleting
+    const { data: order } = await supabaseServer
+      .from('supply_orders')
+      .select('opportunity_id')
+      .eq('id', orderId)
+      .single()
+
+    // Get invoice IDs to cascade-delete invoice_lines
+    const oppId = order?.opportunity_id
+    if (oppId) {
+      const { data: invRows } = await supabaseServer
+        .from('invoices')
+        .select('id')
+        .eq('opportunity_id', oppId)
+      const invIds = (invRows || []).map(r => r.id)
+      if (invIds.length) {
+        await supabaseServer.from('invoice_lines').delete().in('invoice_id', invIds)
+        await supabaseServer.from('invoices').delete().eq('opportunity_id', oppId)
+      }
+      // Clean purchase_lines → purchase_info
+      const { data: piRows } = await supabaseServer
+        .from('purchase_info')
+        .select('id')
+        .eq('opportunity_id', oppId)
+      const piIds = (piRows || []).map(r => r.id)
+      if (piIds.length) {
+        await supabaseServer.from('purchase_lines').delete().in('purchase_info_id', piIds)
+        await supabaseServer.from('purchase_info').delete().eq('opportunity_id', oppId)
+      }
+      // Clean project_services
+      await supabaseServer.from('project_services').delete().eq('opportunity_id', oppId)
+    }
+
     const { error } = await supabaseServer
       .from('supply_orders')
       .delete()

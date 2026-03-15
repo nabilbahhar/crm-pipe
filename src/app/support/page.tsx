@@ -248,16 +248,15 @@ export default function SupportPage() {
   const selectCls = inputCls + ' appearance-none'
 
   return (
-    <div className="mx-auto max-w-[1500px] px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-[1500px] px-4 py-6 space-y-5">
       {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white"><ShieldCheck className="h-5 w-5" /></div>
-          <div><h1 className="text-2xl font-bold text-slate-900">Support / SAV</h1><p className="text-sm text-slate-500">Tickets, garanties & maintenance</p></div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md"><ShieldCheck className="h-5 w-5" /></div>
+          <div><h1 className="text-xl font-black text-slate-900 tracking-tight">Support / SAV</h1><p className="text-xs text-slate-500">Tickets & maintenance</p></div>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={exportExcel} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 h-9 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Download className="h-4 w-4" />Excel</button>
-          <button onClick={load} className="inline-flex items-center justify-center h-9 w-9 rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"><RefreshCw className="h-4 w-4" /></button>
           <button onClick={openCreate} className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 h-9 text-sm font-semibold text-white hover:bg-slate-800"><Plus className="h-4 w-4" />Ticket</button>
         </div>
       </div>

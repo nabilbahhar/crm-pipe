@@ -134,8 +134,39 @@ export default function ActivityPage() {
   async function exportExcel() {
     setExporting(true)
     try {
+      // ── Summary analytics ──
+      const byAction: Record<string, number> = {}
+      const byEntity: Record<string, number> = {}
+      const byUser: Record<string, number> = {}
+      filtered.forEach(a => {
+        const act = ACTION_LABEL[a.action_type] || a.action_type
+        const ent = ENTITY_LABEL[a.entity_type] || a.entity_type
+        const usr = userName(a.user_email)
+        byAction[act] = (byAction[act] || 0) + 1
+        byEntity[ent] = (byEntity[ent] || 0) + 1
+        byUser[usr] = (byUser[usr] || 0) + 1
+      })
+      const todayStr = new Date().toDateString()
+      const todayCount = filtered.filter(a => new Date(a.created_at).toDateString() === todayStr).length
+      const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7)
+      const weekCount = filtered.filter(a => new Date(a.created_at) >= weekAgo).length
+
       const spec = {
         filename: `activites_${new Date().toISOString().slice(0,10)}.xlsx`,
+        summary: {
+          title: `Résumé Activité · ${new Date().toLocaleDateString('fr-MA')}`,
+          kpis: [
+            { label: 'Total actions', value: filtered.length, detail: 'Actions filtrées exportées' },
+            { label: "Aujourd'hui", value: todayCount, detail: `${todayCount} actions aujourd'hui` },
+            { label: 'Cette semaine', value: weekCount, detail: `${weekCount} actions (7 derniers jours)` },
+            { label: 'Utilisateurs actifs', value: Object.keys(byUser).length, detail: Object.keys(byUser).join(', ') },
+          ],
+          breakdownTitle: 'Répartition par type d\'action',
+          breakdownHeaders: ['Action', 'Nombre', '', '% du total'],
+          breakdown: Object.entries(byAction)
+            .sort((a, b) => b[1] - a[1])
+            .map(([action, count]) => [action, count, '', `${((count / filtered.length) * 100).toFixed(1)}%`]),
+        },
         sheets: [{
           name: 'Activités',
           title: `Journal d'activité · ${filtered.length} actions · ${new Date().toLocaleDateString('fr-MA')}`,
@@ -178,12 +209,12 @@ export default function ActivityPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white">
               <ActivityIcon className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Historique des activités</h1>
-              <p className="text-sm text-slate-500 mt-0.5">
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Historique des activités</h1>
+              <p className="text-xs text-slate-500">
                 {filtered.length} événement{filtered.length > 1 ? 's' : ''} · Toutes les modifications de l'équipe
               </p>
             </div>
@@ -192,11 +223,6 @@ export default function ActivityPage() {
             <button onClick={exportExcel} disabled={exporting} title="Export Excel"
               className="inline-flex items-center gap-2 h-9 px-3 rounded-xl border bg-white text-sm text-slate-600 hover:bg-slate-50 shadow-sm disabled:opacity-60">
               <Download className="h-4 w-4" /> {exporting ? 'Export…' : 'Excel'}
-            </button>
-            <button onClick={() => load(true)} disabled={loading}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-xl border bg-white text-sm hover:bg-slate-50 shadow-sm">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Actualiser
             </button>
           </div>
         </div>

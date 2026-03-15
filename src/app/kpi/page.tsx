@@ -146,17 +146,21 @@ export default function KPIPage() {
 
   const Header = () => (
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div>
-        <div className="text-2xl font-bold text-slate-900">KPI {year} — {profile?.name}</div>
-        <div className="text-sm text-slate-500">
-          {profile?.view==='annual' ? 'Commissions annuelles · Objectif 30 M MAD Won' : 'Commissions trimestrielles · 5 000 MAD / trimestre validé'}
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
+          <span className="text-lg">📊</span>
+        </div>
+        <div>
+          <h1 className="text-xl font-black text-slate-900 tracking-tight">KPI {year} — {profile?.name}</h1>
+          <p className="text-xs text-slate-500">
+            {profile?.view==='annual' ? 'Commissions annuelles' : 'Commissions trimestrielles'}
+          </p>
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <select value={year} onChange={e=>setYear(Number(e.target.value))} className="h-9 rounded-xl border bg-white px-3 text-sm outline-none">
+        <select value={year} onChange={e=>setYear(Number(e.target.value))} className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm outline-none">
           {[2026,2025,2024].map(y=><option key={y} value={y}>{y}</option>)}
         </select>
-        <button onClick={load} disabled={loading} className="h-9 rounded-xl border bg-white px-3 text-sm hover:bg-slate-50">{loading?'...':'Rafraichir'}</button>
       </div>
     </div>
   )
@@ -278,7 +282,7 @@ export default function KPIPage() {
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <div className="rounded-2xl border bg-white p-4 shadow-sm">
             <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">Won {year}</div>
-            <div className="text-2xl font-bold text-slate-900 mt-1">{fmtMAD(annual.total,true)}</div>
+            <div className="text-xl font-black text-slate-900 tracking-tight mt-1">{fmtMAD(annual.total,true)}</div>
             <div className="text-xs text-slate-500 mt-0.5">{wonYear.length} deals</div>
           </div>
           <div className="rounded-2xl border bg-white p-4 shadow-sm">

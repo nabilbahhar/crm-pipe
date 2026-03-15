@@ -248,11 +248,11 @@ export default function PartenaireDetailPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 text-white shadow-lg shadow-blue-200 text-lg font-bold">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md text-lg font-bold">
             {card.name.charAt(0).toUpperCase()}
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">{card.name} <TypeBadge type={card.type} /></h1>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">{card.name} <TypeBadge type={card.type} /></h1>
             <p className="text-xs text-slate-400">{kpis.total} deal{kpis.total > 1 ? 's' : ''} · {kpis.won} won · Win rate {kpis.winRate}%</p>
           </div>
         </div>

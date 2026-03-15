@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workflow Deal — CRM-PIPE</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #0f172a 100%);
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 40px 20px 60px;
+  }
+  .container { max-width: 900px; margin: 0 auto; }
+
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    background: linear-gradient(90deg, #60a5fa, #a78bfa, #34d399);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    text-align: center;
+    font-size: 13px;
+    color: #64748b;
+    margin-bottom: 50px;
+  }
+
+  /* ── Nodes ── */
+  .node {
+    border-radius: 14px;
+    padding: 16px 24px;
+    text-align: center;
+    position: relative;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+  .node .title { font-weight: 800; font-size: 15px; }
+  .node .desc { font-size: 11px; opacity: 0.85; margin-top: 4px; }
+
+  .node-won { background: linear-gradient(135deg, #16a34a, #059669); color: white; }
+  .node-fiche { background: linear-gradient(135deg, #2563eb, #3b82f6); color: white; }
+  .node-supply { background: linear-gradient(135deg, #7c3aed, #8b5cf6); color: white; }
+  .node-facture { background: linear-gradient(135deg, #d97706, #f59e0b); color: white; }
+  .node-recouvre { background: linear-gradient(135deg, #dc2626, #ef4444); color: white; }
+  .node-close { background: linear-gradient(135deg, #0f766e, #14b8a6); color: white; }
+  .node-projet { background: linear-gradient(135deg, #be185d, #ec4899); color: white; }
+
+  /* ── Arrow ── */
+  .arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 10px 0;
+  }
+  .arrow .line {
+    width: 2px;
+    height: 28px;
+    background: linear-gradient(180deg, rgba(148,163,184,0.6), rgba(148,163,184,0.2));
+  }
+  .arrow svg { color: #94a3b8; }
+  .arrow .label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 2px;
+  }
+
+  /* ── Supply Pipeline ── */
+  .supply-pipeline {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    margin: 16px auto;
+    max-width: 700px;
+  }
+  .supply-step {
+    flex: 1;
+    text-align: center;
+    padding: 14px 8px;
+    border-radius: 12px;
+    position: relative;
+  }
+  .supply-step .emoji { font-size: 22px; }
+  .supply-step .step-title { font-size: 12px; font-weight: 800; margin-top: 4px; }
+  .supply-step .step-desc { font-size: 9px; opacity: 0.7; margin-top: 2px; }
+
+  .step-place { background: rgba(59,130,246,0.15); border: 1px solid rgba(59,130,246,0.3); }
+  .step-place .step-title { color: #60a5fa; }
+  .step-commande { background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.3); }
+  .step-commande .step-title { color: #a78bfa; }
+  .step-stock { background: rgba(249,115,22,0.15); border: 1px solid rgba(249,115,22,0.3); }
+  .step-stock .step-title { color: #fb923c; }
+  .step-livre { background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.3); }
+  .step-livre .step-title { color: #4ade80; }
+
+  .supply-arrow {
+    font-size: 18px;
+    color: #475569;
+    padding: 0 4px;
+    flex-shrink: 0;
+  }
+
+  /* ── Supply box ── */
+  .supply-box {
+    border: 1px solid rgba(139,92,246,0.3);
+    border-radius: 18px;
+    padding: 20px;
+    background: rgba(139,92,246,0.05);
+    margin: 0 auto;
+    max-width: 750px;
+  }
+  .supply-box .box-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .supply-box .box-header .icon {
+    font-size: 20px;
+  }
+  .supply-box .box-header .text {
+    font-weight: 800;
+    font-size: 14px;
+    color: #c4b5fd;
+  }
+  .supply-box .box-header .badge {
+    font-size: 9px;
+    font-weight: 700;
+    background: rgba(139,92,246,0.2);
+    color: #a78bfa;
+    padding: 3px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(139,92,246,0.3);
+  }
+  .supply-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .supply-info .info {
+    font-size: 10px;
+    color: #94a3b8;
+    background: rgba(30,41,59,0.6);
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(71,85,105,0.3);
+  }
+  .supply-info .info strong { color: #e2e8f0; }
+
+  /* ── Fork ── */
+  .fork {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin: 0 auto;
+    max-width: 700px;
+  }
+  .fork-branch {
+    flex: 1;
+    text-align: center;
+  }
+  .fork-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+
+  /* ── Facture box ── */
+  .facture-box {
+    border: 1px solid rgba(245,158,11,0.3);
+    border-radius: 18px;
+    padding: 20px;
+    background: rgba(245,158,11,0.05);
+    margin: 0 auto;
+    max-width: 600px;
+  }
+  .facture-fields {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .facture-fields .field {
+    background: rgba(30,41,59,0.6);
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(71,85,105,0.3);
+    text-align: center;
+  }
+  .facture-fields .field .label { font-size: 9px; color: #94a3b8; text-transform: uppercase; font-weight: 700; }
+  .facture-fields .field .value { font-size: 13px; font-weight: 800; color: #fbbf24; margin-top: 4px; }
+  .facture-star {
+    text-align: center;
+    margin-top: 14px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fbbf24;
+    background: rgba(245,158,11,0.1);
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px dashed rgba(245,158,11,0.3);
+  }
+
+  /* ── Recouvrement box ── */
+  .recouvre-box {
+    border: 1px solid rgba(239,68,68,0.3);
+    border-radius: 18px;
+    padding: 20px;
+    background: rgba(239,68,68,0.05);
+    margin: 0 auto;
+    max-width: 600px;
+  }
+  .recouvre-timeline {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 14px;
+    gap: 8px;
+  }
+  .recouvre-step {
+    text-align: center;
+    flex: 1;
+  }
+  .recouvre-step .r-icon { font-size: 22px; margin-bottom: 4px; }
+  .recouvre-step .r-title { font-size: 10px; font-weight: 800; color: #fca5a5; }
+  .recouvre-step .r-desc { font-size: 9px; color: #94a3b8; margin-top: 2px; }
+  .recouvre-arrow { color: #475569; font-size: 16px; }
+
+  /* ── Acteurs ── */
+  .acteurs {
+    margin-top: 50px;
+    border: 1px solid rgba(71,85,105,0.3);
+    border-radius: 18px;
+    overflow: hidden;
+  }
+  .acteurs-header {
+    background: rgba(30,41,59,0.8);
+    padding: 14px 20px;
+    font-weight: 800;
+    font-size: 14px;
+    color: #e2e8f0;
+    border-bottom: 1px solid rgba(71,85,105,0.3);
+    text-align: center;
+  }
+  .acteur-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(71,85,105,0.15);
+  }
+  .acteur-row:last-child { border-bottom: none; }
+  .acteur-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .acteur-name { font-weight: 800; font-size: 13px; color: #e2e8f0; }
+  .acteur-role { font-size: 10px; color: #64748b; font-weight: 600; }
+  .acteur-actions { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .acteur-actions span {
+    display: inline-block;
+    background: rgba(71,85,105,0.3);
+    padding: 2px 8px;
+    border-radius: 6px;
+    margin: 2px 3px 2px 0;
+    font-size: 10px;
+    font-weight: 600;
+  }
+
+  .a-nabil { background: linear-gradient(135deg, #2563eb, #3b82f6); }
+  .a-supply { background: linear-gradient(135deg, #7c3aed, #8b5cf6); }
+  .a-aman { background: linear-gradient(135deg, #d97706, #f59e0b); }
+  .a-kader { background: linear-gradient(135deg, #be185d, #ec4899); }
+  .a-client { background: linear-gradient(135deg, #475569, #64748b); }
+
+  /* ── Section divider ── */
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 30px 0 20px;
+  }
+  .divider .line { flex: 1; height: 1px; background: rgba(71,85,105,0.3); }
+  .divider .text {
+    font-size: 10px;
+    font-weight: 700;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <h1>Circuit complet d'un Deal</h1>
+  <p class="subtitle">De Won à Clôturé — CRM-PIPE Workflow</p>
+
+  <!-- ═══ DEAL WON ═══ -->
+  <div class="node node-won">
+    <div class="title">✅ Deal Gagné (Won)</div>
+    <div class="desc">PO (Bon de Commande) reçu du client</div>
+  </div>
+
+  <div class="arrow">
+    <div class="line"></div>
+    <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 0L12 6H0Z" fill="currentColor" transform="rotate(180 6 6)"/></svg>
+    <div class="label">Remplir la fiche</div>
+  </div>
+
+  <!-- ═══ FICHE ACHAT ═══ -->
+  <div class="node node-fiche">
+    <div class="title">📋 Fiche d'Achat</div>
+    <div class="desc">Lignes articles · Fournisseurs · Prix achat/vente · Modalités de paiement</div>
+  </div>
+
+  <div class="arrow">
+    <div class="line"></div>
+    <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 0L12 6H0Z" fill="currentColor" transform="rotate(180 6 6)"/></svg>
+    <div class="label">Deux cas possibles</div>
+  </div>
+
+  <!-- ═══ FORK ═══ -->
+  <div class="fork">
+    <div class="fork-branch">
+      <div class="fork-label">Matériel uniquement</div>
+      <div class="node node-supply" style="max-width:280px;">
+        <div class="title">📦 Supply</div>
+        <div class="desc">Placement commande</div>
+      </div>
+    </div>
+    <div class="fork-branch">
+      <div class="fork-label">Matériel + Prestation</div>
+      <div style="display:flex;gap:8px;">
+        <div class="node node-supply" style="max-width:160px;flex:1;">
+          <div class="title">📦 Supply</div>
+          <div class="desc">Commande</div>
+        </div>
+        <div class="node node-projet" style="max-width:160px;flex:1;">
+          <div class="title">🚀 Projets</div>
+          <div class="desc">Kader planifie</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="line"></div>
+    <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 0L12 6H0Z" fill="currentColor" transform="rotate(180 6 6)"/></svg>
+  </div>
+
+  <!-- ═══ SUPPLY CHAIN ═══ -->
+  <div class="supply-box">
+    <div class="box-header">
+      <span class="icon">📦</span>
+      <span class="text">Supply Chain</span>
+      <span class="badge">Imane · Salim</span>
+    </div>
+
+    <div class="supply-pipeline">
+      <div class="supply-step step-place">
+        <div class="emoji">🔵</div>
+        <div class="step-title">Placé</div>
+        <div class="step-desc">ASAP</div>
+      </div>
+      <div class="supply-arrow">→</div>
+      <div class="supply-step step-commande">
+        <div class="emoji">🟣</div>
+        <div class="step-title">Commandé</div>
+        <div class="step-desc">Chez fournisseur</div>
+      </div>
+      <div class="supply-arrow">→</div>
+      <div class="supply-step step-stock">
+        <div class="emoji">🟠</div>
+        <div class="step-title">En Stock</div>
+        <div class="step-desc">Chez nous (24h)</div>
+      </div>
+      <div class="supply-arrow">→</div>
+      <div class="supply-step step-livre">
+        <div class="emoji">🟢</div>
+        <div class="step-title">Livré</div>
+        <div class="step-desc">Chez client (24h)</div>
+      </div>
+    </div>
+
+    <div class="supply-info">
+      <div class="info">📅 <strong>ETA</strong> — Confirmé par Imane après placement chez fournisseur</div>
+      <div class="info">⚡ <strong>Stock dispo</strong> — 48h total : 24h chez nous + 24h chez client</div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="line"></div>
+    <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 0L12 6H0Z" fill="currentColor" transform="rotate(180 6 6)"/></svg>
+    <div class="label">Client reçoit matériel</div>
+  </div>
+
+  <!-- ═══ FACTURATION ═══ -->
+  <div class="facture-box">
+    <div class="node node-facture" style="max-width:100%;">
+      <div class="title">🧾 Facturation — AMAN</div>
+      <div class="desc">Facture + BL générés par outil interne AMAN · Envoyé au client · Copie reçue</div>
+    </div>
+
+    <div class="facture-fields">
+      <div class="field">
+        <div class="label">N° Facture</div>
+        <div class="value">AMAN-XXX</div>
+      </div>
+      <div class="field">
+        <div class="label">Date émission</div>
+        <div class="value">JJ/MM/AA</div>
+      </div>
+      <div class="field">
+        <div class="label">Échéance</div>
+        <div class="value">30 / 60 / 90j</div>
+      </div>
+    </div>
+
+    <div class="facture-star">
+      ⭐ C'est ici que l'objectif commercial est comptabilisé — Deal facturé = Objectif atteint
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="line"></div>
+    <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 0L12 6H0Z" fill="currentColor" transform="rotate(180 6 6)"/></svg>
+    <div class="label">Suivi du paiement</div>
+  </div>
+
+  <!-- ═══ RECOUVREMENT ═══ -->
+  <div class="recouvre-box">
+    <div class="node node-recouvre" style="max-width:100%;">
+      <div class="title">💰 Recouvrement — Suivi Paiement</div>
+      <div class="desc">Suivre le paiement jusqu'à encaissement</div>
+    </div>
+
+    <div class="recouvre-timeline">
+      <div class="recouvre-step">
+        <div class="r-icon">📧</div>
+        <div class="r-title">J-5 Relance</div>
+        <div class="r-desc">Mail rappel au client avec infos facture</div>
+      </div>
+      <div class="recouvre-arrow">→</div>
+      <div class="recouvre-step">
+        <div class="r-icon">🚨</div>
+        <div class="r-title">Détection</div>
+        <div class="r-desc">Problème de paiement ? Agir avant échéance</div>
+      </div>
+      <div class="recouvre-arrow">→</div>
+      <div class="recouvre-step">
+        <div class="r-icon">✅</div>
+        <div class="r-title">Payée</div>
+        <div class="r-desc">Client a réglé la facture</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="line"></div>
+    <svg width="12" height="12" viewBox="0 0 12 12"><path d="M6 0L12 6H0Z" fill="currentColor" transform="rotate(180 6 6)"/></svg>
+  </div>
+
+  <!-- ═══ DEAL CLOS ═══ -->
+  <div class="node node-close">
+    <div class="title">🏁 Deal Clôturé</div>
+    <div class="desc">Livré · Facturé · Payé — Cycle complet terminé</div>
+  </div>
+
+  <!-- ═══ ACTEURS ═══ -->
+  <div class="divider">
+    <div class="line"></div>
+    <div class="text">Qui fait quoi</div>
+    <div class="line"></div>
+  </div>
+
+  <div class="acteurs">
+    <div class="acteurs-header">👥 Acteurs du Circuit</div>
+
+    <div class="acteur-row">
+      <div class="acteur-avatar a-nabil">👤</div>
+      <div>
+        <div class="acteur-name">Nabil (AE)</div>
+        <div class="acteur-role">Account Executive — BDM</div>
+        <div class="acteur-actions">
+          <span>Fiche achat</span>
+          <span>Suivi facturation</span>
+          <span>Relance paiement</span>
+          <span>Close deal</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="acteur-row">
+      <div class="acteur-avatar a-supply">📦</div>
+      <div>
+        <div class="acteur-name">Imane / Salim (Supply)</div>
+        <div class="acteur-role">Supply Chain & Logistique</div>
+        <div class="acteur-actions">
+          <span>Place commande ASAP</span>
+          <span>Confirme ETA</span>
+          <span>Suit livraison</span>
+          <span>Met à jour statut</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="acteur-row">
+      <div class="acteur-avatar a-aman">🧾</div>
+      <div>
+        <div class="acteur-name">AMAN (Outil interne)</div>
+        <div class="acteur-role">Facturation & BL</div>
+        <div class="acteur-actions">
+          <span>Génère facture</span>
+          <span>Génère BL</span>
+          <span>Envoie au client</span>
+          <span>Copie à l'équipe</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="acteur-row">
+      <div class="acteur-avatar a-kader">🚀</div>
+      <div>
+        <div class="acteur-name">Kader (Projets)</div>
+        <div class="acteur-role">Chef de Projets — Déploiement</div>
+        <div class="acteur-actions">
+          <span>Si presta uniquement</span>
+          <span>Planifie déploiement</span>
+          <span>Reporte avancement</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="acteur-row">
+      <div class="acteur-avatar a-client">🏢</div>
+      <div>
+        <div class="acteur-name">Client Final</div>
+        <div class="acteur-role">Destinataire</div>
+        <div class="acteur-actions">
+          <span>Reçoit matériel + facture</span>
+          <span>Paye selon modalités</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

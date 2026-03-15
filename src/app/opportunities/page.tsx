@@ -201,15 +201,21 @@ function DealsPageInner() {
         // Cascade: supprimer les données liées avant l'opportunité
         const { data: piRows } = await supabase.from('purchase_info').select('id').eq('opportunity_id', deal.id)
         const piIds = (piRows || []).map((r: any) => r.id)
+        // Get invoice IDs to clean invoice_lines
+        const { data: invRows } = await supabase.from('invoices').select('id').eq('opportunity_id', deal.id)
+        const invIds = (invRows || []).map((r: any) => r.id)
         await Promise.all([
           supabase.from('deal_files').delete().eq('opportunity_id', deal.id),
           supabase.from('supply_orders').delete().eq('opportunity_id', deal.id),
           supabase.from('project_services').delete().eq('opportunity_id', deal.id),
           supabase.from('deal_registrations').delete().eq('opportunity_id', deal.id),
-          supabase.from('invoices').delete().eq('opportunity_id', deal.id),
           supabase.from('support_tickets').delete().eq('opportunity_id', deal.id),
+          supabase.from('activity_log').delete().eq('entity_id', deal.id),
+          ...(invIds.length ? [supabase.from('invoice_lines').delete().in('invoice_id', invIds)] : []),
           ...(piIds.length ? [supabase.from('purchase_lines').delete().in('purchase_info_id', piIds)] : []),
         ])
+        // Delete invoices after invoice_lines
+        if (invIds.length) await supabase.from('invoices').delete().eq('opportunity_id', deal.id)
         if (piIds.length) await supabase.from('purchase_info').delete().eq('opportunity_id', deal.id)
         const { error } = await supabase.from('opportunities').delete().eq('id', deal.id)
         if (error) throw error
@@ -463,11 +469,6 @@ function DealsPageInner() {
             <button onClick={exportExcel} type="button" disabled={exporting}
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-60">
               <Download className="h-4 w-4" /> {exporting ? 'Export…' : 'Excel'}
-            </button>
-            <button onClick={load} disabled={loading} type="button"
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition-colors disabled:opacity-60">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Actualiser
             </button>
             <button onClick={() => setShowNewDeal(true)}
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-900 bg-slate-900 px-3.5 text-sm font-semibold text-white hover:bg-slate-800 transition-colors shadow-sm">

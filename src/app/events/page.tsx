@@ -460,19 +460,15 @@ export default function EventsPage() {
         {/* ── Header ────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
               <CalendarDays className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Evenements</h1>
-              <p className="text-sm text-slate-500 mt-0.5">Suivi des evenements · {filtered.length} événement(s)</p>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Evenements</h1>
+              <p className="text-xs text-slate-500">{filtered.length} événement(s)</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={loadAll} disabled={loading}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors disabled:opacity-40">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
             <button onClick={openCreate}
               className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 transition-colors">
               <Plus className="h-4 w-4" /> Nouvel evenement

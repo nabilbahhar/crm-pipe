@@ -831,7 +831,7 @@ export default function TasksPage() {
         {/* ── HEADER ── */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 text-white shadow-lg">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
               <CheckCircle2 className="h-5 w-5" />
             </div>
             <div>
@@ -843,10 +843,6 @@ export default function TasksPage() {
             <button onClick={exportExcel} disabled={exporting}
               className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm disabled:opacity-60">
               <Download className="h-4 w-4" /> {exporting ? 'Export…' : 'Excel'}
-            </button>
-            <button onClick={load} disabled={loading}
-              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-sm">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>

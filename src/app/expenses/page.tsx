@@ -588,12 +588,12 @@ export default function ExpensesPage() {
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
               <Wallet className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Notes de Frais</h1>
-              <p className="text-sm text-slate-500 mt-0.5">
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Notes de Frais</h1>
+              <p className="text-xs text-slate-500">
                 Suivi depenses &middot; {reports.length} note{reports.length !== 1 ? 's' : ''}
               </p>
             </div>
@@ -617,10 +617,6 @@ export default function ExpensesPage() {
                 <X className="h-4 w-4" /> Annuler
               </button>
             )}
-            <button onClick={() => load()} disabled={loading}
-              className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors">
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            </button>
           </div>
         </div>
 

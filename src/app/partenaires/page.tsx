@@ -244,26 +244,66 @@ export default function PartenairesPage() {
   // ── Excel ───────────────────────────────────────────────────────────────
   const exportExcel = async () => {
     try {
-      const rows = filtered.map(c => ({
-        Partenaire: c.name,
-        Type: c.type || '',
-        Deals: c.stats.deals,
-        Won: c.stats.won,
-        'CA Won (MAD)': c.stats.revenue,
-        'Pipeline (MAD)': c.stats.pipeline,
-        Contact: c.contact_name || '',
-        Email: c.contact_email || '',
-        'Tél': c.contact_phone || '',
-      }))
+      const headers = ['Partenaire', 'Type', 'Deals', 'Won', 'CA Won (MAD)', 'Pipeline (MAD)', 'Contact', 'Email', 'Tél']
+      const rows = filtered.map(c => [
+        c.name,
+        c.type || '',
+        c.stats.deals,
+        c.stats.won,
+        c.stats.revenue,
+        c.stats.pipeline,
+        c.contact_name || '',
+        c.contact_email || '',
+        c.contact_phone || '',
+      ])
+      const totalRevenue = filtered.reduce((s, c) => s + c.stats.revenue, 0)
+      const totalPipeline = filtered.reduce((s, c) => s + c.stats.pipeline, 0)
+      const totalDeals = filtered.reduce((s, c) => s + c.stats.deals, 0)
+      const totalWon = filtered.reduce((s, c) => s + c.stats.won, 0)
+
+      // Breakdown par type
+      const byType: Record<string, { count: number; revenue: number; pipeline: number }> = {}
+      filtered.forEach(c => {
+        const t = c.type || 'Non défini'
+        if (!byType[t]) byType[t] = { count: 0, revenue: 0, pipeline: 0 }
+        byType[t].count++
+        byType[t].revenue += c.stats.revenue
+        byType[t].pipeline += c.stats.pipeline
+      })
+
+      const spec = {
+        filename: `partenaires_${new Date().toISOString().slice(0,10)}.xlsx`,
+        summary: {
+          title: `Résumé Partenaires · ${new Date().toLocaleDateString('fr-MA')}`,
+          kpis: [
+            { label: 'Total partenaires', value: filtered.length, detail: `${stats.activeCards} avec des deals actifs` },
+            { label: 'CA Won total', value: totalRevenue, detail: `${totalWon} deals gagnés` },
+            { label: 'Pipeline actif', value: totalPipeline, detail: `${totalDeals} deals en cours` },
+            { label: 'Taux de conversion', value: totalDeals > 0 ? `${((totalWon / totalDeals) * 100).toFixed(1)}%` : '—', detail: `${totalWon} won / ${totalDeals} deals` },
+          ],
+          breakdownTitle: 'Répartition par type de partenaire',
+          breakdownHeaders: ['Type', 'Nombre', 'CA Won (MAD)', '% du CA'],
+          breakdown: Object.entries(byType)
+            .sort((a, b) => b[1].revenue - a[1].revenue)
+            .map(([type, v]) => [type, v.count, v.revenue, totalRevenue > 0 ? `${((v.revenue / totalRevenue) * 100).toFixed(1)}%` : '—']),
+        },
+        sheets: [{
+          name: 'Partenaires',
+          title: `Partenaires · ${filtered.length} partenaires · ${new Date().toLocaleDateString('fr-MA')}`,
+          headers,
+          rows,
+          totalsRow: ['TOTAL', `${filtered.length} partenaires`, totalDeals, totalWon, totalRevenue, totalPipeline, '', '', ''],
+        }],
+      }
       const res = await authFetch('/api/excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: 'partenaires', sheets: [{ name: 'Partenaires', data: rows }] }),
+        body: JSON.stringify(spec),
       })
       if (!res.ok) throw new Error('Erreur export')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a'); a.href = url; a.download = 'partenaires.xlsx'; a.click()
+      const a = document.createElement('a'); a.href = url; a.download = spec.filename; a.click()
       URL.revokeObjectURL(url)
       setToast({ msg: 'Export Excel OK', type: 'success' })
     } catch (e: any) {
@@ -279,17 +319,16 @@ export default function PartenairesPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-violet-600 text-white shadow-lg shadow-blue-200">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
             <Handshake className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Partenaires</h1>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight">Partenaires</h1>
             <p className="text-xs text-slate-400">{stats.totalCards} partenaires · {stats.activeCards} actifs · {mad(stats.totalRevenue)} CA</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Btn variant="outline" onClick={exportExcel}><Download className="h-3.5 w-3.5" /> Excel</Btn>
-          <Btn variant="ghost" onClick={load}><RefreshCw className="h-3.5 w-3.5" /></Btn>
           <Btn variant="primary" onClick={openNew}><Plus className="h-3.5 w-3.5" /> Nouveau</Btn>
         </div>
       </div>

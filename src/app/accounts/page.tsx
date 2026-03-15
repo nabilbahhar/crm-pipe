@@ -269,16 +269,22 @@ export default function AccountsPage() {
       onConfirm: async () => {
         setConfirm(c => ({ ...c, open: false })); setErr(null); setLoading(true)
         try {
+          // Pre-check: refuse if account has linked deals
+          const { count: dealCount } = await supabase.from('opportunities').select('id', { count: 'exact', head: true }).eq('account_id', row.id)
+          if (dealCount && dealCount > 0) {
+            throw new Error(`Suppression impossible : ce client a ${dealCount} deal${dealCount > 1 ? 's' : ''} lié${dealCount > 1 ? 's' : ''}. Supprimez les deals d'abord.`)
+          }
           // Cascade: clean up related records before deleting account
           await Promise.all([
             supabase.from('account_contacts').delete().eq('account_id', row.id),
             supabase.from('account_files').delete().eq('account_id', row.id),
             supabase.from('account_meetings').delete().eq('account_id', row.id),
+            supabase.from('activity_log').delete().eq('entity_id', row.id),
           ])
           const { error } = await supabase.from('accounts').delete().eq('id', row.id)
           if (error) {
             const m = (error.message || '').toLowerCase()
-            throw new Error(m.includes('foreign key') ? 'Suppression impossible : ce client a des deals liés.' : error.message)
+            throw new Error(m.includes('foreign key') ? 'Suppression impossible : ce client a des données liées.' : error.message)
           }
           const { data: { user } } = await supabase.auth.getUser()
           if (user) await supabase.from('activity_log').insert({ user_email: user.email, action_type: 'delete', entity_type: 'account', entity_id: row.id, entity_name: row.name, detail: `${row.sector || ''} · ${row.region || ''}` })
@@ -460,10 +466,6 @@ export default function AccountsPage() {
           <div className="flex items-center gap-2">
             <Btn variant="ghost" onClick={exportExcel} title="Export Excel" disabled={exporting}>
               <Download className="h-4 w-4" /> {exporting ? '…' : ''}
-            </Btn>
-            <Btn variant="ghost" onClick={loadAll} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              Actualiser
             </Btn>
             <Btn variant="primary" onClick={() => setShowAddForm(v => !v)}>
               <Plus className="h-4 w-4" />

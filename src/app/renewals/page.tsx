@@ -156,6 +156,7 @@ export default function RenewalsPage() {
 
   // Excel export
   async function exportExcel() {
+    const typeLabel = tab === 'licenses' ? 'Licences' : 'Support/Garantie'
     const headers = ['Produit', 'Référence', 'Type', 'Compte', 'Projet', 'BU', 'Début', 'Expiration', 'Jours restants']
     const rows = filtered.map(it => [
       it.product, it.ref || '', it.type === 'license' ? 'Licence' : 'Garantie',
@@ -164,18 +165,50 @@ export default function RenewalsPage() {
       it.expiryDate ? expiryLabel(it.expiryDate) : '—',
       it.daysRemaining ?? '—',
     ])
+
+    // Breakdown par BU
+    const byBU: Record<string, { total: number; expired: number; within30: number }> = {}
+    filtered.forEach(it => {
+      const bu = normSBU(it.bu) || 'Autre'
+      if (!byBU[bu]) byBU[bu] = { total: 0, expired: 0, within30: 0 }
+      byBU[bu].total++
+      if (it.daysRemaining !== null && it.daysRemaining < 0) byBU[bu].expired++
+      if (it.daysRemaining !== null && it.daysRemaining >= 0 && it.daysRemaining <= 30) byBU[bu].within30++
+    })
+
     try {
+      const spec = {
+        filename: `renouvellements_${tab}_${new Date().toISOString().slice(0,10)}.xlsx`,
+        summary: {
+          title: `Résumé Renouvellements ${typeLabel} · ${new Date().toLocaleDateString('fr-MA')}`,
+          kpis: [
+            { label: `Total ${typeLabel.toLowerCase()}`, value: kpis.total, detail: `${filtered.length} affichés après filtres` },
+            { label: 'Expirant < 30 jours', value: kpis.within30, detail: 'Action urgente requise' },
+            { label: 'Expirant < 90 jours', value: kpis.within90, detail: 'À planifier' },
+            { label: 'Expirés', value: kpis.expired, detail: 'Déjà expirés — renouvellement en retard' },
+          ],
+          breakdownTitle: 'Répartition par BU',
+          breakdownHeaders: ['BU', 'Total', 'Expirés', '< 30 jours'],
+          breakdown: Object.entries(byBU)
+            .sort((a, b) => b[1].total - a[1].total)
+            .map(([bu, v]) => [bu, v.total, v.expired, v.within30]),
+        },
+        sheets: [{
+          name: tab === 'licenses' ? 'Licences' : 'Garanties',
+          title: `Renouvellements — ${typeLabel}`,
+          headers,
+          rows,
+          totalsRow: ['TOTAL', `${filtered.length} items`, '', '', '', '', '', '', ''],
+        }],
+      }
       const res = await authFetch('/api/excel', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          filename: `renouvellements_${tab}.xlsx`,
-          sheets: [{ name: tab === 'licenses' ? 'Licences' : 'Garanties', title: `Renouvellements — ${tab === 'licenses' ? 'Licences' : 'Support/Garantie'}`, headers, rows }],
-        }),
+        body: JSON.stringify(spec),
       })
       if (!res.ok) throw new Error('Erreur export')
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a'); a.href = url; a.download = `renouvellements_${tab}.xlsx`
+      const a = document.createElement('a'); a.href = url; a.download = spec.filename
       document.body.appendChild(a); a.click(); document.body.removeChild(a)
       setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch {}
@@ -187,22 +220,18 @@ export default function RenewalsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
               <RefreshCw className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Renouvellements</h1>
-              <p className="text-sm text-slate-500 mt-0.5">{kpis.total} {tab === 'licenses' ? 'licences' : 'garanties'} — {kpis.expired} expirés, {kpis.within30} critiques</p>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Renouvellements</h1>
+              <p className="text-xs text-slate-500">{kpis.total} {tab === 'licenses' ? 'licences' : 'garanties'}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <button onClick={exportExcel}
-              className="flex h-9 items-center gap-2 rounded-xl bg-slate-900 px-4 text-xs font-bold text-white hover:bg-slate-800 transition-colors">
-              <Download className="h-3.5 w-3.5" /> Excel
-            </button>
-            <button onClick={load}
-              className="flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 shadow-sm">
+              <Download className="h-4 w-4" /> Excel
             </button>
           </div>
         </div>

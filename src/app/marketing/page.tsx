@@ -259,12 +259,12 @@ export default function MarketingPage() {
         {/* ── Header ── */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-white">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
               <Megaphone className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-slate-900">Marketing</h1>
-              <p className="text-sm text-slate-500 mt-0.5">Stratégie, campagnes & contenu — Compucom Maroc</p>
+              <h1 className="text-xl font-black text-slate-900 tracking-tight">Marketing</h1>
+              <p className="text-xs text-slate-500">Stratégie, campagnes & contenu — Compucom Maroc</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
