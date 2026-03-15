@@ -157,7 +157,7 @@ export default function PurchasePage() {
   const [existingInfo, setExistingInfo] = useState<any>(null)
   const [draftAge, setDraftAge]         = useState<string | null>(null)
   const [editingIdx, setEditingIdx]     = useState<number | null>(null)
-  const [viewMode, setViewMode]         = useState<'cards' | 'table' | 'devis'>('cards')
+  const [viewMode, setViewMode]         = useState<'cards' | 'table' | 'devis'>('devis')
 
   // Files
   const [bcFile, setBcFile]         = useState<File | null>(null)
@@ -851,16 +851,8 @@ export default function PurchasePage() {
 
         {/* ── Table lignes ── */}
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
-          <div className="mb-4 flex items-center justify-between">
+          <div className="mb-4">
             <SecTitle>📋 Lignes produits · {lines.length} article{lines.length>1?'s':''}</SecTitle>
-            <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5">
-              {([['cards','Cartes'],['table','Tableau'],['devis','Devis Pro']] as const).map(([k,label]) => (
-                <button key={k} onClick={() => setViewMode(k)}
-                  className={`rounded-md px-3 py-1.5 text-[11px] font-semibold transition ${viewMode===k?'bg-white text-slate-800 shadow-sm':'text-slate-500 hover:text-slate-700'}`}>
-                  {label}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Progress */}
