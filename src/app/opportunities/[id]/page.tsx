@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabaseClient'
 import { authFetch } from '@/lib/authFetch'
 import { getSignedUrls } from '@/lib/getSignedUrls'
-import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName, paymentTermLabel, PRESCRIPTION_STATUS_CFG, type PrescriptionStatus, PROJECT_SERVICE_STATUS_CFG, type ProjectServiceStatus, INVOICE_STATUS_CFG, type InvoiceStatus } from '@/lib/utils'
+import { mad, pct, fmtDate, fmtDateTime, STAGE_CFG, SUPPLY_STATUS_CFG, SUPPLY_STATUS_ORDER, type SupplyStatus, LINE_STATUS_CFG, LINE_STATUS_ORDER, type LineStatus, ownerName, paymentTermLabel, PRESCRIPTION_STATUS_CFG, type PrescriptionStatus, PROJECT_SERVICE_STATUS_CFG, type ProjectServiceStatus, INVOICE_STATUS_CFG, type InvoiceStatus, COMPUCOM_EMAILS, getDeploySbuEmails } from '@/lib/utils'
+import { buildDeployEmail } from '@/lib/emailTemplates'
 
 import {
   ArrowLeft, Package, Mail, Edit2, Loader2, X,
@@ -303,6 +304,50 @@ async function openSupplyEmail(deal: Opp, info: PurchaseInfo, senderEmail?: stri
   window.location.href = mailto
 }
 
+// ─── 1-clic : copie HTML deploy email + ouvre Outlook ────────
+async function openDeployEmail(deal: Opp, purchaseInfo: PurchaseInfo, senderEmail?: string | null) {
+  const accountName = deal.accounts?.name || deal.title
+  const senderName = senderEmail ? ownerName(senderEmail) : 'Compucom'
+  const bus = deal.bu ? [deal.bu] : []
+  const hasFiles = false // will be updated when files are available
+
+  // Get PRESTA lines from purchase_lines
+  const prestaLines = purchaseInfo.purchase_lines.filter(l => l.ref.toUpperCase().includes('PRESTA'))
+  if (prestaLines.length === 0) return
+
+  const deployHtml = buildDeployEmail({
+    dealTitle: deal.title,
+    accountName,
+    amount: deal.amount,
+    poNumber: deal.po_number || '',
+    bus,
+    prestaLines: prestaLines.map(l => ({ ref: l.ref, designation: l.designation, qty: l.qty })),
+    notes: purchaseInfo.notes || '',
+    senderName,
+    hasFiles,
+  })
+
+  // Copy HTML to clipboard
+  try {
+    const blob = new Blob([deployHtml], { type: 'text/html' })
+    await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob, 'text/plain': new Blob([deployHtml], { type: 'text/plain' }) })])
+  } catch {
+    await navigator.clipboard.writeText(deployHtml).catch(() => {})
+  }
+
+  // Build mailto
+  const nabilEmail = 'n.bahhar@compucom.ma'
+  const salimEmail = 's.chitachny@compucom.ma'
+  const crossCC = senderEmail === nabilEmail ? salimEmail : nabilEmail
+  const sbuEmails = getDeploySbuEmails(bus)
+  const deployTo = [COMPUCOM_EMAILS.belabar, COMPUCOM_EMAILS.si_infras].join(', ')
+  const deployCC = [crossCC, ...sbuEmails].join(', ')
+  const subject = `Nouveau projet — ${deal.title} (${accountName})`
+
+  const mailto = `mailto:${deployTo}?cc=${encodeURIComponent(deployCC)}&subject=${encodeURIComponent(subject)}`
+  window.location.href = mailto
+}
+
 // ─── Main Page ────────────────────────────────────────────────
 export default function OpportunityDetailPage() {
   const params = useParams()
@@ -322,6 +367,7 @@ export default function OpportunityDetailPage() {
   const [loading, setLoading]     = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [emailCopied, setEmailCopied] = useState(false)
+  const [deployEmailCopied, setDeployEmailCopied] = useState(false)
   const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set())
   const [contacts, setContacts]   = useState<any[]>([])
   const [meetings, setMeetings]   = useState<any[]>([])
@@ -329,7 +375,7 @@ export default function OpportunityDetailPage() {
 
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null)) }, [])
   useEffect(() => { if (id) loadAll() }, [id])
-  useEffect(() => { if (opp) document.title = `${opp.title} \· CRM-PIPE` }, [opp])
+  useEffect(() => { if (opp) document.title = `${opp.title} \· Compucom` }, [opp])
 
   async function loadAll() {
     setLoading(true)
@@ -1129,6 +1175,39 @@ export default function OpportunityDetailPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Deploy email button — available as soon as order is placed */}
+              {opp && info && supply && (() => {
+                const prestaLines = info.purchase_lines.filter(l => l.ref.toUpperCase().includes('PRESTA'))
+                if (prestaLines.length === 0) return null
+                return (
+                  <div className={`mt-4 rounded-xl border-2 p-4 transition-colors ${deployEmailCopied ? 'border-emerald-200 bg-emerald-50' : 'border-violet-200 bg-violet-50/50'}`}>
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-sm font-bold text-slate-900">
+                          Informer Kader — projet à planifier
+                        </div>
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          À : {COMPUCOM_EMAILS.belabar}, {COMPUCOM_EMAILS.si_infras} · CC : équipe SBU
+                        </div>
+                      </div>
+                      <button onClick={async () => {
+                          await openDeployEmail(opp, info, userEmail)
+                          setDeployEmailCopied(true)
+                          setTimeout(() => setDeployEmailCopied(false), 8000)
+                        }}
+                        className={`shrink-0 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors shadow-sm ${deployEmailCopied ? 'bg-emerald-600 text-white' : 'bg-violet-700 text-white hover:bg-violet-800'}`}>
+                        {deployEmailCopied ? <><Check className="h-4 w-4" /> Copié ! Ctrl+V dans Outlook</> : <><Mail className="h-4 w-4" /> Envoyer via Outlook</>}
+                      </button>
+                    </div>
+                    {deployEmailCopied && (
+                      <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 font-medium">
+                        Email copié dans le presse-papier — <strong>Collez (Ctrl+V)</strong> dans le corps du mail Outlook puis Envoyer
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </Section>
           )
         })()}

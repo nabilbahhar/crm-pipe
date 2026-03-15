@@ -1,6 +1,6 @@
 /**
  * @file lib/emailTemplates.ts
- * Helpers pour générer des emails HTML professionnels depuis le CRM.
+ * Helpers pour générer des emails HTML professionnels.
  * Chaque template retourne du HTML prêt à afficher dans un iframe ou copier.
  */
 
@@ -46,6 +46,7 @@ type SupplyEmailData = {
   frais: number
   notes: string
   senderName: string
+  hasFiles?: boolean
 }
 
 export function buildSupplyEmail(data: SupplyEmailData): string {
@@ -67,9 +68,9 @@ export function buildSupplyEmail(data: SupplyEmailData): string {
     suppliersHtml += `
       <div class="section-title">${esc(name)}</div>
       <div style="font-size:12px;color:#64748b;margin-bottom:8px">
-        ${contact.contact ? `👤 ${esc(contact.contact)}` : ''}
-        ${contact.email ? `· 📧 ${esc(contact.email)}` : ''}
-        ${contact.tel ? `· 📞 ${esc(contact.tel)}` : ''}
+        ${contact.contact ? `${esc(contact.contact)}` : ''}
+        ${contact.email ? `· ${esc(contact.email)}` : ''}
+        ${contact.tel ? `· ${esc(contact.tel)}` : ''}
       </div>
       <table>
         <tr><th>Réf</th><th>Désignation</th><th>Qté</th><th>PU Achat</th><th>PT Achat</th></tr>
@@ -83,7 +84,7 @@ export function buildSupplyEmail(data: SupplyEmailData): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseStyle}</head><body>
     <div class="header">
-      <h2>📦 Demande de commande — ${esc(data.dealTitle)}</h2>
+      <h2>Demande de commande — ${esc(data.dealTitle)}</h2>
       <div class="sub">Client : ${esc(data.accountName)} · BC : ${esc(data.poNumber)} · ${new Date().toLocaleDateString('fr-MA')}</div>
     </div>
     <div class="body">
@@ -93,9 +94,10 @@ export function buildSupplyEmail(data: SupplyEmailData): string {
         <div><span style="color:#64748b;font-size:11px">TOTAL ACHAT</span><br><strong>${numFmt(totalAchat)} MAD</strong></div>
       </div>
       ${suppliersHtml}
-      ${data.frais ? `<div style="margin-top:12px;font-size:13px">💰 Frais d'engagement : <strong>${numFmt(data.frais)} MAD</strong></div>` : ''}
-      ${data.notes ? `<div style="margin-top:8px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">📝 ${esc(data.notes)}</div>` : ''}
-      <div class="footer">Envoyé depuis CRM-PIPE par ${esc(data.senderName)}</div>
+      ${data.frais ? `<div style="margin-top:12px;font-size:13px">Frais d'engagement : <strong>${numFmt(data.frais)} MAD</strong></div>` : ''}
+      ${data.notes ? `<div style="margin-top:8px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">${esc(data.notes)}</div>` : ''}
+      ${data.hasFiles ? `<div style="margin-top:12px;font-size:13px;color:#1d4ed8;background:#dbeafe;padding:8px 12px;border-radius:8px"><strong>Pièces jointes :</strong> Voir PJ (BC client, devis, etc.)</div>` : ''}
+      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
     </div>
   </body></html>`
 }
@@ -113,6 +115,7 @@ type KaderEmailData = {
   deliveryLines?: Array<{ designation: string; status: string; eta?: string }>
   notes?: string
   senderName: string
+  hasFiles?: boolean
 }
 
 export function buildKaderEmail(data: KaderEmailData): string {
@@ -122,21 +125,25 @@ export function buildKaderEmail(data: KaderEmailData): string {
   let contentHtml = ''
   if (isPrescription) {
     contentHtml = `
-      <p>Un nouveau dossier nécessite une <strong>qualification technique / prescription</strong> :</p>
+      <p>Bonjour Kader,</p>
+      <p>On a un nouveau dossier chez <strong>${esc(data.accountName)}</strong> qui nécessite un accompagnement technique avant-vente. Voici les détails :</p>
       <table>
-        <tr><td style="color:#64748b;width:140px">Deal</td><td><strong>${esc(data.dealTitle)}</strong></td></tr>
+        <tr><td style="color:#64748b;width:140px">Affaire</td><td><strong>${esc(data.dealTitle)}</strong></td></tr>
         <tr><td style="color:#64748b">Client</td><td>${esc(data.accountName)}</td></tr>
         <tr><td style="color:#64748b">Montant</td><td>${numFmt(data.amount)} MAD</td></tr>
         <tr><td style="color:#64748b">BU concernées</td><td>${data.bus.map(b => `<span class="badge badge-blue">${esc(b)}</span>`).join(' ')}</td></tr>
         ${data.presalesAssigned ? `<tr><td style="color:#64748b">Presales assigné</td><td>${esc(data.presalesAssigned)}</td></tr>` : ''}
       </table>
-      ${data.notes ? `<div style="margin-top:12px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">📝 ${esc(data.notes)}</div>` : ''}
+      <p>Est-ce que tu peux nous affecter un ingénieur presales pour qualifier le besoin et accompagner le client ? Merci de me tenir informé de la disponibilité.</p>
+      ${data.notes ? `<div style="margin-top:12px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">${esc(data.notes)}</div>` : ''}
+      ${data.hasFiles ? `<div style="margin-top:12px;font-size:13px;color:#1d4ed8;background:#dbeafe;padding:8px 12px;border-radius:8px"><strong>Pièces jointes :</strong> Voir PJ</div>` : ''}
     `
   } else {
     contentHtml = `
-      <p>Voici le point d'avancement du projet <strong>${esc(data.dealTitle)}</strong> (${esc(data.accountName)}) :</p>
+      <p>Bonjour Kader,</p>
+      <p>Voici le point d'avancement du projet <strong>${esc(data.dealTitle)}</strong> chez <strong>${esc(data.accountName)}</strong> :</p>
       ${data.deliveryLines?.length ? `
-        <div class="section-title">📦 Lignes matériel</div>
+        <div class="section-title">Lignes matériel</div>
         <table>
           <tr><th>Désignation</th><th>Statut</th><th>ETA</th></tr>
           ${data.deliveryLines.map(l => `<tr>
@@ -147,7 +154,7 @@ export function buildKaderEmail(data: KaderEmailData): string {
         </table>
       ` : ''}
       ${data.services?.length ? `
-        <div class="section-title">🔧 Prestations</div>
+        <div class="section-title">Prestations</div>
         <table>
           <tr><th>Prestation</th><th>Ingénieur</th><th>Statut</th></tr>
           ${data.services.map(s => `<tr>
@@ -157,18 +164,19 @@ export function buildKaderEmail(data: KaderEmailData): string {
           </tr>`).join('')}
         </table>
       ` : ''}
-      ${data.notes ? `<div style="margin-top:12px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">📝 ${esc(data.notes)}</div>` : ''}
+      ${data.notes ? `<div style="margin-top:12px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">${esc(data.notes)}</div>` : ''}
+      ${data.hasFiles ? `<div style="margin-top:12px;font-size:13px;color:#1d4ed8;background:#dbeafe;padding:8px 12px;border-radius:8px"><strong>Pièces jointes :</strong> Voir PJ</div>` : ''}
     `
   }
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseStyle}</head><body>
     <div class="header">
-      <h2>${isPrescription ? '🎯 Demande de prescription' : '🏗️ Suivi projet'} — ${esc(data.dealTitle)}</h2>
+      <h2>${isPrescription ? 'Demande d\'accompagnement technique' : 'Suivi projet'} — ${esc(data.dealTitle)}</h2>
       <div class="sub">${esc(data.accountName)} · ${numFmt(data.amount)} MAD · ${new Date().toLocaleDateString('fr-MA')}</div>
     </div>
     <div class="body">
       ${contentHtml}
-      <div class="footer">Envoyé depuis CRM-PIPE par ${esc(data.senderName)}</div>
+      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
     </div>
   </body></html>`
 }
@@ -184,6 +192,7 @@ type DeployEmailData = {
   prestaLines: Array<{ ref: string; designation: string; qty: number }>
   notes: string
   senderName: string
+  hasFiles?: boolean
 }
 
 export function buildDeployEmail(data: DeployEmailData): string {
@@ -191,17 +200,19 @@ export function buildDeployEmail(data: DeployEmailData): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseStyle}</head><body>
     <div class="header">
-      <h2>🚀 Nouveau projet déploiement — ${esc(data.dealTitle)}</h2>
+      <h2>Nouveau projet — ${esc(data.dealTitle)}</h2>
       <div class="sub">Client : ${esc(data.accountName)} · BC : ${esc(data.poNumber)} · ${new Date().toLocaleDateString('fr-MA')}</div>
     </div>
     <div class="body">
-      <p>Une commande a été placée avec des <strong>lignes PRESTA</strong>. Un projet de déploiement doit être initié :</p>
+      <p>Bonjour Kader,</p>
+      <p>On vient de gagner l'affaire <strong>${esc(data.dealTitle)}</strong> chez <strong>${esc(data.accountName)}</strong>.</p>
+      <p>Ce projet inclut une partie prestation. Voici le détail :</p>
       <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px">
-        <div><span style="color:#64748b;font-size:11px">MONTANT DEAL</span><br><strong>${numFmt(data.amount)} MAD</strong></div>
+        <div><span style="color:#64748b;font-size:11px">MONTANT AFFAIRE</span><br><strong>${numFmt(data.amount)} MAD</strong></div>
         <div><span style="color:#64748b;font-size:11px">BC CLIENT</span><br><strong>${esc(data.poNumber)}</strong></div>
         <div><span style="color:#64748b;font-size:11px">BU CONCERNÉES</span><br>${data.bus.map(b => `<span class="badge badge-blue">${esc(b)}</span>`).join(' ')}</div>
       </div>
-      <div class="section-title">🔧 Prestations à déployer</div>
+      <div class="section-title">Prestations concernées</div>
       <table>
         <tr><th>Réf</th><th>Désignation</th><th style="text-align:center">Qté</th></tr>
         ${data.prestaLines.map(l => `<tr>
@@ -210,8 +221,16 @@ export function buildDeployEmail(data: DeployEmailData): string {
           <td style="text-align:center">${l.qty}</td>
         </tr>`).join('')}
       </table>
-      ${data.notes ? `<div style="margin-top:12px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">📝 ${esc(data.notes)}</div>` : ''}
-      <div class="footer">Envoyé depuis CRM-PIPE par ${esc(data.senderName)}</div>
+      <p>Est-ce que tu peux prendre en charge la gestion de ce projet ? J'ai besoin de :</p>
+      <ul style="font-size:13px;color:#334155;margin:8px 0 16px;padding-left:20px">
+        <li>Affecter les ressources nécessaires (ingénieur déploiement / technicien) selon les BU concernées</li>
+        <li>Planifier les interventions avec une date prévisionnelle</li>
+        <li>Assurer le suivi jusqu'à la signature du PV de réception</li>
+      </ul>
+      <p>Le PV final est une condition de facturation sur cette affaire. Merci de me faire un retour dès que possible.</p>
+      ${data.notes ? `<div style="margin-top:12px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">${esc(data.notes)}</div>` : ''}
+      ${data.hasFiles ? `<div style="margin-top:12px;font-size:13px;color:#1d4ed8;background:#dbeafe;padding:8px 12px;border-radius:8px"><strong>Pièces jointes :</strong> Voir PJ (devis, BC, documents techniques)</div>` : ''}
+      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
     </div>
   </body></html>`
 }
@@ -235,7 +254,7 @@ export function buildInvoiceReminderEmail(data: InvoiceEmailData): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseStyle}</head><body>
     <div class="header">
-      <h2>🔔 Relance facture — ${esc(data.invoiceNumber)}</h2>
+      <h2>Relance facture — ${esc(data.invoiceNumber)}</h2>
       <div class="sub">${esc(data.accountName)} · ${new Date().toLocaleDateString('fr-MA')}</div>
     </div>
     <div class="body">
@@ -250,7 +269,7 @@ export function buildInvoiceReminderEmail(data: InvoiceEmailData): string {
         <tr><td style="color:#64748b">Modalités</td><td>${esc(data.paymentTerms)}</td></tr>
       </table>
       <p>Merci de relancer le client pour le règlement de cette facture.</p>
-      <div class="footer">Envoyé depuis CRM-PIPE par ${esc(data.senderName)}</div>
+      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
     </div>
   </body></html>`
 }
@@ -270,7 +289,7 @@ export function buildExpenseEmail(data: ExpenseEmailData): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseStyle}</head><body>
     <div class="header">
-      <h2>💰 Note de frais — ${monthNames[data.month - 1] || 'Mois inconnu'} ${data.year}</h2>
+      <h2>Note de frais — ${monthNames[data.month - 1] || 'Mois inconnu'} ${data.year}</h2>
       <div class="sub">${esc(data.senderName)} · ${new Date().toLocaleDateString('fr-MA')}</div>
     </div>
     <div class="body">
@@ -287,7 +306,7 @@ export function buildExpenseEmail(data: ExpenseEmailData): string {
         </tr>
       </table>
       <p style="font-size:13px;color:#64748b">Les pièces justificatives sont jointes à cette note.</p>
-      <div class="footer">Envoyé depuis CRM-PIPE par ${esc(data.senderName)}</div>
+      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
     </div>
   </body></html>`
 }
@@ -310,7 +329,7 @@ export function buildSupportEmail(data: SupportEmailData): string {
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">${baseStyle}</head><body>
     <div class="header">
-      <h2>🛡️ Ticket Support — ${esc(data.ticketTitle)}</h2>
+      <h2>Ticket Support — ${esc(data.ticketTitle)}</h2>
       <div class="sub">${esc(data.accountName)} · ${new Date().toLocaleDateString('fr-MA')}</div>
     </div>
     <div class="body">
@@ -322,7 +341,7 @@ export function buildSupportEmail(data: SupportEmailData): string {
         <tr><td style="color:#64748b">Priorité</td><td><span class="badge ${prioColor}">${esc(data.priority)}</span></td></tr>
       </table>
       ${data.description ? `<div style="margin-top:16px"><div class="section-title">Description</div><p style="font-size:13px">${esc(data.description)}</p></div>` : ''}
-      <div class="footer">Envoyé depuis CRM-PIPE par ${esc(data.senderName)}</div>
+      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
     </div>
   </body></html>`
 }
