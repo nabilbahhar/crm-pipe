@@ -835,6 +835,12 @@ export default function SupplyPage() {
   const [buFilter, setBuFilter] = useState('Tous')
   const [vendorFilter, setVendorFilter] = useState('Tous')
   const [factureOrder, setFactureOrder] = useState<Order | null>(null)
+  const [sortCol, setSortCol] = useState<'date' | 'client' | 'montant' | 'bu'>('date')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir(col === 'montant' ? 'desc' : 'asc') }
+  }
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok })
@@ -905,8 +911,21 @@ export default function SupplyPage() {
       place: [], commande: [], en_stock: [], livre: [], facture: [],
     }
     filtered.forEach(o => { if (g[o.status as SupplyStatus]) g[o.status as SupplyStatus].push(o) })
+    // Sort each group
+    const dir = sortDir === 'asc' ? 1 : -1
+    for (const s of ALL_STATUSES) {
+      g[s].sort((a, b) => {
+        switch (sortCol) {
+          case 'date': return dir * ((new Date(a.placed_at || 0).getTime()) - (new Date(b.placed_at || 0).getTime()))
+          case 'client': return dir * ((a.opportunities?.accounts?.name || '').localeCompare(b.opportunities?.accounts?.name || ''))
+          case 'montant': return dir * ((a.opportunities?.amount || 0) - (b.opportunities?.amount || 0))
+          case 'bu': return dir * ((a.opportunities?.bu || '').localeCompare(b.opportunities?.bu || ''))
+          default: return 0
+        }
+      })
+    }
     return g
-  }, [filtered])
+  }, [filtered, sortCol, sortDir])
 
   async function changeStatus(order: Order, newStatus: SupplyStatus) {
     if (newStatus === order.status || updating) return
@@ -1190,10 +1209,18 @@ export default function SupplyPage() {
                       <table className="w-full min-w-[900px] text-sm">
                         <thead>
                           <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold text-slate-400">
-                            <th className="px-3 py-2.5 text-left w-[7%]">Reçu le</th>
-                            <th className="px-4 py-2.5 text-left w-[20%]">Compte / Deal</th>
-                            <th className="px-4 py-2.5 text-center w-[6%]">BU</th>
-                            <th className="px-4 py-2.5 text-right w-[10%]">Montant</th>
+                            <th className="px-3 py-2.5 text-left w-[7%] cursor-pointer select-none hover:text-slate-600" onClick={() => toggleSort('date')}>
+                              Reçu le {sortCol === 'date' && <span>{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                            </th>
+                            <th className="px-4 py-2.5 text-left w-[20%] cursor-pointer select-none hover:text-slate-600" onClick={() => toggleSort('client')}>
+                              Compte / Deal {sortCol === 'client' && <span>{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                            </th>
+                            <th className="px-4 py-2.5 text-center w-[6%] cursor-pointer select-none hover:text-slate-600" onClick={() => toggleSort('bu')}>
+                              BU {sortCol === 'bu' && <span>{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                            </th>
+                            <th className="px-4 py-2.5 text-right w-[10%] cursor-pointer select-none hover:text-slate-600" onClick={() => toggleSort('montant')}>
+                              Montant {sortCol === 'montant' && <span>{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                            </th>
                             <th className="px-4 py-2.5 text-left w-[8%]">PO</th>
                             <th className="px-4 py-2.5 text-left w-[12%]">Paiement</th>
                             <th className="px-4 py-2.5 text-center w-[8%]">Lignes</th>
