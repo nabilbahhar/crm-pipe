@@ -459,6 +459,11 @@ export default function OpportunityDetailPage() {
   const supIdx        = supply ? STATUS_ORDER.indexOf(supply.status as SupplyStatus) : -1
   const supCfg        = supply ? STATUS_CFG[supply.status as SupplyStatus] : null
   const commandePlacee = supIdx >= 0 // supply order exists (placé or beyond)
+  // Fiche locked only when ALL lines are en_stock or beyond (livre, facture)
+  const allLinesStocked = !!(info && info.purchase_lines.length > 0 && info.purchase_lines.every(l => {
+    const ls = l.line_status as string
+    return ls === 'en_stock' || ls === 'livre' || ls === 'facture'
+  }))
   const cDate         = closingDate(opp)
   const stageCfg      = STAGE_CFG[opp.stage] || { bg: 'bg-slate-100', text: 'text-slate-600' }
 
@@ -506,11 +511,11 @@ export default function OpportunityDetailPage() {
               {opp.po_number && <><span className="text-slate-300">·</span><span className="font-medium">PO {opp.po_number}</span></>}
             </p>
           </div>
-          {isWon && !commandePlacee && (
+          {isWon && !allLinesStocked && (
             <button onClick={() => router.push(`/opportunities/${id}/purchase`)}
-              className="shrink-0 inline-flex h-9 items-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-colors bg-slate-900 hover:bg-slate-800">
+              className={`shrink-0 inline-flex h-9 items-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-colors ${commandePlacee ? 'bg-blue-600 hover:bg-blue-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
               <Package className="h-4 w-4" />
-              {ficheComplete ? 'Modifier fiche' : info ? 'Compléter fiche' : 'Remplir fiche'}
+              {commandePlacee ? 'Modifier fiche' : info ? 'Continuer' : 'Remplir fiche'}
             </button>
           )}
         </div>
