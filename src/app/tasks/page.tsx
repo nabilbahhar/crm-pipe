@@ -1213,9 +1213,9 @@ export default function TasksPage() {
                             <div className="flex justify-center">
                               <button onClick={() => router.push(`/opportunities/${t.entity_id}/purchase`)}
                                 className={`inline-flex h-8 items-center gap-1.5 rounded-xl px-3 text-xs font-bold text-white transition-colors shadow-sm
-                                  ${t.ficheStatus === 'complete' ? 'bg-emerald-600 hover:bg-emerald-700' : t.ficheStatus === 'en_cours' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'}`}>
+                                  ${t.ficheStatus === 'a_faire' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'}`}>
                                 <Package className="h-3.5 w-3.5" />
-                                {t.ficheStatus === 'complete' ? 'Prêt à placer' : t.ficheStatus === 'en_cours' ? 'Continuer' : 'Remplir fiche'}
+                                {t.ficheStatus === 'a_faire' ? 'Remplir fiche' : 'Continuer'}
                               </button>
                             </div>
                           </td>
