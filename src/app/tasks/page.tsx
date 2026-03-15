@@ -243,25 +243,29 @@ export default function TasksPage() {
 
     const wonIds = won.map((d: any) => d.id)
 
-    // Fetch purchase_info + supply_orders in parallel
-    const [infosRes, supplyRaw] = await Promise.all([
-      supabase.from('purchase_info')
-        .select('opportunity_id, purchase_lines(id, pu_achat, fournisseur, designation)')
-        .in('opportunity_id', wonIds),
+    // Fetch purchase_info (via server API to bypass RLS) + supply_orders in parallel
+    const infoPromises = wonIds.map(wid =>
+      authFetch(`/api/purchase-save?opportunity_id=${wid}`).then(r => r.ok ? r.json() : { info: null }).catch(() => ({ info: null }))
+    )
+    const [supplyRaw, ...infoResults] = await Promise.all([
       authFetch('/api/supply').then(r => r.json()).catch(() => ({ orders: [] })),
+      ...infoPromises,
     ])
-
-    if (infosRes.error) console.warn('loadAchats purchase_info error:', infosRes.error.message)
 
     // Build set of opportunity_ids that already have a supply_order (commande placée)
     const supplyOrders: any[] = supplyRaw?.orders || []
     const placedOppIds = new Set(supplyOrders.map((o: any) => o.opportunity_id))
 
     const infoMap = new Map<string, { total: number; complete: number }>()
-    ;(infosRes.data || []).forEach((info: any) => {
+    wonIds.forEach((wid, idx) => {
+      const info = infoResults[idx]?.info
+      if (!info) return
       const lines: any[] = info.purchase_lines || []
-      const complete = lines.filter((ln: any) => Number(ln.pu_achat) > 0 && ln.fournisseur?.trim()).length
-      infoMap.set(info.opportunity_id, { total: lines.length, complete })
+      const complete = lines.filter((ln: any) => {
+        const isPresta = ln.ref?.toUpperCase().includes('PRESTA')
+        return Number(ln.pu_achat) > 0 && (isPresta || ln.fournisseur?.trim())
+      }).length
+      infoMap.set(wid, { total: lines.length, complete })
     })
 
     return won
