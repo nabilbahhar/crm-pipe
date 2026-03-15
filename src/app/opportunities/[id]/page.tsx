@@ -482,10 +482,10 @@ export default function OpportunityDetailPage() {
             <>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
                 <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">N° PO</div>
-                <div className="text-sm font-bold text-slate-800">{opp.po_number || '\—'}</div>
+                <div className="text-sm font-bold text-slate-800">{opp.po_number || '—'}</div>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Cl\ôture</div>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Clôture</div>
                 <div className="text-sm font-bold text-slate-800">{fmtDate(cDate)}</div>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
@@ -497,10 +497,10 @@ export default function OpportunityDetailPage() {
             <>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
                 <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Stage</div>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${stageCfg.bg} ${stageCfg.text}`}>{opp.stage || '\—'}</span>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${stageCfg.bg} ${stageCfg.text}`}>{opp.stage || '—'}</span>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Cl\ôture</div>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Clôture</div>
                 <div className="text-sm font-bold text-slate-800">{fmtDate(cDate)}</div>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
@@ -512,10 +512,10 @@ export default function OpportunityDetailPage() {
             <>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
                 <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Stage</div>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${stageCfg.bg} ${stageCfg.text}`}>{opp.stage || '\—'}</span>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${stageCfg.bg} ${stageCfg.text}`}>{opp.stage || '—'}</span>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Probabilit\é</div>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Probabilité</div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-1.5 rounded-full bg-slate-100">
                     <div className="h-full rounded-full bg-emerald-500" style={{ width: `${opp.prob||0}%` }} />
@@ -524,7 +524,7 @@ export default function OpportunityDetailPage() {
                 </div>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Cl\ôture</div>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Clôture</div>
                 <div className="text-sm font-bold text-slate-800">{fmtDate(cDate)}</div>
               </div>
             </>
@@ -538,7 +538,7 @@ export default function OpportunityDetailPage() {
             {isWon && <NavPill href="#section-achat" label="Achat" alert={!!(info && !ficheComplete)} />}
             {supply && <NavPill href="#section-supply" label="Supply" alert={lateDeliveries > 0} />}
             {prescription && <NavPill href="#section-prescription" label="Prescription" />}
-            {deployServices.length > 0 && <NavPill href="#section-deploiement" label="D\éploiement" />}
+            {deployServices.length > 0 && <NavPill href="#section-deploiement" label="Déploiement" />}
             {isWon && <NavPill href="#section-facturation" label="Facturation" />}
             {tickets.length > 0 && <NavPill href="#section-support" label="Support" alert={openTickets > 0} />}
             {activities.length > 0 && <NavPill href="#section-historique" label="Historique" />}
@@ -551,15 +551,15 @@ export default function OpportunityDetailPage() {
           <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
             {opp.accounts?.sector && <DetailRow icon={<Tag className="h-3.5 w-3.5"/>} label="Secteur" value={opp.accounts.sector} />}
             {opp.accounts?.segment && <DetailRow icon={<Target className="h-3.5 w-3.5"/>} label="Segment" value={opp.accounts.segment} />}
-            {opp.accounts?.region && <DetailRow icon={<MapPin className="h-3.5 w-3.5"/>} label="R\égion" value={opp.accounts.region} />}
+            {opp.accounts?.region && <DetailRow icon={<MapPin className="h-3.5 w-3.5"/>} label="Région" value={opp.accounts.region} />}
             {opp.contact_name && <DetailRow icon={<User className="h-3.5 w-3.5"/>} label="Contact" value={opp.contact_name} />}
             {opp.contact_email && <DetailRow icon={<Mail className="h-3.5 w-3.5"/>} label="Email contact" value={opp.contact_email} />}
             {opp.vendor && !opp.multi_bu && <DetailRow icon={<Building2 className="h-3.5 w-3.5"/>} label="Vendor / Constructeur" value={opp.vendor} />}
             {opp.po_number && <DetailRow icon={<Tag className="h-3.5 w-3.5"/>} label="N\° PO" value={opp.po_number} />}
             {opp.forecast && <DetailRow icon={<TrendingUp className="h-3.5 w-3.5"/>} label="Forecast" value={opp.forecast} />}
             {opp.owner_email && <DetailRow icon={<User className="h-3.5 w-3.5"/>} label="Owner" value={ownerName(opp.owner_email)} />}
-            <DetailRow icon={<Calendar className="h-3.5 w-3.5"/>} label="Cr\é\é le" value={fmtDate(opp.created_at)} />
-            {opp.updated_at && <DetailRow icon={<Clock className="h-3.5 w-3.5"/>} label="Mis \à jour" value={fmtDate(opp.updated_at)} />}
+            <DetailRow icon={<Calendar className="h-3.5 w-3.5"/>} label="Créé le" value={fmtDate(opp.created_at)} />
+            {opp.updated_at && <DetailRow icon={<Clock className="h-3.5 w-3.5"/>} label="Mis à jour" value={fmtDate(opp.updated_at)} />}
           </div>
 
           {/* Contacts Compte */}
@@ -599,7 +599,7 @@ export default function OpportunityDetailPage() {
             const BG_COLORS = ['bg-indigo-50', 'bg-emerald-50', 'bg-amber-50', 'bg-rose-50', 'bg-cyan-50', 'bg-purple-50']
             return (
               <div className="mt-4 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/50 to-violet-50/50 px-4 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-500 mb-3">{'🏢'} R\épartition par Business Unit</div>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-500 mb-3">{'🏢'} Répartition par Business Unit</div>
                 {/* Progress bar */}
                 <div className="h-3 rounded-full overflow-hidden flex mb-3">
                   {opp.bu_lines.map((l: any, i: number) => {
@@ -656,7 +656,7 @@ export default function OpportunityDetailPage() {
                         {dr.expiry_date ? (
                           <div>
                             <div className={`text-xs font-bold ${isExpired ? 'text-red-600' : expiringSoon ? 'text-amber-600' : 'text-emerald-600'}`}>
-                              {isExpired ? `Expir\é (${Math.abs(daysLeft!)}j)` : expiringSoon ? `Expire dans ${daysLeft}j` : `Valide (${daysLeft}j)`}
+                              {isExpired ? `Expiré (${Math.abs(daysLeft!)}j)` : expiringSoon ? `Expire dans ${daysLeft}j` : `Valide (${daysLeft}j)`}
                             </div>
                             <div className="text-[10px] text-slate-400">{fmtDate(dr.expiry_date)}</div>
                           </div>
@@ -674,7 +674,7 @@ export default function OpportunityDetailPage() {
           {/* Next step */}
           {opp.next_step && (
             <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-blue-500 mb-1.5">{'🎯'} Prochaine \étape</div>
+              <div className="text-[10px] font-bold uppercase tracking-wide text-blue-500 mb-1.5">{'🎯'} Prochaine étape</div>
               <p className="text-sm text-blue-800 leading-relaxed">{opp.next_step}</p>
             </div>
           )}
@@ -712,7 +712,7 @@ export default function OpportunityDetailPage() {
             badge={
               commandePlacee ? (
                 <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Commande plac\ée
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Commande placée
                 </span>
               ) : undefined
             }>
@@ -722,9 +722,9 @@ export default function OpportunityDetailPage() {
               <div>
                 <div className={`text-sm font-black ${ficheComplete ? 'text-emerald-900' : info ? 'text-blue-900' : 'text-amber-900'}`}>
                   Fiche Achat
-                  {ficheComplete && <span className="ml-2 text-xs font-normal text-emerald-600">Compl\ète {'\✓'}</span>}
+                  {ficheComplete && <span className="ml-2 text-xs font-normal text-emerald-600">Complète {'✓'}</span>}
                   {info && !ficheComplete && <span className="ml-2 text-xs font-normal text-blue-600">En cours {'\·'} {linesOk}/{info.purchase_lines.length} lignes</span>}
-                  {!info && <span className="ml-2 text-xs font-normal text-amber-600">{'\À'} remplir</span>}
+                  {!info && <span className="ml-2 text-xs font-normal text-amber-600">{'À'} remplir</span>}
                 </div>
                 {info && (
                   <div className="text-[11px] text-slate-400 mt-0.5">
@@ -851,36 +851,36 @@ export default function OpportunityDetailPage() {
                 <div className="grid gap-4 lg:grid-cols-3">
                   {/* Recap */}
                   <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-2">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{'📊'} R\écap financier</div>
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{'📊'} Récap financier</div>
                     <RRow label="Total vente HT"  value={mad(totalVente)} bold />
-                    <RRow label="Total achat HT"  value={totalAchat > 0 ? mad(totalAchat) : '\—'} />
-                    <RRow label="Marge brute"     value={totalAchat > 0 ? mad(margeBrute) : '\—'}
+                    <RRow label="Total achat HT"  value={totalAchat > 0 ? mad(totalAchat) : '—'} />
+                    <RRow label="Marge brute"     value={totalAchat > 0 ? mad(margeBrute) : '—'}
                       sub={totalAchat > 0 ? pct(totalVente > 0 ? (margeBrute/totalVente)*100 : 0) : undefined}
                       color={margeBrute >= 0 ? 'emerald' : 'red'} />
                     {info.frais_engagement > 0 && (
                       <div className="border-t border-slate-200 pt-2">
-                        <RRow label="Frais engagement" value={`\− ${mad(info.frais_engagement)}`} color="amber" />
+                        <RRow label="Frais engagement" value={`− ${mad(info.frais_engagement)}`} color="amber" />
                       </div>
                     )}
                     <div className="border-t border-slate-200 pt-2">
-                      <RRow label="Marge nette" value={totalAchat > 0 ? mad(margeNette) : '\—'}
+                      <RRow label="Marge nette" value={totalAchat > 0 ? mad(margeNette) : '—'}
                         sub={totalAchat > 0 ? pct(margePctNette) : undefined}
                         color={margePctNette < 10 ? 'red' : 'emerald'} bold />
                     </div>
                     {info.justif_reason && (
                       <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                        <div className="text-[10px] font-bold text-amber-700 uppercase mb-1">{'\⚠'} Marge faible</div>
+                        <div className="text-[10px] font-bold text-amber-700 uppercase mb-1">{'⚠'} Marge faible</div>
                         <div className="text-xs font-medium text-amber-800">{info.justif_reason}</div>
                         <div className="mt-1 text-[10px] font-bold">
                           {info.approved_by
-                            ? <span className="text-emerald-600">{'\✓'} Valid\é par {info.approved_by}</span>
+                            ? <span className="text-emerald-600">{'✓'} Validé par {info.approved_by}</span>
                             : <span className="text-amber-500 flex items-center gap-1"><Clock className="h-3 w-3" /> En attente Achraf</span>}
                         </div>
                       </div>
                     )}
                     {info.payment_terms && (
                       <div className="border-t border-slate-200 pt-2">
-                        <RRow label="Modalit\és paiement" value={(() => {
+                        <RRow label="Modalités paiement" value={(() => {
                           try {
                             const parsed = JSON.parse(info.payment_terms!)
                             return parsed.template ? paymentTermLabel(parsed.template) : paymentTermLabel(info.payment_terms!)
@@ -937,11 +937,11 @@ export default function OpportunityDetailPage() {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <div className={`text-sm font-bold ${canEmail ? 'text-slate-900' : 'text-slate-400'}`}>
-                        {canEmail ? '\✅ Fiche compl\ète \— pr\ête \à envoyer \à Supply Chain' : '\⏳ Compl\étez la fiche pour activer la commande'}
+                        {canEmail ? '✅ Fiche complète — prête à envoyer à Supply Chain' : '⏳ Complétez la fiche pour activer la commande'}
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">
                         À : supplychain@compucom.ma · CC : n.bahhar@compucom.ma
-                        {margePctBrute < 10 && totalAchat > 0 && <>, A.lahkim@compucom.ma <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-700">{'\⚠'} Achraf</span></>}
+                        {margePctBrute < 10 && totalAchat > 0 && <>, A.lahkim@compucom.ma <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-700">{'⚠'} Achraf</span></>}
                       </div>
                     </div>
                     <button onClick={async () => {
@@ -952,12 +952,12 @@ export default function OpportunityDetailPage() {
                         }
                       }} disabled={!canEmail}
                       className={`shrink-0 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors shadow-sm ${emailCopied ? 'bg-emerald-600 text-white' : canEmail ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
-                      {emailCopied ? <><Check className="h-4 w-4" /> Copi\é ! Ctrl+V dans Outlook</> : <><Mail className="h-4 w-4" /> Commander via Outlook</>}
+                      {emailCopied ? <><Check className="h-4 w-4" /> Copié ! Ctrl+V dans Outlook</> : <><Mail className="h-4 w-4" /> Commander via Outlook</>}
                     </button>
                   </div>
                   {emailCopied && (
                     <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 font-medium">
-                      {'\✅'} Email copi\é dans le presse-papier \— <strong>Collez (Ctrl+V)</strong> dans le corps du mail Outlook puis Envoyer
+                      {'✅'} Email copié dans le presse-papier — <strong>Collez (Ctrl+V)</strong> dans le corps du mail Outlook puis Envoyer
                     </div>
                   )}
                 </div>
@@ -966,7 +966,7 @@ export default function OpportunityDetailPage() {
               <div className="flex flex-col items-center justify-center py-12 px-8 text-center">
                 <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-2xl border border-amber-100">{'📦'}</div>
                 <p className="text-base font-black text-slate-800">Aucune fiche achat</p>
-                <p className="text-sm text-slate-400 mt-1 mb-4 max-w-xs leading-relaxed">Remplis la fiche achat pour d\éclencher le processus de commande Supply Chain.</p>
+                <p className="text-sm text-slate-400 mt-1 mb-4 max-w-xs leading-relaxed">Remplis la fiche achat pour déclencher le processus de commande Supply Chain.</p>
                 <button onClick={() => router.push(`/opportunities/${id}/purchase`)}
                   className="inline-flex h-9 items-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-bold text-white hover:bg-amber-600 transition-colors">
                   <Package className="h-4 w-4" /> Remplir la fiche achat
@@ -1015,16 +1015,16 @@ export default function OpportunityDetailPage() {
             {/* Supply key dates */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4">
               {[
-                { label: 'Plac\é le', date: supply.placed_at },
-                { label: 'Command\é le', date: supply.ordered_at },
-                { label: 'Re\çu le', date: supply.received_at },
-                { label: 'Livr\é le', date: supply.delivered_at },
-                { label: 'Factur\é le', date: supply.invoiced_at },
+                { label: 'Placé le', date: supply.placed_at },
+                { label: 'Commandé le', date: supply.ordered_at },
+                { label: 'Reçu le', date: supply.received_at },
+                { label: 'Livré le', date: supply.delivered_at },
+                { label: 'Facturé le', date: supply.invoiced_at },
               ].map(d => (
                 <div key={d.label} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-center">
                   <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{d.label}</div>
                   <div className={`text-xs font-bold mt-0.5 ${d.date ? 'text-slate-700' : 'text-slate-300'}`}>
-                    {d.date ? fmtDate(d.date) : '\—'}
+                    {d.date ? fmtDate(d.date) : '—'}
                   </div>
                 </div>
               ))}
@@ -1046,7 +1046,7 @@ export default function OpportunityDetailPage() {
               <div className="flex items-center gap-6">
                 {prescription.assigned_to && (
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Ing\énieur presales</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Ingénieur presales</div>
                     <div className="text-sm font-semibold text-slate-700">{prescription.assigned_to}</div>
                   </div>
                 )}
@@ -1079,7 +1079,7 @@ export default function OpportunityDetailPage() {
           const done = deployServices.filter(s => s.status === 'termine').length
           const pctDeploy = Math.round((done / deployServices.length) * 100)
           return (
-            <Section id="deploiement" title="Projet & D\éploiement" icon="🚀"
+            <Section id="deploiement" title="Projet & Déploiement" icon="🚀"
               badge={
                 <div className="flex items-center gap-2">
                   <div className="h-2 w-24 rounded-full bg-slate-200 overflow-hidden">
@@ -1095,9 +1095,9 @@ export default function OpportunityDetailPage() {
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/30 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       <th className="px-5 py-2 text-left">Titre</th>
-                      <th className="px-4 py-2 text-left">Ing\énieur</th>
+                      <th className="px-4 py-2 text-left">Ingénieur</th>
                       <th className="px-4 py-2 text-center">Statut</th>
-                      <th className="px-4 py-2 text-left">D\ébut</th>
+                      <th className="px-4 py-2 text-left">Début</th>
                       <th className="px-4 py-2 text-left">Fin</th>
                       <th className="px-4 py-2 text-left">Notes</th>
                     </tr>
@@ -1108,7 +1108,7 @@ export default function OpportunityDetailPage() {
                       return (
                         <tr key={svc.id} className="hover:bg-slate-50/50">
                           <td className="px-5 py-2.5 font-semibold text-slate-800">{svc.title}</td>
-                          <td className="px-4 py-2.5 text-slate-600">{svc.assigned_to || '\—'}</td>
+                          <td className="px-4 py-2.5 text-slate-600">{svc.assigned_to || '—'}</td>
                           <td className="px-4 py-2.5 text-center">
                             <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${cfg.bg} ${cfg.color}`}>
                               {cfg.icon} {cfg.label}
@@ -1116,7 +1116,7 @@ export default function OpportunityDetailPage() {
                           </td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{fmtDate(svc.start_date)}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{fmtDate(svc.end_date)}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-400 max-w-[150px] truncate" title={svc.notes || ''}>{svc.notes || '\—'}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400 max-w-[150px] truncate" title={svc.notes || ''}>{svc.notes || '—'}</td>
                         </tr>
                       )
                     })}
@@ -1151,7 +1151,7 @@ export default function OpportunityDetailPage() {
               <div className="text-center py-4">
                 <p className="text-sm text-slate-400">Aucune facture pour ce deal</p>
                 <Link href="/invoices" className="text-xs text-blue-600 hover:underline font-semibold mt-1 inline-block">
-                  G\érer les factures {'\→'}
+                  Gérer les factures {'→'}
                 </Link>
               </div>
             ) : (
@@ -1162,8 +1162,8 @@ export default function OpportunityDetailPage() {
                       <th className="px-5 py-2 text-left">N\° Facture</th>
                       <th className="px-4 py-2 text-right">Montant</th>
                       <th className="px-4 py-2 text-center">Lignes</th>
-                      <th className="px-4 py-2 text-left">\Émise le</th>
-                      <th className="px-4 py-2 text-left">\Éch\éance</th>
+                      <th className="px-4 py-2 text-left">Émise le</th>
+                      <th className="px-4 py-2 text-left">Échéance</th>
                       <th className="px-4 py-2 text-center">Statut</th>
                     </tr>
                   </thead>
@@ -1175,7 +1175,7 @@ export default function OpportunityDetailPage() {
                       return (
                         <React.Fragment key={inv.id}>
                         <tr className={`hover:bg-slate-50/50 ${isOverdue ? 'bg-red-50/30' : ''}`}>
-                          <td className="px-5 py-2.5 font-semibold text-slate-800">{inv.invoice_number || '\—'}</td>
+                          <td className="px-5 py-2.5 font-semibold text-slate-800">{inv.invoice_number || '—'}</td>
                           <td className="px-4 py-2.5 text-right font-bold text-slate-900">{mad(inv.amount)}</td>
                           <td className="px-4 py-2.5 text-center">
                             {lines.length > 0 ? (
@@ -1190,7 +1190,7 @@ export default function OpportunityDetailPage() {
                                 {lines.length} ligne{lines.length > 1 ? 's' : ''}
                               </button>
                             ) : (
-                              <span className="text-[10px] text-slate-300">{'\—'}</span>
+                              <span className="text-[10px] text-slate-300">{'—'}</span>
                             )}
                           </td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{fmtDate(inv.issue_date)}</td>
@@ -1212,8 +1212,8 @@ export default function OpportunityDetailPage() {
                                   <thead>
                                     <tr className="border-b border-slate-100 text-[9px] font-bold uppercase text-slate-400">
                                       <th className="px-3 py-1.5 text-left">Ref</th>
-                                      <th className="px-3 py-1.5 text-left">D\ésignation</th>
-                                      <th className="px-3 py-1.5 text-right">Qt\é</th>
+                                      <th className="px-3 py-1.5 text-left">Désignation</th>
+                                      <th className="px-3 py-1.5 text-right">Qté</th>
                                       <th className="px-3 py-1.5 text-right">Pt Vente</th>
                                       <th className="px-3 py-1.5 text-left">Fournisseur</th>
                                     </tr>
@@ -1223,11 +1223,11 @@ export default function OpportunityDetailPage() {
                                       const pl = ln.purchase_lines
                                       return (
                                         <tr key={ln.purchase_line_id || i}>
-                                          <td className="px-3 py-1.5 font-mono text-[11px] text-slate-700">{pl?.ref || '\—'}</td>
-                                          <td className="px-3 py-1.5 text-[11px] text-slate-600 max-w-[200px] truncate">{pl?.designation || '\—'}</td>
-                                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">{pl?.qty ?? '\—'}</td>
-                                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">{pl?.pt_vente ? mad(pl.pt_vente) : '\—'}</td>
-                                          <td className="px-3 py-1.5 text-slate-500">{pl?.fournisseur || '\—'}</td>
+                                          <td className="px-3 py-1.5 font-mono text-[11px] text-slate-700">{pl?.ref || '—'}</td>
+                                          <td className="px-3 py-1.5 text-[11px] text-slate-600 max-w-[200px] truncate">{pl?.designation || '—'}</td>
+                                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">{pl?.qty ?? '—'}</td>
+                                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">{pl?.pt_vente ? mad(pl.pt_vente) : '—'}</td>
+                                          <td className="px-3 py-1.5 text-slate-500">{pl?.fournisseur || '—'}</td>
                                         </tr>
                                       )
                                     })}
@@ -1259,7 +1259,7 @@ export default function OpportunityDetailPage() {
                       <div className="text-sm font-semibold text-slate-800">{t.title}</div>
                       <div className="flex items-center gap-2 mt-0.5">
                         {t.type && <span className="text-[10px] rounded-full bg-slate-100 px-2 py-0.5 font-bold text-slate-600">{t.type}</span>}
-                        {t.assigned_to && <span className="text-[10px] text-slate-400">{'\→'} {t.assigned_to}</span>}
+                        {t.assigned_to && <span className="text-[10px] text-slate-400">{'→'} {t.assigned_to}</span>}
                       </div>
                     </div>
                     <div className="text-right shrink-0 ml-3">
