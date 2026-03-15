@@ -1250,7 +1250,7 @@ export default function PurchasePage() {
                 const isOpen = editingIdx === i
                 const fournName = l.fournisseur_id === '__stock__' ? 'Notre Stock' : l.fournisseur_id ? fourns.find(f=>f.id===l.fournisseur_id)?.name : null
                 const isStock = l.fournisseur_id === '__stock__'
-                const lineComplete = !!(l.designation.trim() && l.qty > 0 && l.pu_vente > 0 && l.pu_achat > 0 && l.fournisseur_id && (isStock || l.contact_fournisseur))
+                const lineComplete = !!(l.designation.trim() && l.qty > 0 && l.pu_vente > 0 && l.pu_achat > 0 && (isPrestaLine(l) || (l.fournisseur_id && (isStock || l.contact_fournisseur))))
                 return (
                   <div key={i}>
                     {isOpen ? (
@@ -1443,9 +1443,10 @@ export default function PurchasePage() {
                           ) : (
                             <span className="text-xs text-red-300 italic">Cliquer pour saisir la désignation…</span>
                           )}
-                          {(fournName || (l.pu_achat > 0 && ptVente > 0)) && (
+                          {(fournName || isPrestaLine(l) || (l.pu_achat > 0 && ptVente > 0)) && (
                             <div className="flex items-center gap-2 mt-2">
-                              {fournName && <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${isStock ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{isStock ? '📦 Notre Stock' : fournName}</span>}
+                              {isPrestaLine(l) ? <span className="rounded-md px-2 py-0.5 text-[10px] font-medium bg-slate-200 text-slate-600">Prestation interne</span>
+                              : fournName && <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium ${isStock ? 'bg-blue-50 text-blue-600' : 'bg-slate-100 text-slate-500'}`}>{isStock ? '📦 Notre Stock' : fournName}</span>}
                               {l.pu_achat > 0 && ptVente > 0 && (
                                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${margePc>=20?'bg-emerald-50 text-emerald-600':margePc>=10?'bg-amber-50 text-amber-600':'bg-red-50 text-red-600'}`}>Marge {pct(margePc)}</span>
                               )}
