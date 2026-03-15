@@ -13,6 +13,16 @@ import {
   PAYMENT_TERMS,
 } from '@/lib/utils'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+
+function timeAgo(iso: string | null | undefined) {
+  if (!iso) return null
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (s < 60) return 'à l\'instant'
+  if (s < 3600) return `${Math.floor(s/60)}min`
+  if (s < 86400) return `${Math.floor(s/3600)}h`
+  const d = Math.floor(s/86400)
+  return d === 1 ? 'hier' : `${d}j`
+}
 import { buildSupplyEmail } from '@/lib/emailTemplates'
 import PurchaseModal from '@/components/PurchaseModal'
 import Toast from '@/components/Toast'
@@ -1180,8 +1190,8 @@ export default function SupplyPage() {
                       <table className="w-full min-w-[900px] text-sm">
                         <thead>
                           <tr className="border-b border-slate-100 bg-slate-50/50 text-xs font-semibold text-slate-400">
-                            <th className="px-4 py-2.5 text-left w-[18%]">Compte / Deal</th>
-                            <th className="px-4 py-2.5 text-left w-[10%]">Reçu le</th>
+                            <th className="px-3 py-2.5 text-left w-[7%]">Reçu le</th>
+                            <th className="px-4 py-2.5 text-left w-[20%]">Compte / Deal</th>
                             <th className="px-4 py-2.5 text-center w-[6%]">BU</th>
                             <th className="px-4 py-2.5 text-right w-[10%]">Montant</th>
                             <th className="px-4 py-2.5 text-left w-[8%]">PO</th>
@@ -1213,6 +1223,18 @@ export default function SupplyPage() {
                               <tr key={order.id}
                                 className="hover:bg-slate-50/60 transition-colors cursor-pointer"
                                 onClick={() => setSelectedOrder(order)}>
+                                <td className="px-3 py-3">
+                                  {order.placed_at ? (
+                                    <div className="whitespace-nowrap">
+                                      <div className="text-[11px] font-semibold text-slate-700">
+                                        {new Date(order.placed_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400">
+                                        {new Date(order.placed_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                      </div>
+                                    </div>
+                                  ) : <span className="text-xs text-slate-300">—</span>}
+                                </td>
                                 <td className="px-4 py-3">
                                   <div className="font-bold text-slate-900">
                                     {opp?.accounts?.name || opp?.title || '—'}
@@ -1230,18 +1252,6 @@ export default function SupplyPage() {
                                       </span>
                                     )}
                                   </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  {order.placed_at ? (
-                                    <div>
-                                      <div className="text-xs font-semibold text-slate-700">
-                                        {new Date(order.placed_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                                      </div>
-                                      <div className="text-[10px] text-slate-400">
-                                        {new Date(order.placed_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                                      </div>
-                                    </div>
-                                  ) : <span className="text-xs text-slate-300">—</span>}
                                 </td>
                                 <td className="px-4 py-3 text-center">
                                   <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
