@@ -453,12 +453,12 @@ export default function OpportunityDetailPage() {
   const margeNette    = margeBrute - (info?.frais_engagement || 0)
   const margePctBrute = totalVente > 0 ? (margeBrute/totalVente)*100 : 0
   const margePctNette = totalVente > 0 ? (margeNette/totalVente)*100 : 0
-  const linesOk       = info ? info.purchase_lines.filter(l => Number(l.pu_achat) > 0 && l.fournisseur?.trim()).length : 0
+  const linesOk       = info ? info.purchase_lines.filter(l => Number(l.pu_achat) > 0 && (l.ref?.toUpperCase().includes('PRESTA') || l.fournisseur?.trim())).length : 0
   const ficheComplete = !!(info && info.purchase_lines.length > 0 && linesOk === info.purchase_lines.length)
   const canEmail      = ficheComplete && isWon
   const supIdx        = supply ? STATUS_ORDER.indexOf(supply.status as SupplyStatus) : -1
   const supCfg        = supply ? STATUS_CFG[supply.status as SupplyStatus] : null
-  const commandePlacee = supIdx >= 1 // status is 'commande' or beyond — fiche locked once supplier confirmed
+  const commandePlacee = supIdx >= 0 // supply order exists (placé or beyond)
   const cDate         = closingDate(opp)
   const stageCfg      = STAGE_CFG[opp.stage] || { bg: 'bg-slate-100', text: 'text-slate-600' }
 
