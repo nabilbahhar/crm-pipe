@@ -437,13 +437,15 @@ export default function PurchasePage() {
           : { justif_reason: null, justif_text: null }),
       }
       const lineRows = validLines.map((l) => {
-        const fourn = fourns.find(f => f.id === l.fournisseur_id)
+        const isStock = l.fournisseur_id === '__stock__'
+        const isPresta = isPrestaLine(l)
+        const fourn = (!isStock && !isPresta) ? fourns.find(f => f.id === l.fournisseur_id) : null
         return {
           ref: l.ref||null, designation: l.designation,
           qty: l.qty, pu_vente: l.pu_vente,
           pt_vente: l.pt_vente || l.qty*l.pu_vente, pu_achat: l.pu_achat,
-          fournisseur: fourn?.name || l.fournisseur || null,
-          fournisseur_id: l.fournisseur_id || null,
+          fournisseur: isStock ? 'Stock' : isPresta ? 'Prestation interne' : (fourn?.name || l.fournisseur || null),
+          fournisseur_id: (isStock || isPresta) ? null : (l.fournisseur_id || null),
           contact_fournisseur: l.contact_fournisseur || fourn?.contact || null,
           email_fournisseur: l.email_fournisseur || fourn?.email || null,
           tel_fournisseur: l.tel_fournisseur || fourn?.tel || null,
