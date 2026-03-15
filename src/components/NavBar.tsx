@@ -465,7 +465,7 @@ function ShortcutsPanel({ onClose, modKey }: { onClose: () => void; modKey: stri
   );
 }
 
-// ── NavDropdown ──────────────────────────────────────────────────────────────
+// ── NavDropdown (dark design + slide animation) ─────────────────────────────
 function NavDropdown({ item, active, path }: { item: NavItem; active: boolean; path: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -484,29 +484,42 @@ function NavDropdown({ item, active, path }: { item: NavItem; active: boolean; p
       onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <button
         onClick={() => setOpen(v => !v)}
-        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors border-none cursor-pointer ${
+        className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[13px] transition-colors border-none cursor-pointer whitespace-nowrap ${
           active ? 'font-semibold text-white bg-white/10' : 'font-normal text-slate-400 hover:text-white hover:bg-white/5'
         }`}>
         {Icon && <Icon className="w-3.5 h-3.5" />}
         {item.label}
-        <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3 h-3 opacity-50 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
-      {open && (
-        <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl shadow-lg ring-1 ring-slate-200 overflow-hidden min-w-[170px] z-[200] p-1">
-          {item.children!.map(child => {
-            const childActive = path === child.href.split('?')[0] || path.startsWith(child.href.split('?')[0] + "/");
-            return (
-              <Link key={child.href} href={child.href}
-                onClick={() => setOpen(false)}
-                className={`block px-3 py-2 rounded-lg text-[13px] no-underline transition-colors ${
-                  childActive ? 'font-semibold text-slate-900 bg-slate-100' : 'font-normal text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                }`}>
-                {child.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      <div
+        className="absolute left-0 min-w-[180px] z-[200] overflow-hidden transition-all duration-200 ease-out origin-top"
+        style={{
+          top: '100%',
+          background: '#0f172a',
+          borderRadius: '0 0 10px 10px',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.4)',
+          borderTop: '2px solid #3b82f6',
+          opacity: open ? 1 : 0,
+          transform: open ? 'scaleY(1) translateY(0)' : 'scaleY(0.85) translateY(-4px)',
+          pointerEvents: open ? 'auto' : 'none',
+          padding: open ? '6px 0' : '0',
+        }}
+      >
+        {item.children!.map(child => {
+          const childActive = path === child.href.split('?')[0] || path.startsWith(child.href.split('?')[0] + "/");
+          return (
+            <Link key={child.href} href={child.href}
+              onClick={() => setOpen(false)}
+              className={`block px-4 py-2.5 text-[13px] no-underline transition-colors duration-150 ${
+                childActive
+                  ? 'font-semibold text-white bg-white/10'
+                  : 'font-normal text-slate-400 hover:text-white hover:bg-white/[0.07]'
+              }`}>
+              {child.label}
+            </Link>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -754,7 +767,7 @@ export default function NavBar() {
   return (
     <>
       <div className="sticky top-0 z-[100] bg-slate-900 shadow-md">
-        <div className="mx-auto max-w-[1600px] px-4 h-12 flex items-center gap-2">
+        <div className="mx-auto max-w-[1500px] px-4 h-14 flex items-center gap-3">
 
           {/* ── Mobile hamburger ── */}
           <button
@@ -766,51 +779,40 @@ export default function NavBar() {
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
 
-          <Link href="/dashboard" className="font-black text-sm tracking-[2px] text-white no-underline mr-4 flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center">
-              <span className="text-xs font-black">CP</span>
-            </div>
-            <span className="hidden sm:inline">CRM-PIPE</span>
-          </Link>
+          {/* Logo removed */}
 
-          <nav className="hidden md:flex items-center gap-0.5 flex-1">
+          <nav className="hidden md:flex items-center gap-0.5">
             {NAV_ITEMS.map(it => {
               const allPaths = it.children ? it.children.map(c => c.href.split('?')[0]) : [it.href];
               const active = allPaths.some(p => path === p || path.startsWith(p + "/"));
               const Icon = it.icon;
               if (it.children) {
-                return (
-                  <NavDropdown key={it.label} item={it} active={active} path={path} />
-                );
+                return <NavDropdown key={it.label} item={it} active={active} path={path} />;
               }
               return (
                 <Link key={it.href} href={it.href}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[13px] no-underline transition-colors ${
+                  className={`flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-[13px] no-underline transition-colors whitespace-nowrap ${
                     active ? 'font-semibold text-white bg-white/10' : 'font-normal text-slate-400 hover:text-white hover:bg-white/5'
                   }`}>
                   {Icon && <Icon className="w-3.5 h-3.5" />}
                   {it.label}
-                  {it.badge && taskCount > 0 && (
-                    <span className="min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[10px] font-bold inline-flex items-center justify-center px-1">
-                      {taskCount}
-                    </span>
-                  )}
                 </Link>
               );
             })}
           </nav>
 
-          <div className="flex items-center gap-1">
-
-            {/* ── Quick Search ── */}
+          {/* ── Search bar fills remaining space ── */}
+          <div className="hidden md:flex flex-1 mx-3">
             <button
               onClick={() => setShowSearch(true)}
-              title={`Recherche (${modKey}+K)`}
-              aria-label={`Recherche rapide (${modKey}+K)`}
-              className="w-8 h-8 rounded-lg border-none bg-white/10 cursor-pointer flex items-center justify-center transition-colors hover:bg-white/20"
+              className="w-full h-9 rounded-lg border border-white/10 bg-white/5 cursor-pointer flex items-center gap-2 px-3 transition-colors hover:bg-white/10 hover:border-white/20"
             >
-              <Search className="w-4 h-4 text-slate-300" />
+              <Search className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-[12px] text-slate-500 flex-1 text-left">Rechercher...</span>
             </button>
+          </div>
+
+          <div className="flex items-center gap-1">
 
             {/* ── Messages ── */}
             <Link href="/messages" title="Messages" aria-label="Messages"
@@ -828,11 +830,11 @@ export default function NavBar() {
             {/* ── Tasks ── */}
             <Link href="/tasks" title="Tâches" aria-label="Tâches"
               className={`relative w-8 h-8 rounded-lg border-none flex items-center justify-center no-underline transition-colors ${
-                path === "/tasks" ? 'bg-amber-500/20 text-amber-300' : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                path === "/tasks" ? 'bg-red-500/20 text-red-300' : 'bg-white/10 text-slate-300 hover:bg-white/20'
               }`}>
               <ListChecks className="w-4 h-4" />
               {taskCount > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center px-1 border-2 border-slate-900">
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 border-2 border-slate-900">
                   {taskCount}
                 </span>
               )}
@@ -1006,23 +1008,21 @@ export default function NavBar() {
       {mobileMenuOpen && (
         <div className="md:hidden bg-slate-900 border-b border-slate-700 px-4 py-2 max-h-[70vh] overflow-y-auto">
           {NAV_ITEMS.map(it => {
-            const allPaths = it.children ? it.children.map(c => c.href.split('?')[0]) : [it.href];
-            const active = allPaths.some(p => path === p || path.startsWith(p + "/"));
             const Icon = it.icon;
             if (it.children) {
               return (
-                <div key={it.label} className="mb-1">
-                  <div className={`flex items-center gap-2 px-3 py-2 text-[13px] font-semibold ${active ? 'text-white' : 'text-slate-400'}`}>
+                <div key={it.label}>
+                  <div className="flex items-center gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-widest text-slate-500 mt-2">
                     {Icon && <Icon className="w-3.5 h-3.5" />}
                     {it.label}
                   </div>
                   {it.children.map(child => {
-                    const childActive = path === child.href.split('?')[0];
+                    const childActive = path === child.href.split('?')[0] || path.startsWith(child.href.split('?')[0] + "/");
                     return (
                       <Link key={child.href} href={child.href}
                         onClick={() => setMobileMenuOpen(false)}
-                        className={`block pl-9 pr-3 py-2 text-[13px] no-underline rounded-lg ${
-                          childActive ? 'font-semibold text-white bg-white/10' : 'font-normal text-slate-500 hover:text-white hover:bg-white/5'
+                        className={`flex items-center gap-2 pl-9 pr-3 py-2 text-[13px] no-underline rounded-lg mb-0.5 ${
+                          childActive ? 'font-semibold text-white bg-white/10' : 'font-normal text-slate-400 hover:text-white hover:bg-white/5'
                         }`}>
                         {child.label}
                       </Link>
@@ -1031,6 +1031,7 @@ export default function NavBar() {
                 </div>
               );
             }
+            const active = path === it.href.split('?')[0] || path.startsWith(it.href.split('?')[0] + "/");
             return (
               <Link key={it.href} href={it.href}
                 onClick={() => setMobileMenuOpen(false)}
