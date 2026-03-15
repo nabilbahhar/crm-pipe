@@ -43,6 +43,9 @@ const REASONS = [
   'Autre',
 ]
 
+/** A line is "prestation interne" if ref contains PRESTA → no external supplier needed */
+const isPrestaLine = (l: PurchaseLine) => l.ref.toUpperCase().includes('PRESTA')
+
 const emptyLine = (): PurchaseLine => ({
   ref: '', designation: '', qty: 1, pu_vente: 0, pt_vente: 0, pu_achat: 0,
   fournisseur_id: null, contact_fournisseur: '', email_fournisseur: '', tel_fournisseur: '',
@@ -364,12 +367,13 @@ export default function PurchasePage() {
   const activeLines = lines.filter(l => l.designation.trim())
   const incompleteLinesDetail = activeLines.map((l, i) => {
     const missing: string[] = []
+    const presta = isPrestaLine(l)
     if (!l.designation.trim()) missing.push('désignation')
     if (!l.qty || l.qty <= 0) missing.push('quantité')
     if (!l.pu_vente || l.pu_vente <= 0) missing.push('PU vente')
     if (!l.pu_achat || l.pu_achat <= 0) missing.push('PU achat')
-    if (!l.fournisseur_id) missing.push('fournisseur')
-    if (l.fournisseur_id && l.fournisseur_id !== '__stock__' && !l.contact_fournisseur) missing.push('contact fournisseur')
+    if (!presta && !l.fournisseur_id) missing.push('fournisseur')
+    if (!presta && l.fournisseur_id && l.fournisseur_id !== '__stock__' && !l.contact_fournisseur) missing.push('contact fournisseur')
     return missing.length > 0 ? { line: i + 1, missing } : null
   }).filter(Boolean) as { line: number; missing: string[] }[]
   const allLinesComplete = activeLines.length > 0 && incompleteLinesDetail.length === 0
@@ -401,16 +405,18 @@ export default function PurchasePage() {
       if (!paymentTemplate) { setErr('Modalités de paiement obligatoires. Sélectionne un schéma de paiement.'); return }
       if (!totalMatch)  { setErr(`Total (${mad(totalVente)}) ≠ montant deal (${mad(dealAmount)}). Écart : ${mad(Math.abs(totalDiff))}`); return }
       // Validate each line: designation, qty, pu_vente, pu_achat, supplier, contact are mandatory
+      // PRESTA lines skip fournisseur validation (internal resource)
       const lineErrors: string[] = []
       validLines.forEach((l, idx) => {
         const n = idx + 1
+        const presta = isPrestaLine(l)
         if (!l.designation.trim()) lineErrors.push(`Ligne ${n} : désignation manquante`)
         if (!l.qty || l.qty <= 0) lineErrors.push(`Ligne ${n} : quantité invalide`)
         if (!l.pu_vente || l.pu_vente <= 0) lineErrors.push(`Ligne ${n} : PU vente manquant`)
         if (!l.pu_achat || l.pu_achat <= 0) lineErrors.push(`Ligne ${n} : PU achat manquant`)
-        if (!l.fournisseur_id) lineErrors.push(`Ligne ${n} : fournisseur non sélectionné`)
+        if (!presta && !l.fournisseur_id) lineErrors.push(`Ligne ${n} : fournisseur non sélectionné`)
         const isStock = l.fournisseur_id === '__stock__'
-        if (!isStock && !l.contact_fournisseur) lineErrors.push(`Ligne ${n} : contact fournisseur manquant`)
+        if (!presta && !isStock && !l.contact_fournisseur) lineErrors.push(`Ligne ${n} : contact fournisseur manquant`)
       })
       if (lineErrors.length > 0) {
         setErr(`Champs obligatoires manquants :\n${lineErrors.join(' · ')}`)
@@ -970,13 +976,22 @@ export default function PurchasePage() {
 
                   {/* Fournisseur & Détails (collapsible) */}
                   <div className="border-t border-slate-100">
-                    <details className="group/det" {...(l.fournisseur_id ? { open: true } : {})}>
+                    <details className="group/det" {...(l.fournisseur_id || isPrestaLine(l) ? { open: true } : {})}>
                       <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-400 hover:text-slate-600 transition select-none list-none [&::-webkit-details-marker]:hidden">
                         <span className="text-[10px] transition-transform group-open/det:rotate-90">▶</span>
-                        Fournisseur & Détails
-                        {l.fournisseur_id && <span className="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">{fourns.find(f=>f.id===l.fournisseur_id)?.name}</span>}
+                        {isPrestaLine(l) ? 'Prestation interne' : 'Fournisseur & Détails'}
+                        {isPrestaLine(l) && <span className="ml-1 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-500">Compucom</span>}
+                        {!isPrestaLine(l) && l.fournisseur_id && <span className="ml-1 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700">{fourns.find(f=>f.id===l.fournisseur_id)?.name}</span>}
                       </summary>
                       <div className="px-4 pb-4 pt-1 space-y-3">
+                        {isPrestaLine(l) ? (
+                          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <div className="text-xs text-slate-500">
+                              <span className="font-semibold text-slate-600">Prestation interne Compucom</span> — pas de fournisseur externe.
+                              Le PU Achat correspond aux charges de la prestation.
+                            </div>
+                          </div>
+                        ) : (<>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div>
                             <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">Fournisseur</label>
@@ -1064,6 +1079,7 @@ export default function PurchasePage() {
                             </div>
                           )
                         })()}
+                        </>)}
                       </div>
                     </details>
                   </div>
@@ -1156,7 +1172,14 @@ export default function PurchasePage() {
                           </div>
                         </div>
                       </div>
-                      {/* Fournisseur row */}
+                      {/* Fournisseur row — hidden for PRESTA lines */}
+                      {isPrestaLine(l) ? (
+                        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          <div className="text-xs text-slate-500">
+                            <span className="font-semibold text-slate-600">Prestation interne</span> — le PU Achat correspond aux charges de la prestation.
+                          </div>
+                        </div>
+                      ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                           <label className="mb-1 block text-[10px] font-bold uppercase text-slate-400">Fournisseur</label>
@@ -1184,6 +1207,7 @@ export default function PurchasePage() {
                             className="h-8 w-full rounded-lg border border-slate-200 bg-white px-2 text-xs outline-none focus:border-slate-400" />
                         </div>
                       </div>
+                      )}
                       <div className="flex justify-end">
                         <button onClick={() => setLines(p => p.filter((_,j) => j!==i))}
                           className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-100 transition">
@@ -1293,7 +1317,13 @@ export default function PurchasePage() {
                           </div>
 
                           {/* Fournisseur + Contact + dates */}
-                          {(() => {
+                          {isPrestaLine(l) ? (
+                            <div className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-2">
+                              <div className="text-[11px] text-slate-500">
+                                <span className="font-semibold text-slate-600">Prestation interne</span> — PU Achat = charges prestation
+                              </div>
+                            </div>
+                          ) : (() => {
                             const scContacts = l.fournisseur_id ? supplierContacts.filter(c => c.supplier_id === l.fournisseur_id) : []
                             const fourn = l.fournisseur_id ? fourns.find(f => f.id === l.fournisseur_id) : null
                             const contactOptions: { id: string; label: string; contact: string; email: string; tel: string }[] = []
@@ -1437,7 +1467,7 @@ export default function PurchasePage() {
             {/* Devis footer */}
               {(() => {
                 const activeLines = lines.filter(l => l.designation.trim())
-                const completeLines = lines.filter(l => !!(l.designation.trim() && l.qty > 0 && l.pu_vente > 0 && l.pu_achat > 0 && l.fournisseur_id && (l.fournisseur_id === '__stock__' || l.contact_fournisseur)))
+                const completeLines = lines.filter(l => !!(l.designation.trim() && l.qty > 0 && l.pu_vente > 0 && l.pu_achat > 0 && (isPrestaLine(l) || (l.fournisseur_id && (l.fournisseur_id === '__stock__' || l.contact_fournisseur)))))
                 const allComplete = activeLines.length > 0 && completeLines.length === activeLines.length
                 return (
             <div className="border-t-2 border-slate-800 bg-slate-900">

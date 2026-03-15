@@ -97,7 +97,7 @@ export function buildSupplyEmail(data: SupplyEmailData): string {
       ${data.frais ? `<div style="margin-top:12px;font-size:13px">Frais d'engagement : <strong>${numFmt(data.frais)} MAD</strong></div>` : ''}
       ${data.notes ? `<div style="margin-top:8px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">${esc(data.notes)}</div>` : ''}
       ${data.hasFiles ? `<div style="margin-top:12px;font-size:13px;color:#1d4ed8;background:#dbeafe;padding:8px 12px;border-radius:8px"><strong>Pièces jointes :</strong> Voir PJ (BC client, devis, etc.)</div>` : ''}
-      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
+      <div class="footer">Cordialement,<br>${esc(data.senderName)}</div>
     </div>
   </body></html>`
 }
@@ -176,7 +176,7 @@ export function buildKaderEmail(data: KaderEmailData): string {
     </div>
     <div class="body">
       ${contentHtml}
-      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
+      <div class="footer">Cordialement,<br>${esc(data.senderName)}</div>
     </div>
   </body></html>`
 }
@@ -230,7 +230,7 @@ export function buildDeployEmail(data: DeployEmailData): string {
       <p>Le PV final est une condition de facturation sur cette affaire. Merci de me faire un retour dès que possible.</p>
       ${data.notes ? `<div style="margin-top:12px;font-size:13px;color:#78350f;background:#fef3c7;padding:8px 12px;border-radius:8px">${esc(data.notes)}</div>` : ''}
       ${data.hasFiles ? `<div style="margin-top:12px;font-size:13px;color:#1d4ed8;background:#dbeafe;padding:8px 12px;border-radius:8px"><strong>Pièces jointes :</strong> Voir PJ (devis, BC, documents techniques)</div>` : ''}
-      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
+      <div class="footer">Cordialement,<br>${esc(data.senderName)}</div>
     </div>
   </body></html>`
 }
@@ -269,7 +269,7 @@ export function buildInvoiceReminderEmail(data: InvoiceEmailData): string {
         <tr><td style="color:#64748b">Modalités</td><td>${esc(data.paymentTerms)}</td></tr>
       </table>
       <p>Merci de relancer le client pour le règlement de cette facture.</p>
-      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
+      <div class="footer">Cordialement,<br>${esc(data.senderName)}</div>
     </div>
   </body></html>`
 }
@@ -306,7 +306,7 @@ export function buildExpenseEmail(data: ExpenseEmailData): string {
         </tr>
       </table>
       <p style="font-size:13px;color:#64748b">Les pièces justificatives sont jointes à cette note.</p>
-      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
+      <div class="footer">Cordialement,<br>${esc(data.senderName)}</div>
     </div>
   </body></html>`
 }
@@ -341,7 +341,7 @@ export function buildSupportEmail(data: SupportEmailData): string {
         <tr><td style="color:#64748b">Priorité</td><td><span class="badge ${prioColor}">${esc(data.priority)}</span></td></tr>
       </table>
       ${data.description ? `<div style="margin-top:16px"><div class="section-title">Description</div><p style="font-size:13px">${esc(data.description)}</p></div>` : ''}
-      <div class="footer">Cordialement,<br>${esc(data.senderName)} · Compucom Maroc</div>
+      <div class="footer">Cordialement,<br>${esc(data.senderName)}</div>
     </div>
   </body></html>`
 }
