@@ -5,39 +5,43 @@ import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
-import { Bell, X, ChevronDown, KeyRound, LogOut, Search, User, MessageSquare, ListChecks, Menu } from "lucide-react";
+import { Bell, X, ChevronDown, KeyRound, LogOut, Search, User, MessageSquare, ListChecks, Menu, LayoutDashboard, TrendingUp, Truck, FolderKanban, Banknote, Megaphone, HeadphonesIcon, Gauge, ShieldCheck, Lightbulb } from "lucide-react";
 import { ownerName } from "@/lib/utils";
 
-type NavItem = { label: string; href: string; badge?: boolean; children?: { label: string; href: string }[] }
+type NavItem = { label: string; href: string; badge?: boolean; icon?: any; children?: { label: string; href: string }[] }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Vente", href: "/pipeline", children: [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Vente", href: "/pipeline", icon: TrendingUp, children: [
     { label: "Prospection", href: "/prospection" },
     { label: "Pipeline", href: "/pipeline" },
     { label: "Deals", href: "/opportunities" },
     { label: "Comptes", href: "/accounts" },
     { label: "Partenaires", href: "/partenaires" },
   ]},
-  { label: "Logistique", href: "/supply", children: [
+  { label: "Logistique", href: "/supply", icon: Truck, children: [
     { label: "Supply", href: "/supply" },
     { label: "Fournisseurs", href: "/supply/fournisseurs" },
   ]},
-  { label: "Projets", href: "/projects", children: [
+  { label: "Projets", href: "/projects", icon: FolderKanban, children: [
     { label: "Prescription", href: "/projects?tab=prescription" },
     { label: "Déploiement", href: "/projects?tab=deploiement" },
     { label: "Renouvellements", href: "/renewals" },
   ]},
-  { label: "Finance", href: "/invoices", children: [
+  { label: "Finance", href: "/invoices", icon: Banknote, children: [
     { label: "Facturation", href: "/invoices" },
     { label: "Notes de frais", href: "/expenses" },
   ]},
-  { label: "Marketing", href: "/marketing", children: [
+  { label: "Marketing", href: "/marketing", icon: Megaphone, children: [
     { label: "Stratégie", href: "/marketing" },
     { label: "Événements", href: "/events" },
   ]},
-  { label: "Support", href: "/support" },
-  { label: "KPI", href: "/kpi" },
+  { label: "Support", href: "/support", icon: HeadphonesIcon },
+  { label: "Pilotage", href: "/kpi", icon: Gauge, children: [
+    { label: "KPI", href: "/kpi" },
+    { label: "Qualité", href: "/qualite" },
+    { label: "Innovation", href: "/innovation" },
+  ]},
 ];
 
 /* flat list for QuickSearch links */
@@ -465,6 +469,7 @@ function ShortcutsPanel({ onClose, modKey }: { onClose: () => void; modKey: stri
 function NavDropdown({ item, active, path }: { item: NavItem; active: boolean; path: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const Icon = item.icon;
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -475,43 +480,27 @@ function NavDropdown({ item, active, path }: { item: NavItem; active: boolean; p
   }, []);
 
   return (
-    <div ref={ref} style={{ position: "relative" }}
+    <div ref={ref} className="relative"
       onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
       <button
         onClick={() => setOpen(v => !v)}
-        style={{
-          padding: "5px 10px", borderRadius: 8, fontSize: 13,
-          fontWeight: active ? 600 : 400,
-          color: active ? "#0f172a" : "#64748b",
-          background: active ? "#f1f5f9" : "transparent",
-          border: "none", cursor: "pointer",
-          display: "inline-flex", alignItems: "center", gap: 3,
-        }}>
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors border-none cursor-pointer ${
+          active ? 'font-semibold text-white bg-white/10' : 'font-normal text-slate-400 hover:text-white hover:bg-white/5'
+        }`}>
+        {Icon && <Icon className="w-3.5 h-3.5" />}
         {item.label}
-        <ChevronDown style={{ width: 11, height: 11, opacity: 0.5, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+        <ChevronDown className={`w-3 h-3 opacity-50 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
-        <div style={{
-          position: "absolute", top: "100%", left: 0, marginTop: 4,
-          background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12,
-          boxShadow: "0 8px 30px rgba(0,0,0,0.08)", overflow: "hidden",
-          minWidth: 160, zIndex: 200, padding: "4px",
-        }}>
+        <div className="absolute top-full left-0 mt-1.5 bg-white rounded-xl shadow-lg ring-1 ring-slate-200 overflow-hidden min-w-[170px] z-[200] p-1">
           {item.children!.map(child => {
             const childActive = path === child.href.split('?')[0] || path.startsWith(child.href.split('?')[0] + "/");
             return (
               <Link key={child.href} href={child.href}
                 onClick={() => setOpen(false)}
-                style={{
-                  display: "block", padding: "8px 12px", borderRadius: 8,
-                  fontSize: 13, fontWeight: childActive ? 600 : 400,
-                  color: childActive ? "#0f172a" : "#475569",
-                  textDecoration: "none",
-                  background: childActive ? "#f1f5f9" : "transparent",
-                }}
-                onMouseEnter={e => { if (!childActive) (e.currentTarget.style.background = "#f8fafc") }}
-                onMouseLeave={e => { if (!childActive) (e.currentTarget.style.background = "transparent") }}
-              >
+                className={`block px-3 py-2 rounded-lg text-[13px] no-underline transition-colors ${
+                  childActive ? 'font-semibold text-slate-900 bg-slate-100' : 'font-normal text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                }`}>
                 {child.label}
               </Link>
             );
@@ -764,56 +753,45 @@ export default function NavBar() {
 
   return (
     <>
-      <div style={{ borderBottom: "1px solid #e2e8f0", background: "#fff", position: "sticky", top: 0, zIndex: 100 }}>
-        <div style={{ maxWidth: 1600, margin: "0 auto", padding: "0 24px", height: 56, display: "flex", alignItems: "center", gap: 8 }}>
+      <div className="sticky top-0 z-[100] bg-slate-900 shadow-md">
+        <div className="mx-auto max-w-[1600px] px-4 h-12 flex items-center gap-2">
 
           {/* ── Mobile hamburger ── */}
           <button
             onClick={() => setMobileMenuOpen(v => !v)}
             aria-label={mobileMenuOpen ? "Fermer le menu" : "Ouvrir le menu"}
             aria-expanded={mobileMenuOpen}
-            className="md:hidden"
-            style={{
-              width: 36, height: 36, borderRadius: 8,
-              border: "none", background: mobileMenuOpen ? "#f1f5f9" : "transparent",
-              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-              marginRight: 4,
-            }}
+            className="md:hidden flex items-center justify-center w-8 h-8 rounded-lg border-none bg-transparent cursor-pointer text-white mr-1 hover:bg-white/10"
           >
-            {mobileMenuOpen ? <X style={{ width: 20, height: 20, color: "#0f172a" }} /> : <Menu style={{ width: 20, height: 20, color: "#0f172a" }} />}
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
 
-          <Link href="/dashboard" style={{ fontWeight: 900, fontSize: 15, letterSpacing: "1.5px", color: "#0f172a", textDecoration: "none", marginRight: 16 }}>
-            CRM-PIPE
+          <Link href="/dashboard" className="font-black text-sm tracking-[2px] text-white no-underline mr-4 flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-white/10 flex items-center justify-center">
+              <span className="text-xs font-black">CP</span>
+            </div>
+            <span className="hidden sm:inline">CRM-PIPE</span>
           </Link>
 
-          <nav className="hidden md:flex" style={{ gap: 2, flex: 1 }}>
+          <nav className="hidden md:flex items-center gap-0.5 flex-1">
             {NAV_ITEMS.map(it => {
               const allPaths = it.children ? it.children.map(c => c.href.split('?')[0]) : [it.href];
               const active = allPaths.some(p => path === p || path.startsWith(p + "/"));
+              const Icon = it.icon;
               if (it.children) {
                 return (
                   <NavDropdown key={it.label} item={it} active={active} path={path} />
                 );
               }
               return (
-                <Link key={it.href} href={it.href} style={{
-                  padding: "5px 12px", borderRadius: 8, fontSize: 13,
-                  fontWeight: active ? 600 : 400,
-                  color: active ? "#0f172a" : "#64748b",
-                  textDecoration: "none",
-                  background: active ? "#f1f5f9" : "transparent",
-                  position: "relative", display: "inline-flex", alignItems: "center", gap: 5,
-                }}>
+                <Link key={it.href} href={it.href}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[13px] no-underline transition-colors ${
+                    active ? 'font-semibold text-white bg-white/10' : 'font-normal text-slate-400 hover:text-white hover:bg-white/5'
+                  }`}>
+                  {Icon && <Icon className="w-3.5 h-3.5" />}
                   {it.label}
                   {it.badge && taskCount > 0 && (
-                    <span style={{
-                      minWidth: 16, height: 16, borderRadius: 8,
-                      background: "#ef4444", color: "#fff",
-                      fontSize: 10, fontWeight: 700,
-                      display: "inline-flex", alignItems: "center", justifyContent: "center",
-                      padding: "0 4px",
-                    }}>
+                    <span className="min-w-[16px] h-4 rounded-full bg-red-500 text-white text-[10px] font-bold inline-flex items-center justify-center px-1">
                       {taskCount}
                     </span>
                   )}
@@ -822,81 +800,57 @@ export default function NavBar() {
             })}
           </nav>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <div className="flex items-center gap-1">
 
-            {/* ── Quick Search (compact) ── */}
+            {/* ── Quick Search ── */}
             <button
               onClick={() => setShowSearch(true)}
               title={`Recherche (${modKey}+K)`}
               aria-label={`Recherche rapide (${modKey}+K)`}
-              style={{
-                width: 40, height: 40, borderRadius: "50%",
-                border: "none", background: "#e4e6eb",
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                transition: "background 0.15s",
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = "#d8dadf")}
-              onMouseLeave={e => (e.currentTarget.style.background = "#e4e6eb")}
+              className="w-8 h-8 rounded-lg border-none bg-white/10 cursor-pointer flex items-center justify-center transition-colors hover:bg-white/20"
             >
-              <Search style={{ width: 18, height: 18, color: "#050505" }} />
+              <Search className="w-4 h-4 text-slate-300" />
             </button>
 
-            {/* ── Messages (Facebook-style circle) ── */}
+            {/* ── Messages ── */}
             <Link href="/messages" title="Messages" aria-label="Messages"
-              style={{
-                position: "relative", width: 40, height: 40, borderRadius: "50%",
-                border: "none", background: path === "/messages" ? "#e7f3ff" : "#e4e6eb",
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                textDecoration: "none", transition: "background 0.15s",
-              }}
-              onMouseEnter={e => { if (path !== "/messages") e.currentTarget.style.background = "#d8dadf" }}
-              onMouseLeave={e => { if (path !== "/messages") e.currentTarget.style.background = "#e4e6eb" }}
-            >
-              <MessageSquare style={{ width: 18, height: 18, color: path === "/messages" ? "#0866ff" : "#050505" }} />
+              className={`relative w-8 h-8 rounded-lg border-none flex items-center justify-center no-underline transition-colors ${
+                path === "/messages" ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-slate-300 hover:bg-white/20'
+              }`}>
+              <MessageSquare className="w-4 h-4" />
               {unreadMsgs > 0 && (
-                <span style={{ position: "absolute", top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, background: "#e41e3f", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }}>
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 border-2 border-slate-900">
                   {unreadMsgs}
                 </span>
               )}
             </Link>
 
-            {/* ── Tasks (Facebook-style circle) ── */}
+            {/* ── Tasks ── */}
             <Link href="/tasks" title="Tâches" aria-label="Tâches"
-              style={{
-                position: "relative", width: 40, height: 40, borderRadius: "50%",
-                border: "none", background: path === "/tasks" ? "#fff3e0" : "#e4e6eb",
-                cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                textDecoration: "none", transition: "background 0.15s",
-              }}
-              onMouseEnter={e => { if (path !== "/tasks") e.currentTarget.style.background = "#d8dadf" }}
-              onMouseLeave={e => { if (path !== "/tasks") e.currentTarget.style.background = "#e4e6eb" }}
-            >
-              <ListChecks style={{ width: 18, height: 18, color: path === "/tasks" ? "#e65100" : "#050505" }} />
+              className={`relative w-8 h-8 rounded-lg border-none flex items-center justify-center no-underline transition-colors ${
+                path === "/tasks" ? 'bg-amber-500/20 text-amber-300' : 'bg-white/10 text-slate-300 hover:bg-white/20'
+              }`}>
+              <ListChecks className="w-4 h-4" />
               {taskCount > 0 && (
-                <span style={{ position: "absolute", top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, background: "#e65100", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }}>
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center px-1 border-2 border-slate-900">
                   {taskCount}
                 </span>
               )}
             </Link>
 
-            {/* ── Notifications (Facebook-style circle) ── */}
-            <div style={{ position: "relative" }} ref={panelRef}>
+            {/* ── Notifications ── */}
+            <div className="relative" ref={panelRef}>
               <button
                 onClick={openNotifs}
                 title="Notifications"
                 aria-label="Notifications"
-                style={{
-                  position: "relative", width: 40, height: 40, borderRadius: "50%",
-                  border: "none", background: showNotifs ? "#e7f3ff" : "#e4e6eb",
-                  cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "background 0.15s",
-                }}
-                onMouseEnter={e => { if (!showNotifs) e.currentTarget.style.background = "#d8dadf" }}
-                onMouseLeave={e => { if (!showNotifs) e.currentTarget.style.background = "#e4e6eb" }}
+                className={`relative w-8 h-8 rounded-lg border-none cursor-pointer flex items-center justify-center transition-colors ${
+                  showNotifs ? 'bg-blue-500/20 text-blue-300' : 'bg-white/10 text-slate-300 hover:bg-white/20'
+                }`}
               >
-                <Bell style={{ width: 18, height: 18, color: showNotifs ? "#0866ff" : "#050505" }} />
+                <Bell className="w-4 h-4" />
                 {unread > 0 && (
-                  <span style={{ position: "absolute", top: -2, right: -2, minWidth: 20, height: 20, borderRadius: 10, background: "#e41e3f", color: "#fff", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 5px", border: "2px solid #fff", boxShadow: "0 1px 3px rgba(0,0,0,0.15)" }}>
+                  <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center px-1 border-2 border-slate-900">
                     {unread}
                   </span>
                 )}
@@ -946,27 +900,22 @@ export default function NavBar() {
               )}
             </div>
 
-            {/* ── User Avatar (Facebook-style circle) ── */}
+            {/* ── User Avatar ── */}
             {email && (
-              <div style={{ position: "relative" }} ref={userMenuRef}>
+              <div className="relative ml-1" ref={userMenuRef}>
                 <button
                   onClick={() => setShowUserMenu(v => !v)}
                   title={userName(email)}
                   aria-label={`Menu profil — ${userName(email)}`}
-                  style={{
-                    width: 40, height: 40, borderRadius: "50%",
-                    border: showUserMenu ? "2px solid #0866ff" : "2px solid transparent",
-                    background: avatarUrl ? "transparent" : "#0f172a", cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    padding: 0, transition: "border-color 0.15s, box-shadow 0.15s",
-                    boxShadow: showUserMenu ? "0 0 0 2px rgba(8,102,255,0.2)" : "none",
-                    overflow: "hidden",
-                  }}
+                  className={`w-8 h-8 rounded-lg overflow-hidden cursor-pointer flex items-center justify-center p-0 transition-all border-2 ${
+                    showUserMenu ? 'border-blue-400 ring-2 ring-blue-400/20' : 'border-transparent hover:border-white/20'
+                  }`}
+                  style={{ background: avatarUrl ? 'transparent' : '#475569' }}
                 >
                   {avatarUrl ? (
-                    <img src={avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    <img src={avatarUrl} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    <span style={{ color: "#fff", fontSize: 15, fontWeight: 700, lineHeight: 1, userSelect: "none" }}>
+                    <span className="text-white text-xs font-bold select-none">
                       {userName(email)[0]}
                     </span>
                   )}
@@ -1053,19 +1002,18 @@ export default function NavBar() {
         </div>
       </div>
 
-      {/* ── Mobile navigation menu (accordion) ── */}
+      {/* ── Mobile navigation menu ── */}
       {mobileMenuOpen && (
-        <div className="md:hidden" style={{
-          borderBottom: "1px solid #e2e8f0", background: "#fff",
-          padding: "8px 16px 12px", maxHeight: "70vh", overflowY: "auto",
-        }}>
+        <div className="md:hidden bg-slate-900 border-b border-slate-700 px-4 py-2 max-h-[70vh] overflow-y-auto">
           {NAV_ITEMS.map(it => {
             const allPaths = it.children ? it.children.map(c => c.href.split('?')[0]) : [it.href];
             const active = allPaths.some(p => path === p || path.startsWith(p + "/"));
+            const Icon = it.icon;
             if (it.children) {
               return (
-                <div key={it.label} style={{ marginBottom: 4 }}>
-                  <div style={{ padding: "8px 12px", fontSize: 13, fontWeight: 600, color: active ? "#0f172a" : "#64748b" }}>
+                <div key={it.label} className="mb-1">
+                  <div className={`flex items-center gap-2 px-3 py-2 text-[13px] font-semibold ${active ? 'text-white' : 'text-slate-400'}`}>
+                    {Icon && <Icon className="w-3.5 h-3.5" />}
                     {it.label}
                   </div>
                   {it.children.map(child => {
@@ -1073,14 +1021,9 @@ export default function NavBar() {
                     return (
                       <Link key={child.href} href={child.href}
                         onClick={() => setMobileMenuOpen(false)}
-                        style={{
-                          display: "block", padding: "8px 12px 8px 28px", fontSize: 13,
-                          fontWeight: childActive ? 600 : 400,
-                          color: childActive ? "#0f172a" : "#475569",
-                          textDecoration: "none",
-                          background: childActive ? "#f1f5f9" : "transparent",
-                          borderRadius: 8,
-                        }}>
+                        className={`block pl-9 pr-3 py-2 text-[13px] no-underline rounded-lg ${
+                          childActive ? 'font-semibold text-white bg-white/10' : 'font-normal text-slate-500 hover:text-white hover:bg-white/5'
+                        }`}>
                         {child.label}
                       </Link>
                     );
@@ -1091,14 +1034,10 @@ export default function NavBar() {
             return (
               <Link key={it.href} href={it.href}
                 onClick={() => setMobileMenuOpen(false)}
-                style={{
-                  display: "block", padding: "8px 12px", fontSize: 13, borderRadius: 8,
-                  fontWeight: active ? 600 : 400,
-                  color: active ? "#0f172a" : "#64748b",
-                  textDecoration: "none",
-                  background: active ? "#f1f5f9" : "transparent",
-                  marginBottom: 2,
-                }}>
+                className={`flex items-center gap-2 px-3 py-2 text-[13px] no-underline rounded-lg mb-0.5 ${
+                  active ? 'font-semibold text-white bg-white/10' : 'font-normal text-slate-400 hover:text-white hover:bg-white/5'
+                }`}>
+                {Icon && <Icon className="w-3.5 h-3.5" />}
                 {it.label}
               </Link>
             );
