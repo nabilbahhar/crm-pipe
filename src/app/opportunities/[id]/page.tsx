@@ -488,10 +488,12 @@ export default function OpportunityDetailPage() {
                 <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Clôture</div>
                 <div className="text-sm font-bold text-slate-800">{fmtDate(cDate)}</div>
               </div>
-              <div className="rounded-xl border border-slate-100 bg-white p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Owner</div>
-                <div className="text-sm font-bold text-slate-800">{ownerName(opp.owner_email)}</div>
-              </div>
+              {opp.owner_email && (
+                <div className="rounded-xl border border-slate-100 bg-white p-4">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Owner</div>
+                  <div className="text-sm font-bold text-slate-800">{ownerName(opp.owner_email)}</div>
+                </div>
+              )}
             </>
           ) : opp.status === 'Lost' ? (
             <>
@@ -503,10 +505,12 @@ export default function OpportunityDetailPage() {
                 <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Clôture</div>
                 <div className="text-sm font-bold text-slate-800">{fmtDate(cDate)}</div>
               </div>
-              <div className="rounded-xl border border-slate-100 bg-white p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Owner</div>
-                <div className="text-sm font-bold text-slate-800">{ownerName(opp.owner_email)}</div>
-              </div>
+              {opp.owner_email && (
+                <div className="rounded-xl border border-slate-100 bg-white p-4">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Owner</div>
+                  <div className="text-sm font-bold text-slate-800">{ownerName(opp.owner_email)}</div>
+                </div>
+              )}
             </>
           ) : (
             <>
