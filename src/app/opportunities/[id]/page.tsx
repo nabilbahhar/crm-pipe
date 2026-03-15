@@ -744,8 +744,8 @@ export default function OpportunityDetailPage() {
                         const daysLeft = etaDate ? Math.ceil((etaDate.getTime() - today.getTime()) / 86400000) : null
                         return (
                           <tr key={l.id} className={`border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors ${isLate ? 'bg-red-50/30' : ''}`}>
-                            <td className="px-4 py-3">
-                              <div>
+                            <td className="px-4 py-3" style={{ maxWidth: 320 }}>
+                              <div className="line-clamp-2" title={l.designation}>
                                 {l.ref && <span className="text-[11px] text-slate-400 mr-1.5">[{l.ref}]</span>}
                                 <span className="font-medium text-slate-800">{l.designation}</span>
                               </div>
