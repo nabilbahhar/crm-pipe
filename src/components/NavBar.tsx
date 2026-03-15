@@ -160,7 +160,7 @@ function PasswordModal({ onClose, userEmail }: { onClose: () => void; userEmail:
 
   return (
     <div style={{
-      position: "fixed", inset: 0, zIndex: 999,
+      position: "fixed", inset: 0, zIndex: 150,
       background: "rgba(0,0,0,0.40)",
       display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
     }}>
@@ -359,7 +359,7 @@ function QuickSearch({ onClose }: { onClose: () => void }) {
   const LABELS: Record<string, string> = { deal: 'Deal', account: 'Compte', prospect: 'Prospect' };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 80 }}
+    <div style={{ position: 'fixed', inset: 0, zIndex: 150, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', paddingTop: 80 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ width: '100%', maxWidth: 560, background: '#fff', borderRadius: 16, boxShadow: '0 24px 60px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
@@ -434,7 +434,7 @@ function ShortcutsPanel({ onClose, modKey }: { onClose: () => void; modKey: stri
   }, [onClose]);
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: 80 }}
+    <div style={{ position: "fixed", inset: 0, zIndex: 150, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: 80 }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div style={{ width: "100%", maxWidth: 420, background: "#fff", borderRadius: 16, boxShadow: "0 24px 60px rgba(0,0,0,0.2)", overflow: "hidden" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid #f1f5f9" }}>
@@ -492,7 +492,7 @@ function NavDropdown({ item, active, path }: { item: NavItem; active: boolean; p
         <ChevronDown className={`w-3 h-3 opacity-50 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
       <div
-        className="absolute left-0 min-w-[180px] z-[200] overflow-hidden transition-all duration-200 ease-out origin-top"
+        className="absolute left-0 min-w-[180px] z-[120] overflow-hidden transition-all duration-200 ease-out origin-top"
         style={{
           top: '100%',
           background: '#0f172a',
@@ -859,7 +859,7 @@ export default function NavBar() {
               </button>
 
               {showNotifs && (
-                <div style={{ position: "absolute", top: 44, right: 0, width: 380, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, boxShadow: "0 10px 40px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 200 }}>
+                <div style={{ position: "absolute", top: 44, right: 0, width: 380, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, boxShadow: "0 10px 40px rgba(0,0,0,0.12)", overflow: "hidden", zIndex: 120 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid #f1f5f9" }}>
                     <span style={{ fontSize: 14, fontWeight: 700, color: "#0f172a" }}>Activité de l'équipe</span>
                     <button onClick={() => setShowNotifs(false)} style={{ border: "none", background: "none", cursor: "pointer", padding: 4 }}>
@@ -927,7 +927,7 @@ export default function NavBar() {
                   <div style={{
                     position: "absolute", top: 48, right: 0, width: 240,
                     background: "#fff", borderRadius: 12,
-                    boxShadow: "0 2px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)", overflow: "hidden", zIndex: 200,
+                    boxShadow: "0 2px 12px rgba(0,0,0,0.15), 0 0 0 1px rgba(0,0,0,0.05)", overflow: "hidden", zIndex: 120,
                   }}>
                     <div style={{ padding: "14px 16px 10px", borderBottom: "1px solid #f0f0f0" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

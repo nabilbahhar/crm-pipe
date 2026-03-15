@@ -936,12 +936,13 @@ export default function OpportunityDetailPage() {
                   </div>
                 </div>
 
-                {/* Send button */}
+                {/* Send button — only after commande is placed (not on partial save) */}
+                {commandePlacee && (
                 <div className={`rounded-xl border-2 p-4 transition-colors ${canEmail ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50'}`}>
                   <div className="flex items-center justify-between gap-4">
                     <div>
-                      <div className={`text-sm font-bold ${canEmail ? 'text-slate-900' : 'text-slate-400'}`}>
-                        {canEmail ? '✅ Fiche complète — prête à envoyer à Supply Chain' : '⏳ Complétez la fiche pour activer la commande'}
+                      <div className="text-sm font-bold text-slate-900">
+                        {'✅'} Commande placée — email prêt pour Supply Chain
                       </div>
                       <div className="text-xs text-slate-400 mt-0.5">
                         À : supplychain@compucom.ma · CC : n.bahhar@compucom.ma
@@ -954,8 +955,8 @@ export default function OpportunityDetailPage() {
                           setEmailCopied(true)
                           setTimeout(() => setEmailCopied(false), 8000)
                         }
-                      }} disabled={!canEmail}
-                      className={`shrink-0 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors shadow-sm ${emailCopied ? 'bg-emerald-600 text-white' : canEmail ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                      }}
+                      className={`shrink-0 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors shadow-sm ${emailCopied ? 'bg-emerald-600 text-white' : 'bg-slate-900 text-white hover:bg-slate-800'}`}>
                       {emailCopied ? <><Check className="h-4 w-4" /> Copié ! Ctrl+V dans Outlook</> : <><Mail className="h-4 w-4" /> Commander via Outlook</>}
                     </button>
                   </div>
@@ -965,6 +966,7 @@ export default function OpportunityDetailPage() {
                     </div>
                   )}
                 </div>
+                )}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 px-8 text-center">
