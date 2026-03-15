@@ -322,10 +322,14 @@ export default function OpportunityDetailPage() {
   const [loading, setLoading]     = useState(true)
   const [userEmail, setUserEmail] = useState<string | null>(null)
   const [emailCopied, setEmailCopied] = useState(false)
+  const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set())
+  const [contacts, setContacts]   = useState<any[]>([])
+  const [meetings, setMeetings]   = useState<any[]>([])
+  const [tickets, setTickets]     = useState<any[]>([])
 
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUserEmail(data?.user?.email ?? null)) }, [])
   useEffect(() => { if (id) loadAll() }, [id])
-  useEffect(() => { if (opp) document.title = `${opp.title} \u00b7 CRM-PIPE` }, [opp])
+  useEffect(() => { if (opp) document.title = `${opp.title} \· CRM-PIPE` }, [opp])
 
   async function loadAll() {
     setLoading(true)
@@ -362,16 +366,22 @@ export default function OpportunityDetailPage() {
     if (mySupply) setSupply(mySupply)
     setActivities(actRes.data || [])
 
-    // Load Deal Registrations, Project Services, Invoices
+    // Load Deal Registrations, Project Services, Invoices, Contacts, Meetings, Tickets
     try {
-      const [drRes, svcRes, invRes] = await Promise.all([
+      const [drRes, svcRes, invRes, contactsRes, meetingsRes, ticketsRes] = await Promise.all([
         supabase.from('deal_registrations').select('*').eq('opportunity_id', id),
         supabase.from('project_services').select('*').eq('opportunity_id', id).order('sort_order'),
         supabase.from('invoices').select('*, invoice_lines(purchase_line_id, purchase_lines(ref, designation, qty, pt_vente, fournisseur))').eq('opportunity_id', id).order('issue_date', { ascending: false }),
+        Promise.resolve(supabase.from('account_contacts').select('*').eq('account_id', oppRes.data?.accounts?.id || '')).catch(() => ({ data: [] })),
+        Promise.resolve(supabase.from('account_meetings').select('*').eq('account_id', oppRes.data?.accounts?.id || '').order('meeting_date', { ascending: false }).limit(3)).catch(() => ({ data: [] })),
+        Promise.resolve(supabase.from('support_tickets').select('*').eq('opportunity_id', id)).catch(() => ({ data: [] })),
       ])
       setDrs(drRes.data || [])
       setServices(svcRes.data || [])
       setInvoices(invRes.data || [])
+      setContacts((contactsRes as any)?.data || [])
+      setMeetings((meetingsRes as any)?.data || [])
+      setTickets((ticketsRes as any)?.data || [])
     } catch {} // tables may not exist yet
 
     setLoading(false)
@@ -410,6 +420,11 @@ export default function OpportunityDetailPage() {
     ? Array.from(new Map(info.purchase_lines.filter(l => l.fournisseur).map(l => [l.fournisseur, l])).values())
     : []
 
+  const prescription = services.find(s => s.title === 'Prescription')
+  const deployServices = services.filter(s => s.title !== 'Prescription')
+  const lateDeliveries = info ? info.purchase_lines.filter(l => l.eta && new Date(l.eta) < new Date() && l.line_status !== 'livre').length : 0
+  const openTickets = tickets.filter((t: any) => t.status === 'ouvert' || t.status === 'en_cours').length
+
   return (
     <div className="min-h-screen bg-[#f8fafc]">
       <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
@@ -423,7 +438,7 @@ export default function OpportunityDetailPage() {
           <span className="text-slate-600 font-medium truncate max-w-[200px]">{opp.title}</span>
         </nav>
 
-        {/* ── Header ── */}
+        {/* ── Hero Header ── */}
         <div className="flex items-start gap-3">
           <button onClick={() => router.back()}
             className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 shadow-sm transition-colors">
@@ -431,7 +446,7 @@ export default function OpportunityDetailPage() {
           </button>
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-lg font-black text-slate-900 tracking-tight leading-tight">{opp.title}</h1>
+              <h1 className="text-lg font-black text-slate-900 tracking-tight">{opp.title}</h1>
               <StatusPill status={opp.status} />
             </div>
             <p className="mt-1 text-sm text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -447,31 +462,60 @@ export default function OpportunityDetailPage() {
           </div>
           {isWon && !commandePlacee && (
             <button onClick={() => router.push(`/opportunities/${id}/purchase`)}
-              className={`shrink-0 inline-flex h-9 items-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-colors ${info ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
+              className="shrink-0 inline-flex h-9 items-center gap-2 rounded-xl px-4 text-xs font-bold text-white shadow-sm transition-colors bg-slate-900 hover:bg-slate-800">
               <Package className="h-4 w-4" />
-              {info ? 'Compléter fiche' : 'Remplir fiche'}
+              {ficheComplete ? 'Modifier fiche' : info ? 'Compléter fiche' : 'Remplir fiche'}
             </button>
           )}
         </div>
 
-        {/* ══ SECTION 1 : INFOS PIPELINE / DEAL ══ */}
-        <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-          <div className="border-b border-slate-50 bg-slate-50/50 px-5 py-3">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">📊 Informations Deal</span>
+        {/* ── Contextual KPI Strip ── */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {/* ALWAYS: Montant Deal (dark card) */}
+          <div className="rounded-xl bg-slate-900 p-4">
+            <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Montant Deal</div>
+            <div className="text-base font-black text-white tabular-nums">{mad(opp.amount)}</div>
           </div>
-          <div className="p-5">
-            {/* KPI row */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-5">
-              <div className="rounded-xl bg-slate-900 p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Montant Deal</div>
-                <div className="text-base font-black text-white tabular-nums">{mad(opp.amount)}</div>
+
+          {/* CONTEXTUAL cards based on status */}
+          {isWon ? (
+            <>
+              <div className="rounded-xl border border-slate-100 bg-white p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">N° PO</div>
+                <div className="text-sm font-bold text-slate-800">{opp.po_number || '\—'}</div>
               </div>
+              <div className="rounded-xl border border-slate-100 bg-white p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Cl\ôture</div>
+                <div className="text-sm font-bold text-slate-800">{fmtDate(cDate)}</div>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-white p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Owner</div>
+                <div className="text-sm font-bold text-slate-800">{ownerName(opp.owner_email)}</div>
+              </div>
+            </>
+          ) : opp.status === 'Lost' ? (
+            <>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
                 <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Stage</div>
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${stageCfg.bg} ${stageCfg.text}`}>{opp.stage || '—'}</span>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${stageCfg.bg} ${stageCfg.text}`}>{opp.stage || '\—'}</span>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Probabilité</div>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Cl\ôture</div>
+                <div className="text-sm font-bold text-slate-800">{fmtDate(cDate)}</div>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-white p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Owner</div>
+                <div className="text-sm font-bold text-slate-800">{ownerName(opp.owner_email)}</div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="rounded-xl border border-slate-100 bg-white p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Stage</div>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${stageCfg.bg} ${stageCfg.text}`}>{opp.stage || '\—'}</span>
+              </div>
+              <div className="rounded-xl border border-slate-100 bg-white p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Probabilit\é</div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 h-1.5 rounded-full bg-slate-100">
                     <div className="h-full rounded-full bg-emerald-500" style={{ width: `${opp.prob||0}%` }} />
@@ -480,88 +524,463 @@ export default function OpportunityDetailPage() {
                 </div>
               </div>
               <div className="rounded-xl border border-slate-100 bg-white p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Clôture</div>
+                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">Cl\ôture</div>
                 <div className="text-sm font-bold text-slate-800">{fmtDate(cDate)}</div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ── Sticky Nav Bar ── */}
+        <nav className="sticky top-[57px] z-10 -mx-4 px-4 py-2 bg-white/80 backdrop-blur-sm border-b border-slate-100">
+          <div className="flex items-center gap-1 overflow-x-auto">
+            <NavPill href="#section-commercial" label="Commercial" active />
+            {isWon && <NavPill href="#section-achat" label="Achat" alert={!!(info && !ficheComplete)} />}
+            {supply && <NavPill href="#section-supply" label="Supply" alert={lateDeliveries > 0} />}
+            {prescription && <NavPill href="#section-prescription" label="Prescription" />}
+            {deployServices.length > 0 && <NavPill href="#section-deploiement" label="D\éploiement" />}
+            {isWon && <NavPill href="#section-facturation" label="Facturation" />}
+            {tickets.length > 0 && <NavPill href="#section-support" label="Support" alert={openTickets > 0} />}
+            {activities.length > 0 && <NavPill href="#section-historique" label="Historique" />}
+          </div>
+        </nav>
+
+        {/* ══ SECTION: FICHE COMMERCIALE ══ */}
+        <Section id="commercial" title="Fiche Commerciale" icon="💼">
+          {/* Details grid */}
+          <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+            {opp.accounts?.sector && <DetailRow icon={<Tag className="h-3.5 w-3.5"/>} label="Secteur" value={opp.accounts.sector} />}
+            {opp.accounts?.segment && <DetailRow icon={<Target className="h-3.5 w-3.5"/>} label="Segment" value={opp.accounts.segment} />}
+            {opp.accounts?.region && <DetailRow icon={<MapPin className="h-3.5 w-3.5"/>} label="R\égion" value={opp.accounts.region} />}
+            {opp.contact_name && <DetailRow icon={<User className="h-3.5 w-3.5"/>} label="Contact" value={opp.contact_name} />}
+            {opp.contact_email && <DetailRow icon={<Mail className="h-3.5 w-3.5"/>} label="Email contact" value={opp.contact_email} />}
+            {opp.vendor && !opp.multi_bu && <DetailRow icon={<Building2 className="h-3.5 w-3.5"/>} label="Vendor / Constructeur" value={opp.vendor} />}
+            {opp.po_number && <DetailRow icon={<Tag className="h-3.5 w-3.5"/>} label="N\° PO" value={opp.po_number} />}
+            {opp.forecast && <DetailRow icon={<TrendingUp className="h-3.5 w-3.5"/>} label="Forecast" value={opp.forecast} />}
+            {opp.owner_email && <DetailRow icon={<User className="h-3.5 w-3.5"/>} label="Owner" value={ownerName(opp.owner_email)} />}
+            <DetailRow icon={<Calendar className="h-3.5 w-3.5"/>} label="Cr\é\é le" value={fmtDate(opp.created_at)} />
+            {opp.updated_at && <DetailRow icon={<Clock className="h-3.5 w-3.5"/>} label="Mis \à jour" value={fmtDate(opp.updated_at)} />}
+          </div>
+
+          {/* Contacts Compte */}
+          {contacts.length > 0 && (
+            <div className="mt-4">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{'👥'} Contacts compte</div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {contacts.map((c: any) => (
+                  <div key={c.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3">
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
+                        {(c.full_name || '?')[0].toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-slate-800 flex items-center gap-1.5">
+                          {c.full_name}
+                          {c.is_primary && <span className="text-[9px] rounded-full bg-blue-100 text-blue-700 px-1.5 py-0.5 font-bold">Principal</span>}
+                        </div>
+                        {c.role && <div className="text-[10px] text-slate-500">{c.role}</div>}
+                      </div>
+                    </div>
+                    <div className="mt-2 space-y-0.5">
+                      {c.email && <div className="text-[11px] text-slate-500 flex items-center gap-1"><Mail className="h-3 w-3" />{c.email}</div>}
+                      {c.phone && <div className="text-[11px] text-slate-500 flex items-center gap-1"><Phone className="h-3 w-3" />{c.phone}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* BU breakdown (multi-BU deals) */}
+          {opp.multi_bu && Array.isArray(opp.bu_lines) && opp.bu_lines.length > 0 && (() => {
+            const total = opp.bu_lines.reduce((s: number, l: any) => s + Number(l.amount || 0), 0)
+            const COLORS = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-cyan-500', 'bg-purple-500']
+            const TEXT_COLORS = ['text-indigo-700', 'text-emerald-700', 'text-amber-700', 'text-rose-700', 'text-cyan-700', 'text-purple-700']
+            const BG_COLORS = ['bg-indigo-50', 'bg-emerald-50', 'bg-amber-50', 'bg-rose-50', 'bg-cyan-50', 'bg-purple-50']
+            return (
+              <div className="mt-4 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/50 to-violet-50/50 px-4 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-500 mb-3">{'🏢'} R\épartition par Business Unit</div>
+                {/* Progress bar */}
+                <div className="h-3 rounded-full overflow-hidden flex mb-3">
+                  {opp.bu_lines.map((l: any, i: number) => {
+                    const pctVal = total > 0 ? (Number(l.amount || 0) / total) * 100 : 0
+                    return <div key={i} className={`${COLORS[i % COLORS.length]} first:rounded-l-full last:rounded-r-full`} style={{ width: `${pctVal}%` }} />
+                  })}
+                </div>
+                {/* Lines */}
+                <div className="space-y-2">
+                  {opp.bu_lines.map((l: any, i: number) => {
+                    const amt = Number(l.amount || 0)
+                    const pctVal = total > 0 ? (amt / total) * 100 : 0
+                    return (
+                      <div key={i} className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${BG_COLORS[i % BG_COLORS.length]} ${TEXT_COLORS[i % TEXT_COLORS.length]}`}>{l.card || l.bu}</span>
+                          {l.bu && l.card && l.bu !== l.card && <span className="text-xs text-slate-400">{l.bu}</span>}
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-xs font-bold text-slate-700 tabular-nums">{mad(amt)}</span>
+                          <span className="text-xs text-slate-400 tabular-nums w-10 text-right">{pctVal.toFixed(0)}%</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Deal Registration */}
+          {drs.length > 0 && (
+            <div className="mt-4">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{'🛡️'} Deal Registration ({drs.length})</div>
+              <div className="space-y-2">
+                {drs.map(dr => {
+                  const daysLeft = dr.expiry_date ? Math.ceil((new Date(dr.expiry_date).getTime() - Date.now()) / 86400000) : null
+                  const isExpired = daysLeft !== null && daysLeft < 0
+                  const expiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 30
+                  return (
+                    <div key={dr.id} className={`rounded-xl border p-3 flex items-center justify-between gap-4 ${isExpired ? 'border-red-200 bg-red-50' : expiringSoon ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <ShieldCheck className={`h-5 w-5 shrink-0 ${isExpired ? 'text-red-500' : expiringSoon ? 'text-amber-500' : 'text-emerald-500'}`} />
+                        <div className="min-w-0">
+                          <div className="font-bold text-sm text-slate-800">
+                            {dr.dr_number || 'DR'}
+                            {dr.card && <span className="ml-2 text-xs text-slate-500">{dr.card}</span>}
+                            {dr.bu && <span className="ml-1 text-xs text-slate-400">({dr.bu})</span>}
+                          </div>
+                          {dr.platform && <div className="text-[10px] text-slate-500">Plateforme : {dr.platform}</div>}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        {dr.expiry_date ? (
+                          <div>
+                            <div className={`text-xs font-bold ${isExpired ? 'text-red-600' : expiringSoon ? 'text-amber-600' : 'text-emerald-600'}`}>
+                              {isExpired ? `Expir\é (${Math.abs(daysLeft!)}j)` : expiringSoon ? `Expire dans ${daysLeft}j` : `Valide (${daysLeft}j)`}
+                            </div>
+                            <div className="text-[10px] text-slate-400">{fmtDate(dr.expiry_date)}</div>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-emerald-600 font-bold">Actif</span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Next step */}
+          {opp.next_step && (
+            <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-blue-500 mb-1.5">{'🎯'} Prochaine \étape</div>
+              <p className="text-sm text-blue-800 leading-relaxed">{opp.next_step}</p>
+            </div>
+          )}
+
+          {/* Notes / description */}
+          {(opp.notes || opp.description) && (
+            <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">{'📝'} Notes</div>
+              <p className="text-sm text-slate-600 leading-relaxed">{opp.notes || opp.description}</p>
+            </div>
+          )}
+
+          {/* Meetings */}
+          {meetings.length > 0 && (
+            <div className="mt-4">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{'📅'} Derniers rendez-vous</div>
+              <div className="space-y-2">
+                {meetings.map((m: any) => (
+                  <div key={m.id} className="rounded-xl border border-slate-100 bg-slate-50 px-4 py-2.5 flex items-center justify-between">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-800">{m.title}</div>
+                      {m.summary && <div className="text-xs text-slate-500 line-clamp-1 mt-0.5">{m.summary}</div>}
+                    </div>
+                    <div className="text-xs text-slate-400 shrink-0 ml-3">{fmtDate(m.meeting_date)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Section>
+
+        {/* ══ SECTION: FICHE ACHAT ══ */}
+        {isWon && (
+          <Section id="achat" title="Fiche Achat" icon="📋"
+            badge={
+              commandePlacee ? (
+                <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Commande plac\ée
+                </span>
+              ) : undefined
+            }>
+            {/* Header fiche status */}
+            <div className={`-m-5 mb-4 flex items-center gap-3 px-5 py-4 border-b ${ficheComplete ? 'bg-emerald-50 border-emerald-100' : info ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'}`}>
+              <div className={`flex h-8 w-8 items-center justify-center rounded-xl text-base ${ficheComplete ? 'bg-emerald-500' : info ? 'bg-blue-500' : 'bg-amber-500'} text-white`}>{'📋'}</div>
+              <div>
+                <div className={`text-sm font-black ${ficheComplete ? 'text-emerald-900' : info ? 'text-blue-900' : 'text-amber-900'}`}>
+                  Fiche Achat
+                  {ficheComplete && <span className="ml-2 text-xs font-normal text-emerald-600">Compl\ète {'\✓'}</span>}
+                  {info && !ficheComplete && <span className="ml-2 text-xs font-normal text-blue-600">En cours {'\·'} {linesOk}/{info.purchase_lines.length} lignes</span>}
+                  {!info && <span className="ml-2 text-xs font-normal text-amber-600">{'\À'} remplir</span>}
+                </div>
+                {info && (
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    Par <span className="font-medium">{info.filled_by}</span>
+                    {info.updated_at && <> {'\·'} {fmtDate(info.updated_at)}</>}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Details grid */}
-            <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
-              {opp.accounts?.sector && <DetailRow icon={<Tag className="h-3.5 w-3.5"/>} label="Secteur" value={opp.accounts.sector} />}
-              {opp.accounts?.segment && <DetailRow icon={<Target className="h-3.5 w-3.5"/>} label="Segment" value={opp.accounts.segment} />}
-              {opp.accounts?.region && <DetailRow icon={<MapPin className="h-3.5 w-3.5"/>} label="Région" value={opp.accounts.region} />}
-              {opp.contact_name && <DetailRow icon={<User className="h-3.5 w-3.5"/>} label="Contact" value={opp.contact_name} />}
-              {opp.contact_email && <DetailRow icon={<Mail className="h-3.5 w-3.5"/>} label="Email contact" value={opp.contact_email} />}
-              {opp.vendor && !opp.multi_bu && <DetailRow icon={<Building2 className="h-3.5 w-3.5"/>} label="Vendor / Constructeur" value={opp.vendor} />}
-              {opp.po_number && <DetailRow icon={<Tag className="h-3.5 w-3.5"/>} label="N° PO" value={opp.po_number} />}
-              {opp.forecast && <DetailRow icon={<TrendingUp className="h-3.5 w-3.5"/>} label="Forecast" value={opp.forecast} />}
-              {opp.owner_email && <DetailRow icon={<User className="h-3.5 w-3.5"/>} label="Owner" value={ownerName(opp.owner_email)} />}
-              <DetailRow icon={<Calendar className="h-3.5 w-3.5"/>} label="Créé le" value={fmtDate(opp.created_at)} />
-              {opp.updated_at && <DetailRow icon={<Clock className="h-3.5 w-3.5"/>} label="Mis à jour" value={fmtDate(opp.updated_at)} />}
-            </div>
-
-            {/* BU breakdown (multi-BU deals) */}
-            {opp.multi_bu && Array.isArray(opp.bu_lines) && opp.bu_lines.length > 0 && (() => {
-              const total = opp.bu_lines.reduce((s: number, l: any) => s + Number(l.amount || 0), 0)
-              const COLORS = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500', 'bg-cyan-500', 'bg-purple-500']
-              const TEXT_COLORS = ['text-indigo-700', 'text-emerald-700', 'text-amber-700', 'text-rose-700', 'text-cyan-700', 'text-purple-700']
-              const BG_COLORS = ['bg-indigo-50', 'bg-emerald-50', 'bg-amber-50', 'bg-rose-50', 'bg-cyan-50', 'bg-purple-50']
-              return (
-                <div className="mt-4 rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/50 to-violet-50/50 px-4 py-3">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-500 mb-3">🏢 Répartition par Business Unit</div>
-                  {/* Progress bar */}
-                  <div className="h-3 rounded-full overflow-hidden flex mb-3">
-                    {opp.bu_lines.map((l: any, i: number) => {
-                      const pctVal = total > 0 ? (Number(l.amount || 0) / total) * 100 : 0
-                      return <div key={i} className={`${COLORS[i % COLORS.length]} first:rounded-l-full last:rounded-r-full`} style={{ width: `${pctVal}%` }} />
-                    })}
+            {info && info.purchase_lines.length > 0 ? (
+              <div className="space-y-4">
+                {/* Lines table — Devis Pro style */}
+                <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+                  {/* Dark header */}
+                  <div className="bg-gradient-to-r from-slate-800 to-slate-700 px-5 py-3 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-white font-semibold text-sm tracking-tight">Récapitulatif commande</h3>
+                      <p className="text-slate-400 text-[11px] mt-0.5">{opp.accounts?.name} · {info.purchase_lines.length} article{info.purchase_lines.length > 1 ? 's' : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <div className="text-slate-500 text-[9px] font-bold uppercase tracking-wider">Vente HT</div>
+                        <span className="text-white text-sm font-bold">{mad(totalVente)}</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-slate-500 text-[9px] font-bold uppercase tracking-wider">Marge</div>
+                        <span className={`text-sm font-bold ${margePctBrute >= 15 ? 'text-emerald-400' : margePctBrute >= 0 ? 'text-amber-400' : 'text-red-400'}`}>{mad(margeBrute)} <span className="text-[10px]">({margePctBrute.toFixed(1)}%)</span></span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Column headers */}
+                  <div className="grid grid-cols-[40px_1fr_60px_100px_100px_90px_110px_100px_80px] bg-slate-50/80 border-b border-slate-200 px-4 py-2 text-[9px] font-extrabold uppercase tracking-widest text-slate-400">
+                    <span>N°</span><span>Désignation</span><span className="text-right">Qté</span><span className="text-right">PT Vente</span><span className="text-right">PT Achat</span><span className="text-right">Marge</span><span className="text-center">Fournisseur</span><span className="text-center">Statut</span><span className="text-center">ETA</span>
                   </div>
                   {/* Lines */}
-                  <div className="space-y-2">
-                    {opp.bu_lines.map((l: any, i: number) => {
-                      const amt = Number(l.amount || 0)
-                      const pctVal = total > 0 ? (amt / total) * 100 : 0
+                  <div className="divide-y divide-slate-100">
+                    {info.purchase_lines.map((l, i) => {
+                      const ptV = l.pt_vente || l.qty * l.pu_vente
+                      const ptA = l.qty * l.pu_achat
+                      const marge = ptV - ptA
+                      const margePct = ptV > 0 ? (marge / ptV) * 100 : 0
+                      const status = (l.line_status || 'pending') as LineStatus
+                      const sCfg = LINE_STATUS_CFG[status] || LINE_STATUS_CFG.pending
+                      const etaDate = l.eta ? new Date(l.eta) : null
+                      const today = new Date()
+                      const isLate = etaDate && etaDate < today && status !== 'livre'
+                      const daysLeft = etaDate ? Math.ceil((etaDate.getTime() - today.getTime()) / 86400000) : null
                       return (
-                        <div key={i} className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${BG_COLORS[i % BG_COLORS.length]} ${TEXT_COLORS[i % TEXT_COLORS.length]}`}>{l.card || l.bu}</span>
-                            {l.bu && l.card && l.bu !== l.card && <span className="text-xs text-slate-400">{l.bu}</span>}
+                        <div key={l.id} className={`grid grid-cols-[40px_1fr_60px_100px_100px_90px_110px_100px_80px] items-center px-4 py-2.5 text-[12px] hover:bg-slate-50/50 transition-colors ${isLate ? 'bg-red-50/30' : ''}`}>
+                          {/* N° */}
+                          <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold text-white ${l.pu_achat > 0 && l.fournisseur ? 'bg-emerald-500' : 'bg-slate-400'}`}>{i + 1}</span>
+                          {/* Désignation — compact, 1 line truncated */}
+                          <div className="min-w-0 pr-2">
+                            <div className="truncate font-medium text-slate-800 cursor-pointer" title={l.designation}
+                              onClick={() => setExpandedLines(prev => { const n = new Set(prev); n.has(l.id) ? n.delete(l.id) : n.add(l.id); return n })}>
+                              {l.ref && <span className="text-[10px] text-slate-400 mr-1 font-mono">[{l.ref}]</span>}
+                              {expandedLines.has(l.id) ? l.designation : (l.designation.length > 60 ? l.designation.slice(0, 60) + '…' : l.designation)}
+                            </div>
+                            {l.fournisseur && <div className="text-[10px] text-slate-400 truncate">{l.fournisseur}{l.contact_fournisseur ? ` · ${l.contact_fournisseur}` : ''}</div>}
                           </div>
-                          <div className="flex items-center gap-3 shrink-0">
-                            <span className="text-xs font-bold text-slate-700 tabular-nums">{mad(amt)}</span>
-                            <span className="text-xs text-slate-400 tabular-nums w-10 text-right">{pctVal.toFixed(0)}%</span>
+                          {/* Qté */}
+                          <span className="text-right tabular-nums font-semibold text-slate-600">{l.qty}</span>
+                          {/* PT Vente */}
+                          <span className="text-right tabular-nums font-semibold text-slate-700">{ptV > 0 ? mad(ptV) : '—'}</span>
+                          {/* PT Achat */}
+                          <span className="text-right tabular-nums font-semibold text-slate-600">{l.pu_achat > 0 ? mad(ptA) : '—'}</span>
+                          {/* Marge */}
+                          <div className="text-right">
+                            {l.pu_achat > 0 ? (
+                              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${margePct >= 15 ? 'bg-emerald-100 text-emerald-700' : margePct >= 0 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{margePct.toFixed(0)}%</span>
+                            ) : <span className="text-slate-300">—</span>}
+                          </div>
+                          {/* Fournisseur — moved to designation line, just show badge here */}
+                          <div className="text-center">
+                            {l.fournisseur ? (
+                              <span className="text-[10px] font-medium text-slate-500 truncate block">{l.fournisseur.split(' ').slice(0, 2).join(' ')}</span>
+                            ) : <span className="text-[10px] text-amber-500 font-bold">⚠</span>}
+                          </div>
+                          {/* Statut */}
+                          <div className="text-center">
+                            <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-bold ${sCfg.bg} ${sCfg.color} border ${sCfg.border}`}>
+                              {sCfg.icon} {sCfg.label}
+                            </span>
+                          </div>
+                          {/* ETA */}
+                          <div className="text-center">
+                            {etaDate ? (
+                              <span className={`text-[11px] font-bold tabular-nums ${isLate ? 'text-red-600' : daysLeft! <= 3 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                {isLate && '⚠ '}{etaDate.toLocaleDateString('fr-MA', { day: '2-digit', month: 'short' })}
+                              </span>
+                            ) : <span className="text-slate-300">—</span>}
                           </div>
                         </div>
                       )
                     })}
                   </div>
+                  {/* Footer totals */}
+                  <div className="grid grid-cols-[40px_1fr_60px_100px_100px_90px_110px_100px_80px] items-center px-4 py-3 bg-slate-50 border-t-2 border-slate-200 text-[12px]">
+                    <span />
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Totaux</span>
+                    <span />
+                    <span className="text-right font-black text-slate-900 tabular-nums">{mad(totalVente)}</span>
+                    <span className="text-right font-black text-slate-900 tabular-nums">{totalAchat > 0 ? mad(totalAchat) : '—'}</span>
+                    <div className="text-right">
+                      {totalAchat > 0 && <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${margePctBrute >= 15 ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{margePctBrute.toFixed(1)}%</span>}
+                    </div>
+                    <span />
+                    <div className="text-center">
+                      {(() => {
+                        const delivered = info.purchase_lines.filter(l => l.line_status === 'livre').length
+                        const total = info.purchase_lines.length
+                        return <span className={`text-[10px] font-bold ${delivered === total ? 'text-emerald-600' : 'text-slate-500'}`}>{delivered}/{total} livré{delivered > 1 ? 's' : ''}</span>
+                      })()}
+                    </div>
+                    <span />
+                  </div>
                 </div>
-              )
-            })()}
 
-            {/* Next step */}
-            {opp.next_step && (
-              <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-blue-500 mb-1.5">🎯 Prochaine étape</div>
-                <p className="text-sm text-blue-800 leading-relaxed">{opp.next_step}</p>
+                {/* Line status update section (Supply management) */}
+                <LineStatusManager lines={info.purchase_lines} opportunityId={id} onUpdate={loadAll} />
+
+                {/* 3-col: recap + suppliers + files */}
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {/* Recap */}
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-2">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{'📊'} R\écap financier</div>
+                    <RRow label="Total vente HT"  value={mad(totalVente)} bold />
+                    <RRow label="Total achat HT"  value={totalAchat > 0 ? mad(totalAchat) : '\—'} />
+                    <RRow label="Marge brute"     value={totalAchat > 0 ? mad(margeBrute) : '\—'}
+                      sub={totalAchat > 0 ? pct(totalVente > 0 ? (margeBrute/totalVente)*100 : 0) : undefined}
+                      color={margeBrute >= 0 ? 'emerald' : 'red'} />
+                    {info.frais_engagement > 0 && (
+                      <div className="border-t border-slate-200 pt-2">
+                        <RRow label="Frais engagement" value={`\− ${mad(info.frais_engagement)}`} color="amber" />
+                      </div>
+                    )}
+                    <div className="border-t border-slate-200 pt-2">
+                      <RRow label="Marge nette" value={totalAchat > 0 ? mad(margeNette) : '\—'}
+                        sub={totalAchat > 0 ? pct(margePctNette) : undefined}
+                        color={margePctNette < 10 ? 'red' : 'emerald'} bold />
+                    </div>
+                    {info.justif_reason && (
+                      <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                        <div className="text-[10px] font-bold text-amber-700 uppercase mb-1">{'\⚠'} Marge faible</div>
+                        <div className="text-xs font-medium text-amber-800">{info.justif_reason}</div>
+                        <div className="mt-1 text-[10px] font-bold">
+                          {info.approved_by
+                            ? <span className="text-emerald-600">{'\✓'} Valid\é par {info.approved_by}</span>
+                            : <span className="text-amber-500 flex items-center gap-1"><Clock className="h-3 w-3" /> En attente Achraf</span>}
+                        </div>
+                      </div>
+                    )}
+                    {info.payment_terms && (
+                      <div className="border-t border-slate-200 pt-2">
+                        <RRow label="Modalit\és paiement" value={(() => {
+                          try {
+                            const parsed = JSON.parse(info.payment_terms!)
+                            return parsed.template ? paymentTermLabel(parsed.template) : paymentTermLabel(info.payment_terms!)
+                          } catch { return paymentTermLabel(info.payment_terms!) }
+                        })()} />
+                      </div>
+                    )}
+                    {info.notes && <p className="border-t border-slate-200 pt-2 text-xs text-slate-500 italic">{info.notes}</p>}
+                  </div>
+
+                  {/* Suppliers */}
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{'🏭'} Fournisseurs ({uniqueSuppliers.length})</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {uniqueSuppliers.length === 0
+                        ? <p className="text-xs text-slate-400 italic">Aucun fournisseur</p>
+                        : uniqueSuppliers.map((s, i) => (
+                          <div key={i}
+                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-default transition-colors"
+                            title={[s.contact_fournisseur, s.email_fournisseur, s.tel_fournisseur].filter(Boolean).join(' \· ')}>
+                            {s.fournisseur}
+                            <span className="text-slate-400 font-normal ml-1">{'\·'} {info.purchase_lines.filter(l => l.fournisseur === s.fournisseur).length}</span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* Files */}
+                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">{'📄'} Documents ({files.length})</div>
+                    <div className="space-y-1.5">
+                      {files.length === 0
+                        ? <p className="text-xs text-slate-400 italic">Aucun document</p>
+                        : files.map(f => (
+                          <div key={f.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${f.file_type==='bc_client'?'border-blue-100 bg-blue-50':f.file_type==='devis_compucom'?'border-violet-100 bg-violet-50':'border-slate-200 bg-white'}`}>
+                            <FileText className={`h-3.5 w-3.5 shrink-0 ${f.file_type==='bc_client'?'text-blue-600':f.file_type==='devis_compucom'?'text-violet-600':'text-slate-400'}`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[10px] font-bold uppercase tracking-wide opacity-60">{f.file_type==='bc_client'?'BC Client':f.file_type==='devis_compucom'?'Devis':'Autre'}</div>
+                              <div className="text-xs font-semibold truncate">{f.file_name}</div>
+                            </div>
+                            {fileUrls[f.id] && (
+                              <a href={fileUrls[f.id]} target="_blank" rel="noreferrer" className="shrink-0 opacity-50 hover:opacity-100 transition-opacity">
+                                <Download className="h-3.5 w-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Send button */}
+                <div className={`rounded-xl border-2 p-4 transition-colors ${canEmail ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50'}`}>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <div className={`text-sm font-bold ${canEmail ? 'text-slate-900' : 'text-slate-400'}`}>
+                        {canEmail ? '\✅ Fiche compl\ète \— pr\ête \à envoyer \à Supply Chain' : '\⏳ Compl\étez la fiche pour activer la commande'}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5">
+                        À : supplychain@compucom.ma · CC : n.bahhar@compucom.ma
+                        {margePctBrute < 10 && totalAchat > 0 && <>, A.lahkim@compucom.ma <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-700">{'\⚠'} Achraf</span></>}
+                      </div>
+                    </div>
+                    <button onClick={async () => {
+                        if (opp && info) {
+                          await openSupplyEmail(opp, info, userEmail)
+                          setEmailCopied(true)
+                          setTimeout(() => setEmailCopied(false), 8000)
+                        }
+                      }} disabled={!canEmail}
+                      className={`shrink-0 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors shadow-sm ${emailCopied ? 'bg-emerald-600 text-white' : canEmail ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
+                      {emailCopied ? <><Check className="h-4 w-4" /> Copi\é ! Ctrl+V dans Outlook</> : <><Mail className="h-4 w-4" /> Commander via Outlook</>}
+                    </button>
+                  </div>
+                  {emailCopied && (
+                    <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 font-medium">
+                      {'\✅'} Email copi\é dans le presse-papier \— <strong>Collez (Ctrl+V)</strong> dans le corps du mail Outlook puis Envoyer
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 px-8 text-center">
+                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-2xl border border-amber-100">{'📦'}</div>
+                <p className="text-base font-black text-slate-800">Aucune fiche achat</p>
+                <p className="text-sm text-slate-400 mt-1 mb-4 max-w-xs leading-relaxed">Remplis la fiche achat pour d\éclencher le processus de commande Supply Chain.</p>
+                <button onClick={() => router.push(`/opportunities/${id}/purchase`)}
+                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-bold text-white hover:bg-amber-600 transition-colors">
+                  <Package className="h-4 w-4" /> Remplir la fiche achat
+                </button>
               </div>
             )}
+          </Section>
+        )}
 
-            {/* Notes / description */}
-            {(opp.notes || opp.description) && (
-              <div className="mt-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1.5">📝 Notes</div>
-                <p className="text-sm text-slate-600 leading-relaxed">{opp.notes || opp.description}</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ══ SECTION 2 : SUPPLY ORDER TRACKER (si existe) ══ */}
+        {/* ══ SECTION: SUPPLY / LOGISTIQUE ══ */}
         {supply && supCfg && (
-          <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+          <Section id="supply" title="Logistique" icon="🚚">
             <div className="mb-4 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">📦 Statut commande Supply</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{'📦'} Statut commande Supply</span>
               <div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${supCfg.bg} ${supCfg.color}`}>
                 <span className={`h-2 w-2 rounded-full ${supCfg.dot}`} />
                 {supCfg.label}
@@ -592,69 +1011,42 @@ export default function OpportunityDetailPage() {
                 <span className="font-semibold text-slate-500">Note Supply : </span>{supply.supply_notes}
               </div>
             )}
-          </div>
-        )}
 
-        {/* ══ SECTION : DEAL REGISTRATIONS ══ */}
-        {drs.length > 0 && (
-          <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-            <div className="border-b border-slate-50 bg-blue-50/50 px-5 py-3 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-blue-500">🛡️ Deal Registration ({drs.length})</span>
-            </div>
-            <div className="p-5 space-y-2">
-              {drs.map(dr => {
-                const daysLeft = dr.expiry_date ? Math.ceil((new Date(dr.expiry_date).getTime() - Date.now()) / 86400000) : null
-                const isExpired = daysLeft !== null && daysLeft < 0
-                const expiringSoon = daysLeft !== null && daysLeft >= 0 && daysLeft <= 30
-                return (
-                  <div key={dr.id} className={`rounded-xl border p-3 flex items-center justify-between gap-4 ${isExpired ? 'border-red-200 bg-red-50' : expiringSoon ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
-                    <div className="flex items-center gap-3 min-w-0">
-                      <ShieldCheck className={`h-5 w-5 shrink-0 ${isExpired ? 'text-red-500' : expiringSoon ? 'text-amber-500' : 'text-emerald-500'}`} />
-                      <div className="min-w-0">
-                        <div className="font-bold text-sm text-slate-800">
-                          {dr.dr_number || 'DR'}
-                          {dr.card && <span className="ml-2 text-xs text-slate-500">{dr.card}</span>}
-                          {dr.bu && <span className="ml-1 text-xs text-slate-400">({dr.bu})</span>}
-                        </div>
-                        {dr.platform && <div className="text-[10px] text-slate-500">Plateforme : {dr.platform}</div>}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      {dr.expiry_date ? (
-                        <div>
-                          <div className={`text-xs font-bold ${isExpired ? 'text-red-600' : expiringSoon ? 'text-amber-600' : 'text-emerald-600'}`}>
-                            {isExpired ? `Expiré (${Math.abs(daysLeft!)}j)` : expiringSoon ? `Expire dans ${daysLeft}j` : `Valide (${daysLeft}j)`}
-                          </div>
-                          <div className="text-[10px] text-slate-400">{fmtDate(dr.expiry_date)}</div>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-emerald-600 font-bold">Actif</span>
-                      )}
-                    </div>
+            {/* Supply key dates */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-4">
+              {[
+                { label: 'Plac\é le', date: supply.placed_at },
+                { label: 'Command\é le', date: supply.ordered_at },
+                { label: 'Re\çu le', date: supply.received_at },
+                { label: 'Livr\é le', date: supply.delivered_at },
+                { label: 'Factur\é le', date: supply.invoiced_at },
+              ].map(d => (
+                <div key={d.label} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-center">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{d.label}</div>
+                  <div className={`text-xs font-bold mt-0.5 ${d.date ? 'text-slate-700' : 'text-slate-300'}`}>
+                    {d.date ? fmtDate(d.date) : '\—'}
                   </div>
-                )
-              })}
+                </div>
+              ))}
             </div>
-          </div>
+          </Section>
         )}
 
-        {/* ══ SECTION : PRESCRIPTION ══ */}
+        {/* ══ SECTION: PRESCRIPTION ══ */}
         {(() => {
-          const prescription = services.find(s => s.title === 'Prescription')
           if (!prescription) return null
           const psCfg = PRESCRIPTION_STATUS_CFG[(prescription.prescription_status || 'en_attente') as PrescriptionStatus]
           return (
-            <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-              <div className="border-b border-slate-50 bg-slate-50/50 px-5 py-3 flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">📋 Prescription</span>
+            <Section id="prescription" title="Prescription" icon="📋"
+              badge={
                 <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${psCfg.bg} ${psCfg.color}`}>
                   {psCfg.icon} {psCfg.label}
                 </span>
-              </div>
-              <div className="px-5 py-4 flex items-center gap-6">
+              }>
+              <div className="flex items-center gap-6">
                 {prescription.assigned_to && (
                   <div>
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Ingénieur presales</div>
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Ing\énieur presales</div>
                     <div className="text-sm font-semibold text-slate-700">{prescription.assigned_to}</div>
                   </div>
                 )}
@@ -677,307 +1069,35 @@ export default function OpportunityDetailPage() {
                   </div>
                 )}
               </div>
-            </div>
+            </Section>
           )
         })()}
 
-        {/* ══ SECTION 3 : FICHE ACHAT (Won uniquement) ══ */}
-        {isWon && (
-          <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-            {/* Header fiche */}
-            <div className={`flex items-center justify-between px-5 py-4 border-b ${ficheComplete ? 'bg-emerald-50 border-emerald-100' : info ? 'bg-blue-50 border-blue-100' : 'bg-amber-50 border-amber-100'}`}>
-              <div className="flex items-center gap-3">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-xl text-base ${ficheComplete ? 'bg-emerald-500' : info ? 'bg-blue-500' : 'bg-amber-500'} text-white`}>📋</div>
-                <div>
-                  <div className={`text-sm font-black ${ficheComplete ? 'text-emerald-900' : info ? 'text-blue-900' : 'text-amber-900'}`}>
-                    Fiche Achat
-                    {ficheComplete && <span className="ml-2 text-xs font-normal text-emerald-600">Complète ✓</span>}
-                    {info && !ficheComplete && <span className="ml-2 text-xs font-normal text-blue-600">En cours · {linesOk}/{info.purchase_lines.length} lignes</span>}
-                    {!info && <span className="ml-2 text-xs font-normal text-amber-600">À remplir</span>}
-                  </div>
-                  {info && (
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      Par <span className="font-medium">{info.filled_by}</span>
-                      {info.updated_at && <> · {fmtDate(info.updated_at)}</>}
-                    </div>
-                  )}
-                </div>
-              </div>
-              {commandePlacee ? (
-                <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Commande placée
-                </span>
-              ) : (
-                <button onClick={() => router.push(`/opportunities/${id}/purchase`)}
-                  className={`inline-flex h-8 items-center gap-1.5 rounded-xl border px-3 text-xs font-bold transition-colors ${ficheComplete ? 'border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50' : info ? 'border-blue-200 bg-white text-blue-700 hover:bg-blue-50' : 'bg-amber-500 text-white border-amber-500 hover:bg-amber-600'}`}>
-                  <Edit2 className="h-3.5 w-3.5" />
-                  {ficheComplete ? 'Compléter' : info ? 'Compléter' : 'Remplir'}
-                </button>
-              )}
-            </div>
-
-            {info && info.purchase_lines.length > 0 ? (
-              <div className="p-5 space-y-4">
-                {/* Lines table with status tracking */}
-                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                  <table className="w-full text-sm" style={{ minWidth: 900 }}>
-                    <thead>
-                      <tr className="border-b border-slate-100 bg-slate-50">
-                        <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400">Désignation</th>
-                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400 w-16">Qté</th>
-                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400 w-28">PT Vente</th>
-                        <th className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400 w-28">PT Achat</th>
-                        <th className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-wide text-slate-400 w-32">Fournisseur</th>
-                        <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400 w-36">Statut</th>
-                        <th className="px-4 py-3 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400 w-28">ETA</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {info.purchase_lines.map((l, i) => {
-                        const ptV   = l.pt_vente || l.qty*l.pu_vente
-                        const ptA   = l.qty*l.pu_achat
-                        const status = (l.line_status || 'pending') as LineStatus
-                        const sCfg = LINE_STATUS_CFG[status] || LINE_STATUS_CFG.pending
-                        const etaDate = l.eta ? new Date(l.eta) : null
-                        const today = new Date()
-                        const isLate = etaDate && etaDate < today && status !== 'livre'
-                        const daysLeft = etaDate ? Math.ceil((etaDate.getTime() - today.getTime()) / 86400000) : null
-                        return (
-                          <tr key={l.id} className={`border-b border-slate-50 last:border-0 hover:bg-slate-50/50 transition-colors ${isLate ? 'bg-red-50/30' : ''}`}>
-                            <td className="px-4 py-3" style={{ maxWidth: 320 }}>
-                              <div className="line-clamp-2" title={l.designation}>
-                                {l.ref && <span className="text-[11px] text-slate-400 mr-1.5">[{l.ref}]</span>}
-                                <span className="font-medium text-slate-800">{l.designation}</span>
-                              </div>
-                              {l.contact_fournisseur && (
-                                <div className="text-[10px] text-slate-400 mt-0.5">
-                                  Contact: {l.contact_fournisseur}
-                                </div>
-                              )}
-                              {(l.warranty_months || l.license_months) ? (
-                                <div className="flex gap-1.5 mt-1">
-                                  {l.warranty_months ? <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">🛡️ {l.warranty_months} mois</span> : null}
-                                  {l.license_months ? <span className="inline-flex items-center gap-0.5 rounded-full bg-violet-50 border border-violet-200 px-1.5 py-0.5 text-[9px] font-bold text-violet-700">🔑 {l.license_months} mois</span> : null}
-                                </div>
-                              ) : null}
-                            </td>
-                            <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-600">{l.qty}</td>
-                            <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-700">{ptV > 0 ? mad(ptV) : '—'}</td>
-                            <td className="px-4 py-3 text-right tabular-nums">
-                              {l.pu_achat > 0 ? <span className="font-semibold text-slate-700">{mad(ptA)}</span>
-                                : <span className="text-[11px] font-bold text-amber-500">⚠</span>}
-                            </td>
-                            <td className="px-4 py-3 text-sm font-medium text-slate-700">
-                              {l.fournisseur || <span className="text-[11px] font-bold text-amber-500">⚠</span>}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-bold ${sCfg.bg} ${sCfg.color} border ${sCfg.border}`}>
-                                <span>{sCfg.icon}</span> {sCfg.label}
-                              </span>
-                              {l.status_note && (
-                                <div className="text-[10px] text-slate-400 mt-0.5 max-w-[140px] truncate" title={l.status_note}>{l.status_note}</div>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {etaDate ? (
-                                <div>
-                                  <span className={`text-xs font-bold tabular-nums ${isLate ? 'text-red-600' : daysLeft! <= 3 ? 'text-amber-600' : 'text-slate-700'}`}>
-                                    {etaDate.toLocaleDateString('fr-MA', { day:'2-digit', month:'short' })}
-                                  </span>
-                                  <div className={`text-[10px] font-semibold ${isLate ? 'text-red-500' : daysLeft! <= 3 ? 'text-amber-500' : 'text-slate-400'}`}>
-                                    {isLate ? `⚠ ${Math.abs(daysLeft!)}j retard` : daysLeft === 0 ? "Aujourd'hui" : `${daysLeft}j`}
-                                  </div>
-                                </div>
-                              ) : (
-                                <span className="text-[11px] text-slate-300">—</span>
-                              )}
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                    <tfoot>
-                      <tr className="border-t-2 border-slate-200 bg-slate-50">
-                        <td colSpan={2} className="px-4 py-3 text-right text-[10px] font-bold uppercase tracking-wide text-slate-400">Totaux</td>
-                        <td className="px-4 py-3 text-right font-black text-slate-900 tabular-nums">{mad(totalVente)}</td>
-                        <td className="px-4 py-3 text-right font-black text-slate-900 tabular-nums">{totalAchat > 0 ? mad(totalAchat) : '—'}</td>
-                        <td />
-                        <td className="px-4 py-3 text-center">
-                          {(() => {
-                            const delivered = info.purchase_lines.filter(l => l.line_status === 'livre').length
-                            const total = info.purchase_lines.length
-                            return (
-                              <span className={`text-[11px] font-bold ${delivered === total ? 'text-emerald-600' : 'text-slate-500'}`}>
-                                {delivered}/{total} livré{delivered > 1 ? 's' : ''}
-                              </span>
-                            )
-                          })()}
-                        </td>
-                        <td />
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-
-                {/* Line status update section (Supply management) */}
-                <LineStatusManager lines={info.purchase_lines} opportunityId={id} onUpdate={loadAll} />
-
-                {/* 3-col: recap + suppliers + files */}
-                <div className="grid gap-4 lg:grid-cols-3">
-                  {/* Recap */}
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 space-y-2">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">📊 Récap financier</div>
-                    <RRow label="Total vente HT"  value={mad(totalVente)} bold />
-                    <RRow label="Total achat HT"  value={totalAchat > 0 ? mad(totalAchat) : '—'} />
-                    <RRow label="Marge brute"     value={totalAchat > 0 ? mad(margeBrute) : '—'}
-                      sub={totalAchat > 0 ? pct(totalVente > 0 ? (margeBrute/totalVente)*100 : 0) : undefined}
-                      color={margeBrute >= 0 ? 'emerald' : 'red'} />
-                    {info.frais_engagement > 0 && (
-                      <div className="border-t border-slate-200 pt-2">
-                        <RRow label="Frais engagement" value={`− ${mad(info.frais_engagement)}`} color="amber" />
-                      </div>
-                    )}
-                    <div className="border-t border-slate-200 pt-2">
-                      <RRow label="Marge nette" value={totalAchat > 0 ? mad(margeNette) : '—'}
-                        sub={totalAchat > 0 ? pct(margePctNette) : undefined}
-                        color={margePctNette < 10 ? 'red' : 'emerald'} bold />
-                    </div>
-                    {info.justif_reason && (
-                      <div className="mt-1 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                        <div className="text-[10px] font-bold text-amber-700 uppercase mb-1">⚠ Marge faible</div>
-                        <div className="text-xs font-medium text-amber-800">{info.justif_reason}</div>
-                        <div className="mt-1 text-[10px] font-bold">
-                          {info.approved_by
-                            ? <span className="text-emerald-600">✓ Validé par {info.approved_by}</span>
-                            : <span className="text-amber-500 flex items-center gap-1"><Clock className="h-3 w-3" /> En attente Achraf</span>}
-                        </div>
-                      </div>
-                    )}
-                    {info.payment_terms && (
-                      <div className="border-t border-slate-200 pt-2">
-                        <RRow label="Modalités paiement" value={(() => {
-                          try {
-                            const parsed = JSON.parse(info.payment_terms!)
-                            return parsed.template ? paymentTermLabel(parsed.template) : paymentTermLabel(info.payment_terms!)
-                          } catch { return paymentTermLabel(info.payment_terms!) }
-                        })()} />
-                      </div>
-                    )}
-                    {info.notes && <p className="border-t border-slate-200 pt-2 text-xs text-slate-500 italic">{info.notes}</p>}
-                  </div>
-
-                  {/* Suppliers */}
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">🏭 Fournisseurs ({uniqueSuppliers.length})</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {uniqueSuppliers.length === 0
-                        ? <p className="text-xs text-slate-400 italic">Aucun fournisseur</p>
-                        : uniqueSuppliers.map((s, i) => (
-                          <div key={i}
-                            className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-default transition-colors"
-                            title={[s.contact_fournisseur, s.email_fournisseur, s.tel_fournisseur].filter(Boolean).join(' · ')}>
-                            {s.fournisseur}
-                            <span className="text-slate-400 font-normal ml-1">· {info.purchase_lines.filter(l => l.fournisseur === s.fournisseur).length}</span>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-
-                  {/* Files */}
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">📄 Documents ({files.length})</div>
-                    <div className="space-y-1.5">
-                      {files.length === 0
-                        ? <p className="text-xs text-slate-400 italic">Aucun document</p>
-                        : files.map(f => (
-                          <div key={f.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${f.file_type==='bc_client'?'border-blue-100 bg-blue-50':f.file_type==='devis_compucom'?'border-violet-100 bg-violet-50':'border-slate-200 bg-white'}`}>
-                            <FileText className={`h-3.5 w-3.5 shrink-0 ${f.file_type==='bc_client'?'text-blue-600':f.file_type==='devis_compucom'?'text-violet-600':'text-slate-400'}`} />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-[10px] font-bold uppercase tracking-wide opacity-60">{f.file_type==='bc_client'?'BC Client':f.file_type==='devis_compucom'?'Devis':'Autre'}</div>
-                              <div className="text-xs font-semibold truncate">{f.file_name}</div>
-                            </div>
-                            {fileUrls[f.id] && (
-                              <a href={fileUrls[f.id]} target="_blank" rel="noreferrer" className="shrink-0 opacity-50 hover:opacity-100 transition-opacity">
-                                <Download className="h-3.5 w-3.5" />
-                              </a>
-                            )}
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Send button */}
-                <div className={`rounded-xl border-2 p-4 transition-colors ${canEmail ? 'border-slate-200 bg-white' : 'border-slate-100 bg-slate-50'}`}>
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <div className={`text-sm font-bold ${canEmail ? 'text-slate-900' : 'text-slate-400'}`}>
-                        {canEmail ? '✅ Fiche complète — prête à envoyer à Supply Chain' : '⏳ Complétez la fiche pour activer la commande'}
-                      </div>
-                      <div className="text-xs text-slate-400 mt-0.5">
-                        À : supplychain@compucom.ma · CC : n.bahhar@compucom.ma
-                        {margePctBrute < 10 && totalAchat > 0 && <>, A.lahkim@compucom.ma <span className="rounded bg-amber-100 px-1 py-0.5 text-[10px] font-bold text-amber-700">⚠ Achraf</span></>}
-                      </div>
-                    </div>
-                    <button onClick={async () => {
-                        if (opp && info) {
-                          await openSupplyEmail(opp, info, userEmail)
-                          setEmailCopied(true)
-                          setTimeout(() => setEmailCopied(false), 8000)
-                        }
-                      }} disabled={!canEmail}
-                      className={`shrink-0 inline-flex h-10 items-center gap-2 rounded-xl px-5 text-sm font-bold transition-colors shadow-sm ${emailCopied ? 'bg-emerald-600 text-white' : canEmail ? 'bg-slate-900 text-white hover:bg-slate-800' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}>
-                      {emailCopied ? <><Check className="h-4 w-4" /> Copié ! Ctrl+V dans Outlook</> : <><Mail className="h-4 w-4" /> Commander via Outlook</>}
-                    </button>
-                  </div>
-                  {emailCopied && (
-                    <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 font-medium">
-                      ✅ Email copié dans le presse-papier — <strong>Collez (Ctrl+V)</strong> dans le corps du mail Outlook puis Envoyer
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-12 px-8 text-center">
-                <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-2xl border border-amber-100">📦</div>
-                <p className="text-base font-black text-slate-800">Aucune fiche achat</p>
-                <p className="text-sm text-slate-400 mt-1 mb-4 max-w-xs leading-relaxed">Remplis la fiche achat pour déclencher le processus de commande Supply Chain.</p>
-                <button onClick={() => router.push(`/opportunities/${id}/purchase`)}
-                  className="inline-flex h-9 items-center gap-2 rounded-xl bg-amber-500 px-5 text-sm font-bold text-white hover:bg-amber-600 transition-colors">
-                  <Package className="h-4 w-4" /> Remplir la fiche achat
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ══ SECTION : PROJET & DÉPLOIEMENT ══ */}
+        {/* ══ SECTION: PROJET & DEPLOIEMENT ══ */}
         {(() => {
-          const deployServices = services.filter(s => s.title !== 'Prescription')
           if (deployServices.length === 0) return null
           const done = deployServices.filter(s => s.status === 'termine').length
-          const pct = Math.round((done / deployServices.length) * 100)
+          const pctDeploy = Math.round((done / deployServices.length) * 100)
           return (
-            <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-              <div className="border-b border-slate-50 bg-slate-50/50 px-5 py-3 flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">🚀 Projet & Déploiement</span>
+            <Section id="deploiement" title="Projet & D\éploiement" icon="🚀"
+              badge={
                 <div className="flex items-center gap-2">
                   <div className="h-2 w-24 rounded-full bg-slate-200 overflow-hidden">
-                    <div className={`h-full rounded-full transition-all ${pct === 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
-                      style={{ width: `${pct}%` }} />
+                    <div className={`h-full rounded-full transition-all ${pctDeploy === 100 ? 'bg-emerald-500' : pctDeploy >= 50 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                      style={{ width: `${pctDeploy}%` }} />
                   </div>
-                  <span className="text-xs font-bold text-slate-600">{pct}%</span>
+                  <span className="text-xs font-bold text-slate-600">{pctDeploy}%</span>
                   <span className="text-[10px] text-slate-400">{done}/{deployServices.length}</span>
                 </div>
-              </div>
+              }>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/30 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                       <th className="px-5 py-2 text-left">Titre</th>
-                      <th className="px-4 py-2 text-left">Ingénieur</th>
+                      <th className="px-4 py-2 text-left">Ing\énieur</th>
                       <th className="px-4 py-2 text-center">Statut</th>
-                      <th className="px-4 py-2 text-left">Début</th>
+                      <th className="px-4 py-2 text-left">D\ébut</th>
                       <th className="px-4 py-2 text-left">Fin</th>
                       <th className="px-4 py-2 text-left">Notes</th>
                     </tr>
@@ -988,7 +1108,7 @@ export default function OpportunityDetailPage() {
                       return (
                         <tr key={svc.id} className="hover:bg-slate-50/50">
                           <td className="px-5 py-2.5 font-semibold text-slate-800">{svc.title}</td>
-                          <td className="px-4 py-2.5 text-slate-600">{svc.assigned_to || '—'}</td>
+                          <td className="px-4 py-2.5 text-slate-600">{svc.assigned_to || '\—'}</td>
                           <td className="px-4 py-2.5 text-center">
                             <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${cfg.bg} ${cfg.color}`}>
                               {cfg.icon} {cfg.label}
@@ -996,23 +1116,22 @@ export default function OpportunityDetailPage() {
                           </td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{fmtDate(svc.start_date)}</td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{fmtDate(svc.end_date)}</td>
-                          <td className="px-4 py-2.5 text-xs text-slate-400 max-w-[150px] truncate" title={svc.notes || ''}>{svc.notes || '—'}</td>
+                          <td className="px-4 py-2.5 text-xs text-slate-400 max-w-[150px] truncate" title={svc.notes || ''}>{svc.notes || '\—'}</td>
                         </tr>
                       )
                     })}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Section>
           )
         })()}
 
-        {/* ══ SECTION : FACTURATION ══ */}
+        {/* ══ SECTION: FACTURATION ══ */}
         {isWon && (
-          <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-            <div className="border-b border-slate-50 bg-slate-50/50 px-5 py-3 flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">💰 Facturation</span>
-              {invoices.length > 0 && (() => {
+          <Section id="facturation" title="Facturation" icon="💰"
+            badge={
+              invoices.length > 0 ? (() => {
                 const totalFacture = invoices.reduce((s, inv) => s + (inv.amount || 0), 0)
                 const dealAmt = opp.amount || 1
                 const factPct = Math.min(100, Math.round((totalFacture / dealAmt) * 100))
@@ -1026,13 +1145,13 @@ export default function OpportunityDetailPage() {
                     <span className="text-[10px] text-slate-400">/ {mad(opp.amount)}</span>
                   </div>
                 )
-              })()}
-            </div>
+              })() : undefined
+            }>
             {invoices.length === 0 ? (
-              <div className="px-5 py-6 text-center">
+              <div className="text-center py-4">
                 <p className="text-sm text-slate-400">Aucune facture pour ce deal</p>
                 <Link href="/invoices" className="text-xs text-blue-600 hover:underline font-semibold mt-1 inline-block">
-                  Gérer les factures →
+                  G\érer les factures {'\→'}
                 </Link>
               </div>
             ) : (
@@ -1040,11 +1159,11 @@ export default function OpportunityDetailPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/30 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      <th className="px-5 py-2 text-left">N° Facture</th>
+                      <th className="px-5 py-2 text-left">N\° Facture</th>
                       <th className="px-4 py-2 text-right">Montant</th>
                       <th className="px-4 py-2 text-center">Lignes</th>
-                      <th className="px-4 py-2 text-left">Émise le</th>
-                      <th className="px-4 py-2 text-left">Échéance</th>
+                      <th className="px-4 py-2 text-left">\Émise le</th>
+                      <th className="px-4 py-2 text-left">\Éch\éance</th>
                       <th className="px-4 py-2 text-center">Statut</th>
                     </tr>
                   </thead>
@@ -1056,7 +1175,7 @@ export default function OpportunityDetailPage() {
                       return (
                         <React.Fragment key={inv.id}>
                         <tr className={`hover:bg-slate-50/50 ${isOverdue ? 'bg-red-50/30' : ''}`}>
-                          <td className="px-5 py-2.5 font-semibold text-slate-800">{inv.invoice_number || '—'}</td>
+                          <td className="px-5 py-2.5 font-semibold text-slate-800">{inv.invoice_number || '\—'}</td>
                           <td className="px-4 py-2.5 text-right font-bold text-slate-900">{mad(inv.amount)}</td>
                           <td className="px-4 py-2.5 text-center">
                             {lines.length > 0 ? (
@@ -1071,7 +1190,7 @@ export default function OpportunityDetailPage() {
                                 {lines.length} ligne{lines.length > 1 ? 's' : ''}
                               </button>
                             ) : (
-                              <span className="text-[10px] text-slate-300">—</span>
+                              <span className="text-[10px] text-slate-300">{'\—'}</span>
                             )}
                           </td>
                           <td className="px-4 py-2.5 text-xs text-slate-500">{fmtDate(inv.issue_date)}</td>
@@ -1093,8 +1212,8 @@ export default function OpportunityDetailPage() {
                                   <thead>
                                     <tr className="border-b border-slate-100 text-[9px] font-bold uppercase text-slate-400">
                                       <th className="px-3 py-1.5 text-left">Ref</th>
-                                      <th className="px-3 py-1.5 text-left">Désignation</th>
-                                      <th className="px-3 py-1.5 text-right">Qté</th>
+                                      <th className="px-3 py-1.5 text-left">D\ésignation</th>
+                                      <th className="px-3 py-1.5 text-right">Qt\é</th>
                                       <th className="px-3 py-1.5 text-right">Pt Vente</th>
                                       <th className="px-3 py-1.5 text-left">Fournisseur</th>
                                     </tr>
@@ -1104,11 +1223,11 @@ export default function OpportunityDetailPage() {
                                       const pl = ln.purchase_lines
                                       return (
                                         <tr key={ln.purchase_line_id || i}>
-                                          <td className="px-3 py-1.5 font-mono text-[11px] text-slate-700">{pl?.ref || '—'}</td>
-                                          <td className="px-3 py-1.5 text-[11px] text-slate-600 max-w-[200px] truncate">{pl?.designation || '—'}</td>
-                                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">{pl?.qty ?? '—'}</td>
-                                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">{pl?.pt_vente ? mad(pl.pt_vente) : '—'}</td>
-                                          <td className="px-3 py-1.5 text-slate-500">{pl?.fournisseur || '—'}</td>
+                                          <td className="px-3 py-1.5 font-mono text-[11px] text-slate-700">{pl?.ref || '\—'}</td>
+                                          <td className="px-3 py-1.5 text-[11px] text-slate-600 max-w-[200px] truncate">{pl?.designation || '\—'}</td>
+                                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">{pl?.qty ?? '\—'}</td>
+                                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-slate-800">{pl?.pt_vente ? mad(pl.pt_vente) : '\—'}</td>
+                                          <td className="px-3 py-1.5 text-slate-500">{pl?.fournisseur || '\—'}</td>
                                         </tr>
                                       )
                                     })}
@@ -1125,44 +1244,102 @@ export default function OpportunityDetailPage() {
                 </table>
               </div>
             )}
-          </div>
+          </Section>
         )}
 
-        {/* ══ SECTION 4 : HISTORIQUE ACTIVITÉ ══ */}
-        {activities.length > 0 && (
-          <div className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
-            <div className="border-b border-slate-50 bg-slate-50/50 px-5 py-3">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">🕐 Historique ({activities.length})</span>
-            </div>
-            <div className="divide-y divide-slate-50">
-              {activities.map(a => {
-                const icon  = ACTION_ICON[a.action_type] || '📌'
-                const color = ACTION_COLOR[a.action_type] || '#64748b'
+        {/* ══ SECTION: SUPPORT ══ */}
+        {tickets.length > 0 && (
+          <Section id="support" title="Support / SAV" icon="🛟">
+            <div className="space-y-2">
+              {tickets.map((t: any) => {
+                const isOpen = t.status === 'ouvert' || t.status === 'en_cours'
                 return (
-                  <div key={a.id} className="flex items-start gap-3 px-5 py-3 hover:bg-slate-50/50 transition-colors">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-sm mt-0.5" style={{ backgroundColor: color + '15' }}>
-                      {icon}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-slate-700 leading-snug">
-                        <span className="font-semibold">{a.entity_name}</span>
-                        {a.detail && <span className="text-slate-500"> · {a.detail}</span>}
-                      </p>
+                  <div key={t.id} className={`rounded-xl border p-3 flex items-center justify-between ${isOpen ? 'border-amber-200 bg-amber-50/50' : 'border-slate-100'}`}>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-800">{t.title}</div>
                       <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[11px] text-slate-400">{fmtDateTime(a.created_at)}</span>
-                        {a.user_email && <span className="text-[11px] text-slate-400">· {a.user_email}</span>}
+                        {t.type && <span className="text-[10px] rounded-full bg-slate-100 px-2 py-0.5 font-bold text-slate-600">{t.type}</span>}
+                        {t.assigned_to && <span className="text-[10px] text-slate-400">{'\→'} {t.assigned_to}</span>}
                       </div>
+                    </div>
+                    <div className="text-right shrink-0 ml-3">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                        isOpen ? 'bg-amber-100 text-amber-700' : t.status === 'resolu' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                      }`}>{t.status}</span>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{fmtDate(t.created_at)}</div>
                     </div>
                   </div>
                 )
               })}
+              <Link href="/support" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline font-semibold mt-1">
+                Voir sur la page support <ChevronRight className="h-3 w-3" />
+              </Link>
             </div>
-          </div>
+          </Section>
+        )}
+
+        {/* ══ SECTION: HISTORIQUE ══ */}
+        {activities.length > 0 && (
+          <Section id="historique" title={`Historique (${activities.length})`} icon="🕐" defaultOpen={true}>
+            <div className="max-h-[300px] overflow-y-auto divide-y divide-slate-50 -m-5 p-5">
+              {activities.map(a => {
+                const icon  = ACTION_ICON[a.action_type] || '📌'
+                const color = ACTION_COLOR[a.action_type] || '#64748b'
+                return (
+                  <div key={a.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs" style={{ backgroundColor: color + '15' }}>
+                      {icon}
+                    </div>
+                    <div className="flex-1 min-w-0 flex items-center gap-2">
+                      <span className="text-xs font-semibold text-slate-700 truncate">{a.entity_name}</span>
+                      {a.detail && <span className="text-xs text-slate-400 truncate">{a.detail}</span>}
+                    </div>
+                    <span className="text-[10px] text-slate-400 shrink-0 tabular-nums">{fmtDateTime(a.created_at)}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </Section>
         )}
 
       </div>
-
     </div>
+  )
+}
+
+// ─── Section component ──────────────────────────────────────
+function Section({ id, title, icon, badge, children, defaultOpen = true }: {
+  id: string; title: string; icon: string; badge?: React.ReactNode
+  children: React.ReactNode; defaultOpen?: boolean
+}) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <div id={`section-${id}`} className="rounded-2xl border border-slate-100 bg-white shadow-sm overflow-hidden">
+      <button onClick={() => setOpen(!open)}
+        className="w-full border-b border-slate-50 bg-slate-50/50 px-5 py-3 flex items-center justify-between hover:bg-slate-100/50 transition-colors">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 flex items-center gap-1.5">
+          <span>{icon}</span> {title}
+        </span>
+        <div className="flex items-center gap-2">
+          {badge}
+          <ChevronRight className={`h-4 w-4 text-slate-400 transition-transform duration-200 ${open ? 'rotate-90' : ''}`} />
+        </div>
+      </button>
+      {open && <div className="p-5">{children}</div>}
+    </div>
+  )
+}
+
+// ─── NavPill component ──────────────────────────────────────
+function NavPill({ href, label, active, alert }: { href: string; label: string; active?: boolean; alert?: boolean }) {
+  return (
+    <a href={href}
+      className={`shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold transition-colors ${
+        active ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
+      }`}>
+      {label}
+      {alert && <span className="h-1.5 w-1.5 rounded-full bg-red-500" />}
+    </a>
   )
 }
 
