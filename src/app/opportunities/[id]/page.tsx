@@ -379,14 +379,12 @@ export default function OpportunityDetailPage() {
 
   async function loadAll() {
     setLoading(true)
-    const [oppRes, infoApiRes, filesRes, supplyRes, actRes] = await Promise.all([
+    const [oppRes, infoApiRes, filesApiRes, supplyRes, actRes] = await Promise.all([
       supabase.from('opportunities')
         .select('*, accounts(id,name,sector,segment,region)')
         .eq('id', id).single(),
       authFetch(`/api/purchase-save?opportunity_id=${id}`).then(r => r.ok ? r.json() : { info: null }).catch(() => ({ info: null })),
-      supabase.from('deal_files')
-        .select('id,file_type,file_name,file_url')
-        .eq('opportunity_id', id),
+      authFetch(`/api/upload?opportunity_id=${id}`).then(r => r.ok ? r.json() : { files: [] }).catch(() => ({ files: [] })),
       authFetch('/api/supply').then(r => r.ok ? r.json() : { orders: [] }).catch(() => ({ orders: [] })),
       supabase.from('activity_log')
         .select('id,action_type,entity_type,entity_name,detail,created_at,user_email')
@@ -402,7 +400,7 @@ export default function OpportunityDetailPage() {
       purchase_lines: (infoApiRes.info.purchase_lines || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
     })
 
-    const f = filesRes.data || []
+    const f = filesApiRes.files || []
     setFiles(f)
     const urls = await getSignedUrls('deal-files', f)
     setFileUrls(urls)
