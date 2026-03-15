@@ -135,9 +135,10 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error('[purchase-save]', e)
     // Generic error to avoid leaking DB structure
-    const isConstraint = e?.message?.includes('violates') || e?.message?.includes('constraint')
+    const msg = e?.message || 'Erreur inconnue'
+    const isConstraint = msg.includes('violates') || msg.includes('constraint')
     return NextResponse.json(
-      { error: isConstraint ? 'Conflit de données — vérifiez les doublons' : 'Erreur sauvegarde' },
+      { error: isConstraint ? `Conflit de données : ${msg}` : `Erreur sauvegarde : ${msg}` },
       { status: isConstraint ? 409 : 500 }
     )
   }
