@@ -324,7 +324,7 @@ export default function PartenairesPage() {
           </div>
           <div>
             <h1 className="text-xl font-black text-slate-900 tracking-tight">Partenaires</h1>
-            <p className="text-xs text-slate-400">{stats.totalCards} partenaires · {stats.activeCards} actifs · {mad(stats.totalRevenue)} CA</p>
+            <p className="text-xs text-slate-500">{stats.totalCards} partenaires · {stats.activeCards} actifs · {mad(stats.totalRevenue)} CA</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
