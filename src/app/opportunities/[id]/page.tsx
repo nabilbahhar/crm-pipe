@@ -823,10 +823,12 @@ export default function OpportunityDetailPage() {
                       const today = new Date()
                       const isLate = etaDate && etaDate < today && status !== 'livre'
                       const daysLeft = etaDate ? Math.ceil((etaDate.getTime() - today.getTime()) / 86400000) : null
+                      const isPresta = l.ref?.toUpperCase().includes('PRESTA')
+                      const lineOk = l.pu_achat > 0 && (isPresta || !!l.fournisseur)
                       return (
                         <div key={l.id} className={`grid grid-cols-[40px_1fr_60px_100px_100px_90px_110px_100px_80px] items-center px-4 py-2.5 text-[12px] hover:bg-slate-50/50 transition-colors ${isLate ? 'bg-red-50/30' : ''}`}>
                           {/* N° */}
-                          <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold text-white ${l.pu_achat > 0 && l.fournisseur ? 'bg-emerald-500' : 'bg-slate-400'}`}>{i + 1}</span>
+                          <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold text-white ${lineOk ? 'bg-emerald-500' : 'bg-slate-400'}`}>{i + 1}</span>
                           {/* Désignation — compact, 1 line truncated */}
                           <div className="min-w-0 pr-2">
                             <div className="truncate font-medium text-slate-800 cursor-pointer" title={l.designation}
@@ -834,7 +836,9 @@ export default function OpportunityDetailPage() {
                               {l.ref && <span className="text-[10px] text-slate-400 mr-1 font-mono">[{l.ref}]</span>}
                               {expandedLines.has(l.id) ? l.designation : (l.designation.length > 60 ? l.designation.slice(0, 60) + '…' : l.designation)}
                             </div>
-                            {l.fournisseur && <div className="text-[10px] text-slate-400 truncate">{l.fournisseur}{l.contact_fournisseur ? ` · ${l.contact_fournisseur}` : ''}</div>}
+                            {isPresta
+                              ? <div className="text-[10px] text-slate-400 truncate">Prestation interne</div>
+                              : l.fournisseur && <div className="text-[10px] text-slate-400 truncate">{l.fournisseur}{l.contact_fournisseur ? ` · ${l.contact_fournisseur}` : ''}</div>}
                           </div>
                           {/* Qté */}
                           <span className="text-right tabular-nums font-semibold text-slate-600">{l.qty}</span>
@@ -848,9 +852,11 @@ export default function OpportunityDetailPage() {
                               <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${margePct >= 15 ? 'bg-emerald-100 text-emerald-700' : margePct >= 0 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'}`}>{margePct.toFixed(0)}%</span>
                             ) : <span className="text-slate-300">—</span>}
                           </div>
-                          {/* Fournisseur — moved to designation line, just show badge here */}
+                          {/* Fournisseur */}
                           <div className="text-center">
-                            {l.fournisseur ? (
+                            {isPresta ? (
+                              <span className="text-[10px] font-medium text-slate-400 italic">Interne</span>
+                            ) : l.fournisseur ? (
                               <span className="text-[10px] font-medium text-slate-500 truncate block">{l.fournisseur.split(' ').slice(0, 2).join(' ')}</span>
                             ) : <span className="text-[10px] text-amber-500 font-bold">⚠</span>}
                           </div>
